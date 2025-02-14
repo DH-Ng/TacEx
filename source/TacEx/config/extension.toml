@@ -23,7 +23,7 @@ keywords = ["extension", "template", "isaaclab"]
 # NOTE: Add additional dependencies here
 
 [[python.module]]
-name = "ext_template"
+name = "TacEx"
 
 [isaaclab_settings]
 # TODO: Uncomment and list any apt dependencies here.

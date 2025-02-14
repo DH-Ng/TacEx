@@ -18,8 +18,8 @@ services:
       args:
         - ISAACLAB_BASE_IMAGE_ARG=${ISAACLAB_BASE_IMAGE}
         - DOCKER_ISAACLAB_EXTENSION_TEMPLATE_PATH_ARG=${DOCKER_ISAACLAB_EXTENSION_TEMPLATE_PATH}
-    image: isaac-lab-template
-    container_name: isaac-lab-template
+    image: isaac-lab-tacex
+    container_name: isaac-lab-tacex
     volumes:
       - type: bind
         source: ../
