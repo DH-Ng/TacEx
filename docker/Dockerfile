@@ -62,8 +62,8 @@ RUN echo "alias run=/isaac-sim/isaac-sim.streaming.sh" >> ${HOME}/.bashrc && \
 
 # Install TacEx package
 RUN bash -i -c "source ${HOME}/.bashrc && \
-    cd ${DOCKER_ISAACLAB_EXTENSION_TEMPLATE_PATH}/source/TacEx && \
-    pip install -e . && \
+    cd ${DOCKER_ISAACLAB_EXTENSION_TEMPLATE_PATH} && \
+    ./tacex_install.sh -i && \
     git config --global --add safe.directory /workspace/tacex"
 
 # make working directory as the Isaac Lab directory
