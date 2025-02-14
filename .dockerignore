@@ -21,3 +21,5 @@ recordings/
 **/*.egg-info/
 # ignore isaac sim symlink
 _isaac_sim?
+# ignore isaac lab symlink
+_isaac_lab?

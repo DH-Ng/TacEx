@@ -41,6 +41,8 @@ python -m pip install -e source/TacEx
 ```bash
 python scripts/rsl_rl/train.py --task=Template-Isaac-Velocity-Rough-Anymal-D-v0
 ```
+<details>
+<summary>Docker setup (recommended)</summary>
 
 ## Docker setup
 
@@ -60,15 +62,25 @@ docker images
 # isaac-lab-base                   latest    28be62af627e   32 minutes ago   18.9GB
 ```
 
-### Building Isaac Lab Template Image
->For simplicity we use container utils from Isaac Lab for building, starting, entering and stopping the container (other things, such as different profiles, are not supported here).
+### Building TacEx Image for Isaac Lab
+>[!NOTE]
+>For simplicity we use the container script from Isaac Lab (slightly modified) for building, starting, entering and stopping the container. 
+>Additional features, such as different container profiles, are currently not supported here.
+
+> [!TIP]
+> The container script can be found in `./docker/container.py`. Just setup an alias in your `~/.bashrc` file for conveniently calling it. 
+> For example via `alias tacex="/path_to_repo/TacEx---Tactile-Extension/docker/container.py"`.
 
 After building the Isaac Lab container, you can build the docker container for this project. It is called `isaac-lab-tacex`. 
 
 ```bash
+# assuming you are in the root directory of this Repo
 cd docker
+# this command also starts the container in the background
 container.py build
 ```
+>[!NOTE]
+> If you are not using the base image `isaac-lab-base`, then you need to change `ISAACLAB_BASE_IMAGE` in the file `docker/.env.base`.
 
 You can verify the image is built successfully using the same command as earlier:
 
@@ -128,6 +140,11 @@ To setup the IDE, please follow these instructions:
 
 If everything executes correctly, it should create a file .python.env in the `.vscode` directory. The file contains the python paths to all the extensions provided by Isaac Sim and Omniverse. This helps in indexing all the python modules for intelligent suggestions while writing code.
 
+</details>
+
+<details>
+<summary>Setup as Omniverse Extension (Optional)</summary>
+
 ### Setup as Omniverse Extension (Optional)
 
 We provide an example UI extension that will load upon enabling your extension defined in `source/TacEx/TacEx/ui_extension_example.py`.
@@ -145,7 +162,7 @@ To enable your extension, follow these steps:
     - Find your extension under the `Third Party` category.
     - Toggle it to enable your extension.
 
-
+</details>
 
 ## Code formatting
 
