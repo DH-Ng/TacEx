@@ -1,3 +1,5 @@
+name: tacex
+
 x-default-isaac-lab-template-environment: &default-isaac-lab-template-environment
   - OMNI_KIT_ALLOW_ROOT=1
 
