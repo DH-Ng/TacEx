@@ -7,8 +7,12 @@ Some example commands for training etc.
 isaaclab -p ./scripts/reinforcement_learning/rsl_rl/train.py --task Isaac-Ball-Rolling-IK-v0 --num_envs 1024 
 ```
 
+```bash
+isaaclab -p ./scripts/reinforcement_learning/rsl_rl/train.py --task Isaac-Ball-Rolling-Priviledged-v0 --num_envs 1024 
+```
+
 ## Other
-You can start tensorboard with
+You can activate tensorboard with
 ```bash
 isaaclab -p -m tensorboard.main serve --logdir /workspace/tacex/logs/rsl_rl/ball_rolling
 ```

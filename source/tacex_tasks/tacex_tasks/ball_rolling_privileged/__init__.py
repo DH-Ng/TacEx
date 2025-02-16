@@ -12,12 +12,12 @@ from . import agents
 # Register Gym environments.
 ##
 
-ball_rolling_task_entry = "tacex_tasks.ball_rolling"
+ball_rolling_task_entry = "tacex_tasks.ball_rolling_priviledged"
 from .base_env import BallRollingEnv, BallRollingEnvCfg # need to import BallRollingEnv here, otherwise class will not be detected for entry point
 
 gym.register(
-    id="Isaac-Ball-Rolling-IK-v0",
-    entry_point=f"{ball_rolling_task_entry}.base_env:BallRollingEnv",
+    id="Isaac-Ball-Rolling-Priviledged-v0",
+    entry_point=f"{__name__}.base_env:BallRollingEnv",
     disable_env_checker=True,
     kwargs={
         "env_cfg_entry_point": BallRollingEnvCfg,

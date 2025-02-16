@@ -71,9 +71,11 @@ class BallRollingEnvCfg(DirectRLEnvCfg):
 
     # viewer settings
     viewer: ViewerCfg = ViewerCfg()
-    # viewer.eye = (1.5, 1, 0.5)
+    viewer.eye = (1.9, 1.4, 0.3)
+    viewer.lookat = (-1.5, -1.9, -1.1)
+    
+    # viewer.origin_type = "env"
     # viewer.env_idx = 50
-    viewer.origin_type = "robot"
 
     debug_vis = True
 
@@ -100,7 +102,7 @@ class BallRollingEnvCfg(DirectRLEnvCfg):
     )
 
     # scene
-    scene: InteractiveSceneCfg = InteractiveSceneCfg(num_envs=1024, env_spacing=2.0, replicate_physics=True)
+    scene: InteractiveSceneCfg = InteractiveSceneCfg(num_envs=1024, env_spacing=1.5, replicate_physics=True)
 
     # use robot with stiff PD control for better IK tracking
     robot: ArticulationCfg = FRANKA_PANDA_ARM_GSMINI_SINGLE_ADAPTER_HIGH_PD_CFG.replace(
@@ -191,7 +193,7 @@ class BallRollingEnvCfg(DirectRLEnvCfg):
     at_obj_reward = {"weight": 1, "minimal_distance": 0.01}
     tracking_reward = {"weight":0.3, "w": 1, "v": 1, "alpha":1e-5, "minimal_distance": 0.01}
     # fine_tracking_reward = {"weight":0.01, "std": 0.23, "minimal_distance": 0.005}
-    success_reward = {"weight": 10, "threshold": 0.0025} # we count it as a sucess when dist obj <-> goal is less than the threshold
+    success_reward = {"weight": 10, "threshold": 0.005} # 0.0025 we count it as a sucess when dist obj <-> goal is less than the threshold
     height_penalty = {"weight": -0.1, "min_height": 0.008}  # ball has diameter of 1cm, plate 0.5 cm -> 0.005m + 0.0025m = 0.0075m is above the ball
     orient_penalty = {"weight": -0.1}
 
@@ -200,8 +202,8 @@ class BallRollingEnvCfg(DirectRLEnvCfg):
     joint_vel_penalty_scale = [-1e-4, -1e-2] 
 
     # curriculum settings
-    curriculum_steps = [2.5e10] # after this amount of common_steps (= total steps), we make the task more difficult
-    obj_pos_randomization_range = [[-0.1, 0.1], [-0.15, 0.15]]
+    curriculum_steps = [1e6] # after this amount of common_steps (= total steps), we make the task more difficult
+    obj_pos_randomization_range = [[-0.1, 0.1], [-0.25, 0.25]]
 
     # env
     episode_length_s = 8.3333 # 500*2 timesteps
@@ -212,7 +214,7 @@ class BallRollingEnvCfg(DirectRLEnvCfg):
     ball_radius = 0.01
     x_bounds = (0.2, 0.75)
     y_bounds = (-0.375, 0.375)
-    too_far_away_threshold = 0.5
+    too_far_away_threshold = 0.35
 
 class BallRollingEnv(DirectRLEnv):
     """RL env in which the robot has to push/roll a ball to a goal position.
@@ -511,14 +513,14 @@ class BallRollingEnv(DirectRLEnv):
         super()._reset_idx(env_ids)
 
         # spawn robot at random position
-        obj_pos = self.object.data.default_root_state[env_ids]
+        obj_pos = self.object.data.default_root_state[env_ids] 
+        obj_pos[:, :3] += self.scene.env_origins[env_ids]
         obj_pos[:, :2] += sample_uniform(
             self.cfg.obj_pos_randomization_range[self.curriculum_phase_id][0], 
             self.cfg.obj_pos_randomization_range[self.curriculum_phase_id][1],
             (len(env_ids), 2), 
             self.device
         )
-        obj_pos[:, :3] += self.scene.env_origins[env_ids]
         self.object.write_root_state_to_sim(obj_pos, env_ids=env_ids)
 
         # reset robot state 
@@ -653,7 +655,8 @@ class BallRollingEnv(DirectRLEnv):
         if debug_vis:
             if not hasattr(self, "goal_pos_visualizer"):
                 marker_cfg = CUBOID_MARKER_CFG.copy()
-                marker_cfg.markers["cuboid"].size = (0.01, 0.01, 0.01)
+                # marker_cfg.markers["cuboid"].size = (0.01, 0.01, 0.01)
+                marker_cfg.markers["cuboid"].size = (2*self.cfg.success_reward["threshold"], 2*self.cfg.success_reward["threshold"], 0.01)
                 # -- goal pose
                 marker_cfg.prim_path = "/Visuals/Command/goal_position"
                 self.goal_pos_visualizer = VisualizationMarkers(marker_cfg)
