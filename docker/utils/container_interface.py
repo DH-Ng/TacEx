@@ -120,7 +120,6 @@ class ContainerInterface:
 
 	## We don't support multiple profiles for the extension, to keep it simple 
 	## -> use profiles when building IsaacLab image
-        
         # build the image for the profile 
         #subprocess.run(
         #    ["docker", "compose"]
@@ -151,6 +150,7 @@ class ContainerInterface:
                 ".env.base",
                 "up",
                 "--detach",
+                "--remove-orphans",
             ],
             check=False,
             cwd=self.context_dir,

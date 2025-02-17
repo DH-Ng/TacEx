@@ -23,3 +23,7 @@ recordings/
 _isaac_sim?
 # ignore isaac lab symlink
 _isaac_lab?
+
+# Omniverse
+**/*.dmp
+**/.thumbs
