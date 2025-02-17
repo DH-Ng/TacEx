@@ -141,42 +141,28 @@ This stops and removes the containers, but keeps the images.
 
 To setup the IDE, please follow these instructions:
 
-- Run VSCode Tasks, by pressing `Ctrl+Shift+P`, selecting `Tasks: Run Task` and running the `setup_python_env` in the drop down menu. When running this task, you will be prompted to add the absolute path to your Isaac Sim installation 
-- e.g. `/workspace/isaaclab/_isaac_sim`
+<!-- - make sure that env variables `${ISAACLAB_PATH}` and `ISAACLAB_EXTENSION_TEMPLATE_PATH` are set properly.
+This is done automatically in the docker setup. You can set it manually like this:
+```bash
+export ISAACLAB_PATH="/path_to/isaaclab"
+export ISAACLAB_EXTENSION_TEMPLATE_PATH="/path_to/tacex"
+```  -->
+
+- Run VSCode Tasks, by pressing `Ctrl+Shift+P`, selecting `Tasks: Run Task` and running the `setup_python_env` in the drop down menu. When running this task, you will be prompted to add the absolute path to your Isaac Sim installation. 
+> For the docker setup this is `/workspace/isaaclab/_isaac_sim`
 
 If everything executes correctly, it should create a file .python.env in the `.vscode` directory. The file contains the python paths to all the extensions provided by Isaac Sim and Omniverse. This helps in indexing all the python modules for intelligent suggestions while writing code.
 
 If IsaacLab and IsaacSim python modules are not indexed correctly (i.e., the IDE cannot find them when being in the code editor), then
 you need to adjust the `"python.analysis.extraPaths"` in the `.vscode/settings.json` file.
 
-For example, when using the docker setup: 
-- You first need to create a symbolic link to the IsaacLab files:
+For the docker setup you can use the `/docker/settings.json` file and replace the one in the `.vscode` folder for indexing
+IsaacLab and TacEx modules. (Idk why the ones from IsaacSim dont work.)
+<!-- - You first need to create a symbolic link to the IsaacLab files:
 ```bash
 # in a terminal inside the tacex docker container
-ln -sf ${ISAACLAB_PATH} ${DOCKER_ISAACLAB_EXTENSION_TEMPLATE_PATH}/_isaac_lab
-```
-
-Then, the `.vscode/settings.json` file in the TacEx root dir should contain this:
-```json
-"python.analysis.extraPaths": [
-        "${workspaceFolder}/_isaac_lab/_isaac_sim/exts/isaacsim.app.about",
-        "${workspaceFolder}/_isaac_lab/_isaac_sim/exts/isaacsim.app.selector",
-        "${workspaceFolder}/_isaac_lab/_isaac_sim/exts/isaacsim.app.setup",
-        "${workspaceFolder}/_isaac_lab/_isaac_sim/exts/isaacsim.asset.browser",
-        <...a whole bunch of other _isaac_sim packages>
-
-        "${workspaceFolder}/_isaac_lab/source/isaaclab",
-        "${workspaceFolder}/_isaac_lab/source/isaaclab_assets",
-        "${workspaceFolder}/_isaac_lab/source/isaaclab_mimic",
-        "${workspaceFolder}/_isaac_lab/source/isaaclab_rl",
-        "${workspaceFolder}/_isaac_lab/source/isaaclab_tasks",
-
-        "${workspaceFolder}/source/tacex_assets",
-        "${workspaceFolder}/source/tacex",
-        "${workspaceFolder}/source/tacex_gipc",
-        "${workspaceFolder}/source/tacex_tasks"
-]
-``` 
+ln -sf ${ISAACLAB_PATH} ${ISAACLAB_EXTENSION_TEMPLATE_PATH}/_isaac_lab
+``` -->
 
 
 ## Code formatting

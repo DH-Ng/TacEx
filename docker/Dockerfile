@@ -6,8 +6,8 @@ FROM ${ISAACLAB_BASE_IMAGE_ARG} AS base
 # Set default RUN shell to bash
 SHELL ["/bin/bash", "-c"]
 
-ARG DOCKER_ISAACLAB_EXTENSION_TEMPLATE_PATH_ARG
-ENV DOCKER_ISAACLAB_EXTENSION_TEMPLATE_PATH=${DOCKER_ISAACLAB_EXTENSION_TEMPLATE_PATH_ARG}
+ARG ISAACLAB_EXTENSION_TEMPLATE_PATH_ARG
+ENV ISAACLAB_EXTENSION_TEMPLATE_PATH=${ISAACLAB_EXTENSION_TEMPLATE_PATH_ARG}
 
 # Path to the Isaac Lab directory
 ARG ISAACLAB_PATH_ARG
@@ -20,10 +20,10 @@ ENV DEBIAN_FRONTEND=noninteractive
 USER root
 
 # Copy the Isaac Lab Extension Template directory (files to exclude are defined in .dockerignore)
-COPY ../ ${DOCKER_ISAACLAB_EXTENSION_TEMPLATE_PATH}
+COPY ../ ${ISAACLAB_EXTENSION_TEMPLATE_PATH}
 
 # Set up a symbolic link between the Isaac Lab root folder and the TacEx directory
-# RUN ln -sf ${ISAACLAB_PATH} ${DOCKER_ISAACLAB_EXTENSION_TEMPLATE_PATH}/_isaac_lab
+# RUN ln -sf ${ISAACLAB_PATH} ${ISAACLAB_EXTENSION_TEMPLATE_PATH}/_isaac_lab
 #-> doesnt do anything, because we mount the complete TacEx directory as volume -> need to add symlink manually after container is build
 
 # # Install whatever you need as additional dependencies.
@@ -67,10 +67,10 @@ RUN echo "alias run=/isaac-sim/isaac-sim.streaming.sh" >> ${HOME}/.bashrc && \
 
 # Install TacEx package
 RUN bash -i -c "source ${HOME}/.bashrc && \
-    cd ${DOCKER_ISAACLAB_EXTENSION_TEMPLATE_PATH} && \
-    ./tacex_install.sh -i && \
+    cd ${ISAACLAB_EXTENSION_TEMPLATE_PATH} && \
+    ./tacex.sh -i && \
     git config --global --add safe.directory /workspace/tacex"
 
 # make working directory as the tacex directory
 # this is the default directory when the container is run
-WORKDIR ${DOCKER_ISAACLAB_EXTENSION_TEMPLATE_PATH}
+WORKDIR ${ISAACLAB_EXTENSION_TEMPLATE_PATH}
