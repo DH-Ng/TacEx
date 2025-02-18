@@ -169,8 +169,8 @@ class BallRollingEnvWithoutReachingCfg(DirectRLEnvCfg):
     ik_solver_cfg = {
         "urdf_path": f"{TACEX_ASSETS_DATA_DIR}/Robots/Franka/GelSight_Mini/Single_Adapter/physx_rigid_gelpad.urdf",
         "ee_link_name": "gelsight_mini_gelpad", #gelsight_mini_gelpad
-        "max_iterations": 50,
-        "num_retries": 10,
+        "max_iterations": 20,
+        "num_retries": 5,
         "learning_rate": 0.2
     }
     ik_controller_cfg = DifferentialIKControllerCfg(command_type="pose", use_relative_mode=True, ik_method="dls")
