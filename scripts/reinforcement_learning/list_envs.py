@@ -22,9 +22,10 @@ from prettytable import PrettyTable
 # Import extensions to set up environment tasks
 import tacex_tasks  # noqa: F401
 
+TEMPLATE = "TacEx"
 
 def main():
-    """Print all environments registered in `isaac.lab_demo` extension."""
+    """Print all TacEx environments registered in `tacex_tasks` extension."""
     # print all the available environments
     table = PrettyTable(["S. No.", "Task Name", "Entry Point", "Config"])
     table.title = "Available Environments in TacEx"
@@ -37,7 +38,7 @@ def main():
     index = 0
     # acquire all Isaac environments names
     for task_spec in gym.registry.values():
-        if "Template-" in task_spec.id:
+        if f"{TEMPLATE}-" in task_spec.id:
             # add details to table
             table.add_row([index + 1, task_spec.id, task_spec.entry_point, task_spec.kwargs["env_cfg_entry_point"]])
             # increment count

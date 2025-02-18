@@ -1,14 +1,24 @@
 # Example Commands
-Some example commands for training etc. 
+Some example commands for training etc.
+
+To list all environemnts:
+```bash
+# Assuming you are in the TacEx root directory
+isaaclab -p scripts/reinforcement_learning/list_envs.py
+```
 
 ## Training
 
 ```bash
-isaaclab -p ./scripts/reinforcement_learning/rsl_rl/train.py --task Isaac-Ball-Rolling-IK-v0 --num_envs 1024 
+isaaclab -p ./scripts/reinforcement_learning/rsl_rl/train.py --task TacEx-Ball-Rolling-IK-v0 --num_envs 1024 
 ```
 
 ```bash
-isaaclab -p ./scripts/reinforcement_learning/rsl_rl/train.py --task Isaac-Ball-Rolling-Priviledged-v0 --num_envs 1024 
+isaaclab -p ./scripts/reinforcement_learning/rsl_rl/train.py --task TacEx-Ball-Rolling-Priviledged-v0 --num_envs 1024 
+```
+
+```bash
+isaaclab -p ./scripts/reinforcement_learning/rsl_rl/train.py --task TacEx-Ball-Rolling-Priviledged-without-Reach_v0 --num_envs 1024 
 ```
 
 ## Other
