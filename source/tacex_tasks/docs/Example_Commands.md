@@ -14,11 +14,11 @@ isaaclab -p ./scripts/reinforcement_learning/rsl_rl/train.py --task TacEx-Ball-R
 ```
 
 ```bash
-isaaclab -p ./scripts/reinforcement_learning/rsl_rl/train.py --task TacEx-Ball-Rolling-Priviledged-v0 --num_envs 1024 
+isaaclab -p ./scripts/reinforcement_learning/rsl_rl/train.py --task TacEx-Ball-Rolling-Privileged-v0 --num_envs 1024 
 ```
 
 ```bash
-isaaclab -p ./scripts/reinforcement_learning/rsl_rl/train.py --task TacEx-Ball-Rolling-Priviledged-without-Reach_v0 --num_envs 1024 
+isaaclab -p ./scripts/reinforcement_learning/rsl_rl/train.py --task TacEx-Ball-Rolling-Privileged-without-Reach_v0 --num_envs 1024 
 ```
 
 ## Other

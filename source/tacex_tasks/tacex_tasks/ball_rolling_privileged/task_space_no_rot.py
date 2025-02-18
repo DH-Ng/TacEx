@@ -191,7 +191,7 @@ class BallRollingEnvCfg(DirectRLEnvCfg):
     curriculum_steps = 2500
 
     # env
-    episode_length_s = 8.3333*2 # 500*2 timesteps
+    episode_length_s = 8.3333*2 # 500 timesteps
     action_space = 3 # (dx, dy, dz)
     observation_space = 12 # 3 for rel ee pos, 2 for orient (roll, pitch, yaw), 2 for goal (x,y) and 2 for obj (x,y,z) pos, 5 for actions
     state_space = 0

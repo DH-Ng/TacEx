@@ -48,153 +48,11 @@ import pytorch_kinematics as pk
 from tacex_assets import TACEX_ASSETS_DATA_DIR
 from tacex_assets.robots.franka.franka_gsmini_single_adapter_rigid import FRANKA_PANDA_ARM_GSMINI_SINGLE_ADAPTER_HIGH_PD_CFG
 
-class CustomEnvWindow(BaseEnvWindow):
-    """Window manager for the Quadcopter environment."""
-
-    def __init__(self, env: DirectRLEnvCfg, window_name: str = "IsaacLab"):
-        """Initialize the window.
-
-        Args:
-            env: The environment object.
-            window_name: The name of the window. Defaults to "IsaacLab".
-        """
-        # initialize base window
-        super().__init__(env, window_name)
-        # add custom UI elements
-        with self.ui_window_elements["main_vstack"]:
-            with self.ui_window_elements["debug_frame"]:
-                with self.ui_window_elements["debug_vstack"]:
-                    # add command manager visualization
-                    self._create_debug_vis_ui_element("targets", self.env)
+from .reset_with_IK_solver import BallRollingIKResetEnv, BallRollingIKResetEnvCfg
 
 
 @configclass
-class BallRollingEnvWithoutReachingCfg(DirectRLEnvCfg):
-
-    # viewer settings
-    viewer: ViewerCfg = ViewerCfg()
-    viewer.eye = (1.9, 1.4, 0.3)
-    viewer.lookat = (-1.5, -1.9, -1.1)
-    
-    # viewer.origin_type = "env"
-    # viewer.env_idx = 50
-
-    debug_vis = True
-
-    ui_window_class_type = CustomEnvWindow
-
-    decimation = 1
-    # simulation
-    sim: SimulationCfg = SimulationCfg(
-        dt=0.01, #1 / 120, #0.001
-        render_interval=decimation,
-        disable_contact_processing=True,
-        #device="cpu",
-        physx=PhysxCfg(
-            enable_ccd=True, # needed for more stable ball_rolling
-            # bounce_threshold_velocity=10000,
-        ),
-        physics_material=sim_utils.RigidBodyMaterialCfg(
-            friction_combine_mode="multiply",
-            restitution_combine_mode="multiply",
-            static_friction=5.0,
-            dynamic_friction=5.0,
-            restitution=0.0,
-        ),
-    )
-
-    # scene
-    scene: InteractiveSceneCfg = InteractiveSceneCfg(num_envs=1024, env_spacing=1.5, replicate_physics=True)
-
-    # use robot with stiff PD control for better IK tracking
-    robot: ArticulationCfg = FRANKA_PANDA_ARM_GSMINI_SINGLE_ADAPTER_HIGH_PD_CFG.replace(
-        prim_path="/World/envs/env_.*/Robot",
-        # init_state=ArticulationCfg.InitialStateCfg(
-        #                 joint_pos={
-        #                     "panda_joint1": 0.0,
-        #                     "panda_joint2": 0.0,
-        #                     "panda_joint3": 0.0,
-        #                     "panda_joint4": -2.46,
-        #                     "panda_joint5": 0.0,
-        #                     "panda_joint6": 2.5,
-        #                     "panda_joint7": 0.741,
-        #                 },
-        #         ),
-    )
-
-    # robot = ArticulationCfg(
-    #     prim_path="/World/envs/env_.*/Robot",
-    #     spawn=sim_utils.UsdFileCfg(
-    #         usd_path="/workspace/isaaclab/data_storage/TacEx/assets/robots_with_gelsight_mini/assets/standard_isaac_models/franka_single_gsmini_rigid.usd",
-    #         activate_contact_sensors=False,
-    #         rigid_props=sim_utils.RigidBodyPropertiesCfg(
-    #             disable_gravity=True, #True instead of False
-    #             max_depenetration_velocity=5.0,
-    #         ),
-    #         articulation_props=sim_utils.ArticulationRootPropertiesCfg(
-    #             enabled_self_collisions=True, solver_position_iteration_count=16, solver_velocity_iteration_count=1
-    #         ),
-    #     ),
-    #     init_state=ArticulationCfg.InitialStateCfg(
-    #             joint_pos={
-    #                 "panda_joint1": 0.0,
-    #                 "panda_joint2": 0.0,
-    #                 "panda_joint3": 0.0,
-    #                 "panda_joint4": -2.46,
-    #                 "panda_joint5": 0.0,
-    #                 "panda_joint6": 2.5,
-    #                 "panda_joint7": 0.741,
-    #             },
-    #         ),
-    #     actuators={
-    #         "panda_shoulder": ImplicitActuatorCfg(
-    #             joint_names_expr=["panda_joint[1-4]"],
-    #             effort_limit=87.0,
-    #             velocity_limit=2.175,
-    #             stiffness=400, # instead of 80.0,
-    #             damping=80, # instead of 4.0,
-    #         ),
-    #         "panda_forearm": ImplicitActuatorCfg(
-    #             joint_names_expr=["panda_joint[5-7]"],
-    #             effort_limit=12.0,
-    #             velocity_limit=2.61,
-    #             stiffness=400, # instead of 80.0,
-    #             damping=80, #instead 4.0,
-    #         ),
-
-    #     },
-    #     soft_joint_pos_limit_factor=1.0,
-    # )
-    # use an proper ik solver for computing desired ee pose after resets
-    ik_solver_cfg = {
-        "urdf_path": f"{TACEX_ASSETS_DATA_DIR}/Robots/Franka/GelSight_Mini/Single_Adapter/physx_rigid_gelpad.urdf",
-        "ee_link_name": "gelsight_mini_gelpad", #gelsight_mini_gelpad
-        "max_iterations": 20,
-        "num_retries": 5,
-        "learning_rate": 0.2
-    }
-    ik_controller_cfg = DifferentialIKControllerCfg(command_type="pose", use_relative_mode=True, ik_method="dls")
-
-    # rigid body ball
-    ball: RigidObjectCfg = RigidObjectCfg(
-        prim_path= "/World/envs/env_.*/rigid_ball",
-        spawn=sim_utils.UsdFileCfg(
-            usd_path=f"{TACEX_ASSETS_DATA_DIR}/Props/ball_wood.usd", 
-            #scale=(2, 1, 0.6),
-            rigid_props=RigidBodyPropertiesCfg(
-                    solver_position_iteration_count=16,
-                    solver_velocity_iteration_count=1,
-                    max_angular_velocity=1000.0,
-                    max_linear_velocity=1000.0,
-                    max_depenetration_velocity=5.0,
-                    disable_gravity=False,
-            ),
-        ),
-        init_state=RigidObjectCfg.InitialStateCfg(pos=(0.5, 0, 0.01)),
-    )
-
-    # sensors
-    #gsmini = GsMiniSensorCfg(prim_path="/World/envs/env_0/Robot/gelsight_mini_case")
+class BallRollingWithoutReachingEnvCfg(BallRollingIKResetEnvCfg):
 
     #MARK: reward configuration
     reaching_penalty = {"weight": -0.2} 
@@ -215,7 +73,7 @@ class BallRollingEnvWithoutReachingCfg(DirectRLEnvCfg):
     obj_pos_randomization_range = [[-0.1, 0.1], [-0.25, 0.25]]
 
     # env
-    episode_length_s = 1 #8.3333 # 500*2 timesteps
+    episode_length_s = 8.3333 # 500 timesteps
     action_space = 5 # we use relative task_space actions: (dx, dy, dz, droll, dpitch) -> dyaw is ommitted
     observation_space = 14 # 3 for rel ee pos, 2 for orient (roll, pitch), 2 for goal (x,y) and 2 for obj-pos (x,y), 5 for actions
     state_space = 0
@@ -240,9 +98,9 @@ class BallRollingWithoutReachingEnv(DirectRLEnv):
     #   |-- _reset_idx(env_ids)
     #   |-- _get_observations()
 
-    cfg: BallRollingEnvCfg
+    cfg: BallRollingWithoutReachingEnvCfg
 
-    def __init__(self, cfg: BallRollingEnvCfg, render_mode: str | None = None, **kwargs):
+    def __init__(self, cfg: BallRollingWithoutReachingEnvCfg, render_mode: str | None = None, **kwargs):
         super().__init__(cfg, render_mode, **kwargs)
 
         self.dt = self.cfg.sim.dt * self.cfg.decimation
@@ -317,10 +175,6 @@ class BallRollingWithoutReachingEnv(DirectRLEnv):
         self.processed_actions = torch.zeros((self.num_envs, self._ik_controller.action_dim), device=self.device)
         self.prev_actions = torch.zeros_like(self.actions)
 
-        # ik controller for moving ee to ball position after reset -> not relative mode!
-        reset_ik_cfg = DifferentialIKControllerCfg(command_type="pose", use_relative_mode=False, ik_method="dls")
-        self._reset_ik_controller = DifferentialIKController(reset_ik_cfg, num_envs=self.num_envs, device=self.device)
-        
         # add handle for debug visualization (this is set to a valid handle inside set_debug_vis)
         self.set_debug_vis(self.cfg.debug_vis)
 
@@ -433,11 +287,9 @@ class BallRollingWithoutReachingEnv(DirectRLEnv):
             joint_pos_des = self._ik_controller.compute(ee_pos_curr_b, ee_quat_curr_b, jacobian, joint_pos)
         else:
             joint_pos_des = joint_pos.clone()
-        #todo uncomment
-        # self._robot.set_joint_position_target(joint_pos_des)
 
-        # pass
-        
+        self._robot.set_joint_position_target(joint_pos_des)
+
     # post-physics step calls    
 
     #MARK: dones
@@ -641,9 +493,9 @@ class BallRollingWithoutReachingEnv(DirectRLEnv):
         # self.gsmini.update_gui_windows()
         return {"policy": obs}            
 
-    ####
-    ## Helper Functions
-    ####
+####
+## Helper Functions
+####
 
     ################################# For IK
     #  From task_space_actions.py

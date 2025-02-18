@@ -47,7 +47,7 @@ from tacex_assets import TACEX_ASSETS_DATA_DIR
 from tacex_assets.robots.franka.franka_gsmini_single_adapter_rigid import FRANKA_PANDA_ARM_GSMINI_SINGLE_ADAPTER_HIGH_PD_CFG
 
 class CustomEnvWindow(BaseEnvWindow):
-    """Window manager for the Quadcopter environment."""
+    """Window manager for the RL environment."""
 
     def __init__(self, env: DirectRLEnvCfg, window_name: str = "IsaacLab"):
         """Initialize the window.
@@ -181,7 +181,7 @@ class BallRollingEnvCfg(DirectRLEnvCfg):
                     disable_gravity=False,
             ),
         ),
-        init_state=RigidObjectCfg.InitialStateCfg(pos=(0.5, 0, 0.03)),
+        init_state=RigidObjectCfg.InitialStateCfg(pos=(0.5, 0, 0.01)),
     )
 
     # sensors
@@ -206,13 +206,13 @@ class BallRollingEnvCfg(DirectRLEnvCfg):
     obj_pos_randomization_range = [[-0.1, 0.1], [-0.25, 0.25]]
 
     # env
-    episode_length_s = 8.3333 # 500*2 timesteps
+    episode_length_s = 8.3333 # 500 timesteps
     action_space = 5 # we use relative task_space actions: (dx, dy, dz, droll, dpitch) -> dyaw is ommitted
-    observation_space = 14 # 3 for rel ee pos, 2 for orient (roll, pitch), 2 for goal (x,y) and 2 for obj-pos (x,y), 5 for actions
+    observation_space = 14 # 3 for ee pos, 2 for orient (roll, pitch), 2 for goal (x,y) and 2 for obj-pos (x,y), 5 for actions
     state_space = 0
 
     ball_radius = 0.01
-    x_bounds = (0.2, 0.75)
+    x_bounds = (0.225, 0.75)
     y_bounds = (-0.375, 0.375)
     too_far_away_threshold = 0.35
 
