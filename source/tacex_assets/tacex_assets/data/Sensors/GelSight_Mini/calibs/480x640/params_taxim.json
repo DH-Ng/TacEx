@@ -1,0 +1,27 @@
+{
+  "simulator": {
+    "kscale": 50,
+    "diff_threshold": 5,
+    "frame_mixing_percentage": 0.15,
+    "shadow_step": 1.25,
+    "discretize_precision": 0.1,
+    "height_precision": 0.1,
+    "fan_angle": 0.1,
+    "fan_precision": 0.05,
+    "contact_scale": 0.4,
+    "pyramid_kernel_size": [
+      51,
+      21,
+      11,
+      5
+    ],
+    "kernel_size": 5,
+    "sigma": 2
+  },
+  "sensor": {
+    "pixmm": 0.05107,
+    "num_bins": 125,
+    "h": 480,
+    "w": 640
+  }
+}
