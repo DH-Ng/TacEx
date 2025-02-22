@@ -1,3 +1,3 @@
-from .taxim_sim import TaximSimulator
-from .fots_marker_sim_cfg import TaximSimulatorCfg
+from .fots_marker_sim import FOTSMarkerSimulator
+from .fots_marker_sim_cfg import FOTSMarkerSimulatorCfg
 

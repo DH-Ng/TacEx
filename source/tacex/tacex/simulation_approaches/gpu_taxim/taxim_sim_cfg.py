@@ -18,7 +18,7 @@ class TaximSimulatorCfg():
     num_envs: int = 0
 
     with_shadow: bool = False
-    tactile_img_res: tuple = (240, 320)
+    tactile_img_res: tuple = (320, 240)
     """Resolution of the Tactile Image.
     
     Can be different from the Sensor Camera.
@@ -34,6 +34,3 @@ class TaximSimulatorCfg():
     Used for computing the indentation depth out of the 
     camera height map.
     """
-
-    height_map: torch.Tensor = None
-    """Reference to buffer of the GelSight sensor which contains height map data"""

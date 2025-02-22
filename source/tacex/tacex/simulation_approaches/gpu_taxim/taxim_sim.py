@@ -7,20 +7,22 @@ import torch
 
 from .sim import Taxim
 
-from ..optical_sim import OpticalSimulator
+from ..gelsight_simulator import GelSightSimulator
+from ...gelsight_sensor import GelSightSensor
 
 if TYPE_CHECKING:
     from .taxim_sim_cfg import TaximSimulatorCfg
 
-class TaximSimulator(OpticalSimulator):
+class TaximSimulator(GelSightSimulator):
     """Wraps around the Taxim simulation for the optical simulation of GelSight sensors 
     inside Isaac Sim.
     
     """
     cfg: TaximSimulatorCfg
 
-    def __init__(self, cfg, height_map: torch.Tensor):
-        self.height_map: torch.Tensor = height_map
+    def __init__(self, sensor: GelSightSensor, cfg: TaximSimulatorCfg):
+        self.sensor = sensor
+        self.height_map: torch.Tensor = self.sensor._data.output["height_map"]
 
         super().__init__(cfg)
 

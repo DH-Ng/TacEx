@@ -40,8 +40,7 @@ from isaaclab.sensors import SensorBase, SensorBaseCfg, Camera, CameraCfg, Tiled
 import time
 
 
-from .simulation_approaches.optical_sim import OpticalSimulator
-from .simulation_approaches.marker_motion_sim import MarkerMotionSimulator
+from .simulation_approaches.gelsight_simulator import GelSightSimulator
 
 from .gelsight_sensor_data import GelSightSensorData
 if TYPE_CHECKING:
@@ -63,8 +62,8 @@ class GelSightSensor(SensorBase):
         self._indentation_depth: torch.tensor = None
 
         # simulation approaches for simulating GelSight sensor output
-        self.optical_simulator: OpticalSimulator = None
-        self.marker_motion_simulator: MarkerMotionSimulator = None
+        self.optical_simulator: GelSightSimulator = None
+        self.marker_motion_simulator: GelSightSimulator = None
         self.compute_indentation_depth_func = None
 
         # Create empty variables for storing output data
@@ -164,6 +163,7 @@ class GelSightSensor(SensorBase):
         if (self.marker_motion_simulator is not None) and ("marker_motion" in self._data.output.keys()):
             # height_map_shifted = self.taxim._get_shifted_height_map(self._indentation_depth, self._data.output["height_map"])
             self._data.output["marker_motion"][:] = self.marker_motion_simulator.marker_motion_simulation() #TODO adjust mm2pix value 19.58 #/19.58
+            self.marker_motion_simulator.reset()
 
         # Reset the frame count
         self._frame[env_ids] = 0
@@ -231,7 +231,9 @@ class GelSightSensor(SensorBase):
         #     if not self._is_spawned:
         #         raise RuntimeError("Initializing the camera failed! Please provide a valid argument for `prim_path`.")
         #     sensor_prim_path = self.prim_path
- 
+
+        #TODO check if class for optical and for marker sim is the same
+        #-> If yes, only initialize class one time
         # simulation approaches for simulating GelSight sensor output
         if self.cfg.optical_sim_cfg is not None:
             # update the cfg
@@ -239,9 +241,9 @@ class GelSightSensor(SensorBase):
             self.cfg.optical_sim_cfg.num_envs = self._num_envs
             # initialize class we set in the cfg class for the optical simulation
             self.optical_simulator = self.cfg.optical_sim_cfg.class_type(
+                self,
                 self.cfg.optical_sim_cfg,
-                self._data.output["height_map"]
-            ) #todo no way this works lol
+            )
             
         if "tactile_rgb" in self._data.output.keys():
             self._data.output["tactile_rgb"] = torch.zeros(
@@ -295,12 +297,11 @@ class GelSightSensor(SensorBase):
 
         if (self.optical_simulator is not None) and ("tactile_rgb" in self._data.output.keys()) :
             #self.optical_simulator.height_map[:] = self._get_height_map()
-            self.optical_simulator.height_map[:] = self._data.output["height_map"]
+            self.optical_simulator.height_map = self._data.output["height_map"]
             self._data.output["tactile_rgb"][:] = self.optical_simulator.optical_simulation()
 
         if (self.marker_motion_simulator is not None) and ("marker_motion" in self._data.output.keys()):
-            # height_map_shifted = self.taxim._get_shifted_height_map(self._indentation_depth, self._data.output["height_map"])
-            self._data.output["marker_motion"][:] = self.marker_motion_simulator.marker_motion_simulation() #TODO adjust mm2pix value 19.58 #/19.58
+            self._data.output["marker_motion"][:] = self.marker_motion_simulator.marker_motion_simulation()
 
 
     def _set_debug_vis_impl(self, debug_vis: bool):

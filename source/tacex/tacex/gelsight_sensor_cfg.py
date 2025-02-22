@@ -3,9 +3,7 @@ from typing import TYPE_CHECKING, Any, Dict, Sequence, Tuple, Union, Literal
 from isaaclab.utils import class_to_dict, to_camel_case, configclass
 from isaaclab.sensors import SensorBaseCfg, TiledCameraCfg
 
-from .simulation_approaches.optical_sim import OpticalSimulator
-from .simulation_approaches.marker_motion_sim import MarkerMotionSimulator
-
+from .simulation_approaches.gelsight_simulator import GelSightSimulator
 from .gelsight_sensor import GelSightSensor
 
 """Configuration for a Gelsight tactile sensor."""
@@ -34,10 +32,10 @@ class GelSightSensorCfg(SensorBaseCfg):
 
     data_types: list[str] = ["height_map", "tactile_rgb", "marker_motion"]
 
-    optical_sim_cfg: None = None # freely able to choose what class, but this cfg is also just optionally
+    optical_sim_cfg: GelSightSimulator = None # freely able to choose what class, but this cfg is also just optionally
     """Cfg class of the optical simulator you want to use."""
 
-    marker_motion_sim_cfg: None = None
+    marker_motion_sim_cfg: GelSightSimulator = None
     """Cfg class of the marker motion simulator you want to use."""
 
     compute_indentation_depth_class: Literal["optical_sim", "marker_motion_sim"] = "optical_sim"

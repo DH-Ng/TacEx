@@ -1,6 +1,6 @@
-"""Base class for marker motion simulation approaches.
+"""Base class for optical simulation approaches.
 
-This class defines an interface for simulating the marker motion of GelSight tactile sensors.
+This class defines an interface for simulating the optical response of GelSight tactile sensors.
 Each simulation method class should inherit from this class and implement the abstract methods.
 """
 
@@ -11,8 +11,8 @@ import torch
 import weakref
 from abc import ABC, abstractmethod
 
-class MarkerMotionSimulator(ABC):
-    """Base class for implementing a marker motion simulation approach.
+class GelSightSimulator(ABC):
+    """Base class for implementing an optical simulation approach.
     
     
     """
@@ -24,14 +24,21 @@ class MarkerMotionSimulator(ABC):
     def _initialize_impl(self):
         raise NotImplementedError
 
-    @abstractmethod
+    # @abstractmethod
+    def optical_simulation(self):
+        """Simulates the optical output of a Tactile sensor.
+
+        """
+        raise NotImplementedError
+
+    # @abstractmethod
     def marker_motion_simulation(self):
         """Simulates the marker motion of a Tactile sensor.
 
         """
         raise NotImplementedError
-
-    #@abstractmethod
+    
+    #@abstractmethod make it optional, in case another method is used for computing indentation depth
     def compute_indentation_depth(self):
         """Computes how deep the indenter is pressed into the gelpad"""
         raise NotImplementedError
