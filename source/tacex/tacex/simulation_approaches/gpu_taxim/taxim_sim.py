@@ -6,7 +6,6 @@ from typing import TYPE_CHECKING
 import torch
 
 from .sim import Taxim
-
 from ..gelsight_simulator import GelSightSimulator
 from ...gelsight_sensor import GelSightSensor
 
@@ -22,15 +21,18 @@ class TaximSimulator(GelSightSimulator):
 
     def __init__(self, sensor: GelSightSensor, cfg: TaximSimulatorCfg):
         self.sensor = sensor
-        self.height_map: torch.Tensor = self.sensor._data.output["height_map"]
 
-        super().__init__(cfg)
+        super().__init__(sensor=sensor, cfg=cfg)
 
     def _initialize_impl(self):
         calib_folder = Path(self.cfg.calib_folder_path)
 
-        self._device = self.cfg.device
-        self._num_envs = self.cfg.num_envs
+        if self.cfg.device is None:
+            # use same device as simulation
+            self._device = self.sensor.device
+        else: 
+            self._device = self.cfg.device
+            
 
         self._taxim = Taxim(calib_folder=calib_folder, device=self._device)
 
@@ -52,7 +54,7 @@ class TaximSimulator(GelSightSimulator):
         #shifted_height_map = self._taxim._get_shifted_height_map(self._indentation_depth, self.height_map)
         #todo only render img where indentation_depth > 0
         tactile_rgb_img = self._taxim.render(
-            self.height_map,
+            self.sensor._data.output["height_map"], 
             with_shadow=self.cfg.with_shadow,
             press_depth=self._indentation_depth,
             orig_hm_fmt=False,
@@ -60,7 +62,7 @@ class TaximSimulator(GelSightSimulator):
         return tactile_rgb_img
 
     def compute_indentation_depth(self):
-        self.height_map = self.height_map / 1000 # convert height map from mm to meter
+        self.height_map = self.sensor._data.output["height_map"] / 1000 # convert height map from mm to meter
         min_distance_obj = self.height_map.amin((1,2))
         # smallest distance between object and sensor case
         dist_obj_sensor_case = min_distance_obj - self.cfg.gelpad_to_camera_min_distance

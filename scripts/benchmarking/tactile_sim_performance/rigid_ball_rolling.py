@@ -32,7 +32,7 @@ from isaaclab.assets import ArticulationCfg, RigidObjectCfg, AssetBaseCfg
 from isaaclab.managers import SceneEntityCfg
 
 from isaaclab.utils import configclass
-from isaaclab.utils.math import transform_points
+from isaaclab.utils.math import transform_points, sample_uniform
 import isaaclab.utils.math as orbit_math
 
 from isaaclab.scene import InteractiveScene, InteractiveSceneCfg
@@ -54,7 +54,6 @@ import isaacsim.core.utils.bounds as bounds_utils
 from isaacsim.core.utils.collisions import ray_cast
 #from isaacsim.core.utils.bounds import create_bbox_cache, compute_aabb
 from omni.physx import get_physx_cooking_interface, get_physx_interface, get_physx_scene_query_interface
-
 
 import numpy as np
 import torch
@@ -93,7 +92,6 @@ class BallRollingSceneCfg(InteractiveSceneCfg):
         spawn=sim_utils.UsdFileCfg(usd_path=f"{TACEX_ASSETS_DATA_DIR}/Props/plate.usd"),
     )
 
-
     ball = RigidObjectCfg(
         prim_path="{ENV_REGEX_NS}/ball",
         init_state=RigidObjectCfg.InitialStateCfg(pos=[0.65, 0.0, 0.015]),
@@ -126,13 +124,6 @@ class BallRollingSceneCfg(InteractiveSceneCfg):
         tactile_img_res = (480, 640),
         debug_vis=True # for being able to see sensor output in the gui
     )
-    # gsmini = GsMiniSensorMarkerSimCfg(
-    #     prim_path="{ENV_REGEX_NS}/Robot/gelsight_mini_case",                              
-    #     with_rgb=True, #True,
-    #     resolution = (48, 64),
-    #     num_markers_col = 12, #20,#20,
-    #     num_markers_row = 16, #20,#15,
-    # )
 
 def movement_pattern(ball_position, sim_device, ball_radius=0.01, gel_length=20.75/1000, gel_width=25.25/1000, gel_height=4.25/1000):
     """ Computes the goal positions for the ee of the Franka arm, so that the ball is being rolled around.
@@ -296,6 +287,13 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
             current_goal_idx = (current_goal_idx + 1) % len(ee_goals)
 
             ik_commands[:] = ee_goals[current_goal_idx]
+            # add some randomization 
+            ik_commands[:, :2] += sample_uniform(
+                -0.005, 
+                0.005,
+                (scene.num_envs, 2), 
+                sim.device
+            )
             diff_ik_controller.set_command(ik_commands)
         else:
             # obtain quantities from simulation for IK controller 

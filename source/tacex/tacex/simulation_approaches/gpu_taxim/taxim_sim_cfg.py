@@ -5,17 +5,17 @@ from typing import TYPE_CHECKING, Any, Dict, Sequence, Tuple, Union, List
 from isaaclab.utils import class_to_dict, to_camel_case, configclass
 
 
+from ..gelsight_simulator_cfg import GelSightSimulatorCfg
 from .taxim_sim import TaximSimulator
 
 """Configuration for a tactile RGB simulation with Taxim."""
 @configclass
-class TaximSimulatorCfg():
-    class_type: type = TaximSimulator
+class TaximSimulatorCfg(GelSightSimulatorCfg):
+    simulation_approach_class: type = TaximSimulator
 
     calib_folder_path: str = ""
 
-    device: str = "cuda"
-    num_envs: int = 0
+    device: str = "cuda" 
 
     with_shadow: bool = False
     tactile_img_res: tuple = (320, 240)

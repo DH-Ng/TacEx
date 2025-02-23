@@ -18,27 +18,23 @@ class MarkerMotion():
                 frame0_blur,
                 lamb,
                 mm2pix=33.898, #FOTS default is 19.58
-                N=11,
-                M=9,
-                W=240,
-                H=320,
+                num_markers_col=11,
+                num_markers_row=9,
+                tactile_img_width=240,
+                tactile_img_height=320,
+                x0=0,
+                y0=0,
                 is_flow=True):
 
-        # self.model = model
-        # self.data = data
         self.frame0_blur = frame0_blur
-        print("resize image", frame0_blur.shape)
-        if (W,H) != frame0_blur.shape:
-            H = frame0_blur.shape[0]
-            W = frame0_blur.shape[1]
 
         self.lamb = lamb
 
         self.mm2pix = mm2pix
-        self.N = N # number of markers in rows
-        self.M = M # numbers of markers in columns
-        self.W = W
-        self.H = H
+        self.num_markers_col = num_markers_col 
+        self.num_markers_row = num_markers_row 
+        self.tactile_img_width = tactile_img_width
+        self.tactile_img_height = tactile_img_height
 
         self.contact = []
         self.moving = False
@@ -46,28 +42,28 @@ class MarkerMotion():
 
         self.mkr_rng = 0.5
 
-        self.x = np.arange(0, self.W, 1)
-        self.y = np.arange(0, self.H, 1)
+        self.x = np.arange(0, self.tactile_img_width, 1) # x is column-wise defined
+        self.y = np.arange(0, self.tactile_img_height, 1) # y is row-wise defined
         self.xx, self.yy = np.meshgrid(self.x, self.y)
 
-        self.xx_init, self.yy_init = np.meshgrid(self.x, self.y)
+        # self.xx_init, self.yy_init = np.meshgrid(self.x, self.y)
 
-        x = np.arange(int(self.H/(2*self.N)), self.H, int(self.H/self.N)) # get out indices of the markers in the image -> take the first N of them
-        y = np.arange(int(self.W/(2*self.M)), self.W, int(self.W/self.M))
+        # compute marker indices based on number of markers per column/row and image shape
+        marker_x_idx = np.linspace(x0, self.tactile_img_width-x0, self.num_markers_col, dtype=int)
+        marker_y_idx = np.linspace(y0, self.tactile_img_height-y0, self.num_markers_row, dtype=int)
+        # marker_x_idx = np.arange(int(self.tactile_img_width/self.num_markers_col), self.tactile_img_width - int(self.tactile_img_width/self.num_markers_col), int(self.tactile_img_width/self.num_markers_col)) 
+        # marker_y_idx = np.arange(int(self.tactile_img_height/self.num_markers_row), self.tactile_img_height - int(self.tactile_img_height/self.num_markers_row), int(self.tactile_img_height/self.num_markers_row))
 
-        xind, yind = np.meshgrid(x, y)
-        self.xind = (xind.reshape([1, -1])[0]).astype(np.int16)
-        self.yind = (yind.reshape([1, -1])[0]).astype(np.int16)
+        marker_x_idx, marker_y_idx = np.meshgrid(marker_x_idx, marker_y_idx)
+        self.marker_x_idx = (marker_x_idx.reshape([1, -1])[0]).astype(np.int16)
+        self.marker_y_idx = (marker_y_idx.reshape([1, -1])[0]).astype(np.int16)
         
-        #! marker init positions
-        self.xx_marker_init = self.xx[xind, yind].reshape([self.M, self.N])
-        self.yy_marker_init = self.yy[xind, yind].reshape([self.M, self.N])
-        # print("test ", self.yy[xind, yind].size/self.M)
-        # self.xx_marker_init = self.xx[xind, yind].reshape([self.M, 17])
-        # self.yy_marker_init = self.yy[xind, yind].reshape([self.M, 17]) #todo -1 is workaround for not fitting shapes
+        self.init_marker_x_pos = self.xx[self.marker_y_idx, self.marker_x_idx].reshape([self.num_markers_row, self.num_markers_col])
+        self.init_marker_y_pos = self.yy[self.marker_y_idx, self.marker_x_idx].reshape([self.num_markers_row, self.num_markers_col])
 
-        self.xx_marker_curr = self.xx_marker_init
-        self.yy_marker_curr = self.yy_marker_init
+
+        self.marker_x_pos = self.init_marker_x_pos
+        self.marker_y_pos = self.init_marker_y_pos
 
 
     def _shear(self, center_x, center_y, lamb, shear_x, shear_y, xx, yy):
@@ -106,91 +102,85 @@ class MarkerMotion():
         yy_ = yy + dy
         return xx_, yy_
 
-    def _generate(self,xx,yy):
+    def _generate(self, x_pos_of_all_markers, y_pos_of_all_markers):
         img = np.zeros_like(self.frame0_blur.copy())#
-        for i in range(self.N):
-            for j in range(self.M):
-                ini_r = int(self.yy_marker_init[j,i]) #yy_marker_init
-                ini_c = int(self.xx_marker_init[j,i]) #xx_marker_init
-                r = int(yy[j, i])
-                c = int(xx[j, i])
-                if r >= self.H or r < 0 or c >= self.W or c < 0:
+        for i in range(self.num_markers_col):
+            for j in range(self.num_markers_row):
+                init_y_pos = int(self.yy_marker_init[j,i]) # yy_marker_init (row)
+                init_x_pos = int(self.xx_marker_init[j,i]) # xx_marker_init (column)
+                y_pos = int(y_pos_of_all_markers[j, i]) # position row-wise
+                x_pos = int(x_pos_of_all_markers[j, i]) # position column-wise
+                if y_pos >= self.tactile_img_height or y_pos < 0 or x_pos >= self.tactile_img_width or x_pos < 0:
                     continue
-                cv2.circle(img,(c,r), 3, (20,20,20), 4)
+                cv2.circle(img,(x_pos,y_pos), 3, (20,20,20), 4)
 
                 #img[r, c, :] = self.frame0_blur[r, c, :] * 0
                 k = 0.001
-                pt1 = (ini_c, ini_r)
-                pt2 = (c+int(k*(c-ini_c)), r+int(k*(r-ini_r)))
+                pt1 = (init_x_pos, init_y_pos)
+                pt2 = (init_y_pos+int(k*(y_pos-init_y_pos)), init_x_pos+int(k*(x_pos-init_x_pos)))
                 color = (0, 255, 0)
                 cv2.arrowedLine(img, pt1, pt2, color, 2,  tipLength=0.2)
 
-        #img = img[:self.W, :self.H]
+        #img = img[:self.tactile_img_width, :self.tactile_img_height]
         return img
 
-    def _motion_callback(self, xx, yy, depth_map, contact_mask, traj):
-        for i in range(self.N):
-            for j in range(self.M):
-                r = int(yy[j, i])
-                c = int(xx[j, i])
-                if r >= self.H or r < 0 or c >= self.W or c < 0:
+    def _motion_callback(self, init_marker_x_pos, init_marker_y_pos, depth_map, contact_mask, traj):
+        for i in range(self.num_markers_col):
+            for j in range(self.num_markers_row):
+                y_pos = int(init_marker_y_pos[j, i]) # row-wise defined
+                x_pos = int(init_marker_x_pos[j, i]) # column-wise defined
+                if y_pos >= self.tactile_img_height or y_pos < 0 or x_pos >= self.tactile_img_width or x_pos < 0:
                     continue
-                if contact_mask[r,c] == 1.0:
-                    h = depth_map[r,c]
-                    self.contact.append([r,c,h])
-        # print("Max depth ", np.max(depth_map))
+                if contact_mask[y_pos, x_pos] == 1.0:
+                    tactile_img_height = depth_map[y_pos, x_pos]
+                    self.contact.append([y_pos, x_pos, tactile_img_height])
+
         if not self.contact:
-            xx,yy = self.xx_marker_init, self.yy_marker_init
+            new_x_pos, new_y_pos = init_marker_x_pos, init_marker_y_pos
+            return new_x_pos, new_y_pos
         
-        xx_,yy_ = self._dilate(self.lamb[0], xx, yy) # normal load
+        # compute marker motion under normal load
+        new_x_pos, new_y_pos = self._dilate(self.lamb[0], init_marker_x_pos, init_marker_y_pos) 
         if len(traj) >= 2:
-            # shear load
+            # under shear load
             # print("traj diff x,y ", (traj[-1][0]-traj[0][0]), (traj[-1][1]-traj[0][1]))
-            xx_,yy_ = self._shear(int(traj[0][0]*self.mm2pix + self.H/2), 
-                                int(traj[0][1]*self.mm2pix + self.W/2 ),
+            new_x_pos, new_y_pos = self._shear(int(traj[0][0]*self.mm2pix + self.tactile_img_height/2), 
+                                int(traj[0][1]*self.mm2pix + self.tactile_img_width/2 ),
                                 self.lamb[1],
                                 int((traj[-1][0]-traj[0][0])*self.mm2pix),
                                 int((traj[-1][1]-traj[0][1])*self.mm2pix),
-                                xx_,
-                                yy_)
-            # twist load
+                                new_x_pos,
+                                new_y_pos)
+            # under twist load
             # print("theta is ", np.rad2deg(traj[-1][2]-traj[0][2]))
             # theta = max(min(traj[-1][2]-traj[0][2], 50 / 180.0 * math.pi), -50 / 180.0 * math.pi) # -50 = max angle, traj rotation is in rad!
-            # xx_,yy_ = self._twist(int(traj[-1][0]*self.mm2pix + self.H/2), 
-            #                     int(traj[-1][1]*self.mm2pix + self.W/2),
+            # new_x_pos,new_y_pos = self._twist(int(traj[-1][0]*self.mm2pix + self.tactile_img_height/2), 
+            #                     int(traj[-1][1]*self.mm2pix + self.tactile_img_width/2),
             #                     self.lamb[2],
             #                     theta,
-            #                     xx_,
-            #                     yy_)
-        return xx_, yy_
+            #                     new_x_pos,
+            #                     new_y_pos)
+        return new_x_pos, new_y_pos
 
     def marker_sim(self, depth_map, contact_mask, traj):
-        # xind = (np.random.random(self.N * self.M) * self.W).astype(np.int16)
-        # yind = (np.random.random(self.N * self.M) * self.H).astype(np.int16)
-
-        xind = self.xind
-        yind = self.yind
-
-        xx = self.xx_marker_init#[xind, yind].reshape([self.M, self.N])
-        yy = self.yy_marker_init#[xind, yind].reshape([self.M, self.N])
-        #! updated marker positions
-        xx_marker_, yy_marker_ = self._motion_callback(xx, yy, depth_map, contact_mask, traj)
+        #! update marker positions
+        new_marker_x_pos, new_marker_y_pos = self._motion_callback(self.init_marker_x_pos, self.init_marker_y_pos, depth_map, contact_mask, traj)
         # self.xx_marker_curr += xx_marker_.astype(int)
         # self.yy_marker_curr += yy_marker_.astype(int)
 
         self.contact = []
 
-        return xx_marker_, yy_marker_
+        return new_marker_x_pos, new_marker_y_pos
 
     def _marker_motion(self, depth_map, contact_mask, traj):        
-        x = np.arange(int(self.H/(2*self.N)), self.H, int(self.H/self.N)) # get indices of the markes in the image -> take the first N of them
-        y = np.arange(int(self.W/(2*self.M)), self.W, int(self.W/self.M))
+        x = np.arange(int(self.tactile_img_height/(2*self.num_markers_col)), self.tactile_img_height, int(self.tactile_img_height/self.num_markers_col)) # get indices of the markes in the image -> take the first num_markers_col of them
+        y = np.arange(int(self.tactile_img_width/(2*self.num_markers_row)), self.tactile_img_width, int(self.tactile_img_width/self.num_markers_row))
 
         xind, yind = np.meshgrid(x, y)
         xind = (xind.reshape([1, -1])[0]).astype(np.int16)
         yind = (yind.reshape([1, -1])[0]).astype(np.int16)
         
-        xx_marker, yy_marker = self.xx[xind, yind].reshape([self.M, self.N]), self.yy[xind, yind].reshape([self.M, self.N])
+        xx_marker, yy_marker = self.xx[xind, yind].reshape([self.num_markers_row, self.num_markers_col]), self.yy[xind, yind].reshape([self.num_markers_row, self.num_markers_col])
         self.xx,self.yy = xx_marker, yy_marker
 
         img = self._generate(xx_marker, yy_marker)

@@ -163,6 +163,9 @@ class GelSightSensor(SensorBase):
         if (self.marker_motion_simulator is not None) and ("marker_motion" in self._data.output.keys()):
             # height_map_shifted = self.taxim._get_shifted_height_map(self._indentation_depth, self._data.output["height_map"])
             self._data.output["marker_motion"][:] = self.marker_motion_simulator.marker_motion_simulation() #TODO adjust mm2pix value 19.58 #/19.58
+            # (yy_init_pos, xx_init_pos), i.e. along height x width of tactile img
+            self._data.output["init_marker_pos"] = ([0], [0])
+            
             self.marker_motion_simulator.reset()
 
         # Reset the frame count
@@ -232,31 +235,45 @@ class GelSightSensor(SensorBase):
         #         raise RuntimeError("Initializing the camera failed! Please provide a valid argument for `prim_path`.")
         #     sensor_prim_path = self.prim_path
 
-        #TODO check if class for optical and for marker sim is the same
-        #-> If yes, only initialize class one time
-        # simulation approaches for simulating GelSight sensor output
+
+        # initialize classes for GelSight simulation approaches for simulating GelSight sensor output
         if self.cfg.optical_sim_cfg is not None:
-            # update the cfg
-            self.cfg.optical_sim_cfg.device = self.cfg.device
-            self.cfg.optical_sim_cfg.num_envs = self._num_envs
-            # initialize class we set in the cfg class for the optical simulation
-            self.optical_simulator = self.cfg.optical_sim_cfg.class_type(
-                self,
-                self.cfg.optical_sim_cfg,
+            # initialize class we set in the cfg class of the sim approach
+            self.optical_simulator = self.cfg.optical_sim_cfg.simulation_approach_class(
+                sensor = self,
+                cfg = self.cfg.optical_sim_cfg,
             )
             
+        if self.cfg.marker_motion_sim_cfg is not None:
+            if ((self.optical_simulator is not None) and 
+                (self.cfg.optical_sim_cfg.simulation_approach_class == self.cfg.marker_motion_sim_cfg.simulation_approach_class)):
+                # if same class for optical and marker sim, then use same obj
+                self.marker_motion_simulator = self.optical_simulator
+            else:
+                self.marker_motion_simulator = self.cfg.marker_motion_sim_cfg.simulation_approach_class(
+                    sensor = self,
+                    cfg = self.cfg.marker_motion_sim_cfg
+                )
+        
+        # create buffers for output
         if "tactile_rgb" in self._data.output.keys():
             self._data.output["tactile_rgb"] = torch.zeros(
                 (self._num_envs, 3, self.cfg.optical_sim_cfg.tactile_img_res[0], self.cfg.optical_sim_cfg.tactile_img_res[1]), 
                 device=self.cfg.device
             )
 
-        # if self.cfg.marker_motion_sim_cfg is not None:
-        #     # self.cfg.marker_motion_sim_cfg.device = self.cfg.device
-        #     self.cfg.marker_motion_sim_cfg.num_envs = self._num_envs
-        #     self.marker_motion_simulator = self.cfg.marker_motion_sim_cfg.class_type(self.cfg.marker_motion_sim_cfg)
+        if "marker_motion" in self._data.output.keys():
+            self._data.output["marker_motion"]= torch.zeros(
+                (
+                    self._num_envs,
+                    self.cfg.marker_motion_sim_cfg.marker_params.num_markers_row, 
+                    self.cfg.marker_motion_sim_cfg.marker_params.num_markers_col,
+                    2 # two, because each marker at (row,col) has position value (x,y)
+                ), 
+                device=self.cfg.device
+            )
 
-        # this code is... wild I guess
+        # set how the indentation depth should be computed
         if self.cfg.compute_indentation_depth_class == "optical_sim":
             self.compute_indentation_depth_func = self.optical_simulator.compute_indentation_depth
         else:
@@ -269,6 +286,8 @@ class GelSightSensor(SensorBase):
 
         # reset internal buffers
         self.reset()
+
+        #todo print init data
 
     #MARK: _update_buffers_impl
     def _update_buffers_impl(self, env_ids: Sequence[int]):
@@ -296,8 +315,7 @@ class GelSightSensor(SensorBase):
         self._indentation_depth[:] = self.compute_indentation_depth_func() # type: ignore
 
         if (self.optical_simulator is not None) and ("tactile_rgb" in self._data.output.keys()) :
-            #self.optical_simulator.height_map[:] = self._get_height_map()
-            self.optical_simulator.height_map = self._data.output["height_map"]
+            # self.optical_simulator.height_map = self._data.output["height_map"]
             self._data.output["tactile_rgb"][:] = self.optical_simulator.optical_simulation()
 
         if (self.marker_motion_simulator is not None) and ("marker_motion" in self._data.output.keys()):
@@ -342,80 +360,57 @@ class GelSightSensor(SensorBase):
                     # create image provider
                     self._img_providers[str(i)] = omni.ui.ByteImageProvider() # default format omni.ui.TextureFormat.RGBA8_UNORM
 
-                # if self._marker_sim:
-                #     frame = np.zeros(self.fots_marker_motion.frame0_blur.shape).astype(np.uint8) #np.zeros_like(self.fots_marker_motion.frame0_blur).astype(np.uint8)
-
-                #     if self.cfg.with_rgb:
-                #         # get tactile rgb image
-                #         tactile_rgb = self.data.output["tactile_rgb"][i].permute(1, 2, 0).cpu().numpy()
-                #         tactile_rgb = cv2.normalize(tactile_rgb, None, alpha = 0, beta = 255, norm_type = cv2.NORM_MINMAX, dtype = cv2.CV_32F).astype(np.uint8)
-                #         frame = tactile_rgb
-
-                #         # #Test: visualize contact mask
-                #         # height_map_shifted = self.taxim._get_shifted_height_map(self._press_depth, self._data.output["height_map"])
-                #         # deformed_gel, contact_mask = self.taxim._compute_gel_pad_deformation(height_map_shifted)
-                #         # frame = contact_mask.cpu().numpy().astype(np.uint8)*255
-                #     marker_data = self.data.output["marker_motion"][i]
-                #     xx = marker_data[:,:,0].cpu().numpy()
-                #     yy = marker_data[:,:,1].cpu().numpy()
-                #     color = (255, 255, 255)
-                #     for k in range(self.fots_marker_motion.N):
-                #         for j in range(self.fots_marker_motion.M):
-                #             ini_r = int(self.fots_marker_motion.yy_marker_init[j,k])
-                #             ini_c = int(self.fots_marker_motion.xx_marker_init[j,k])
-                #             r = int(yy[j, k]) # row
-                #             c = int(xx[j, k]) # column
-                #             if r >= self.fots_marker_motion.H or r < 0 or c >= self.fots_marker_motion.W or c < 0:
-                #                 continue
-                #             # cv2.circle(frame,(c,r), 6, (255,255,255), 1, lineType=8)
-
-                #             #frame[r, c, :] = self.frame0_blur[r, c, :] * 0
-                #             arrow_scale = 0.001 #10 #0.0001 #0.25
-                            
-                #             pt1 = (ini_c, ini_r)
-                #             # pt2 = (c+int(arrow_scale*(c-ini_c)), r+int(arrow_scale*(r-ini_r)))
-                #             pt2 = (c, r)
-                #             cv2.arrowedLine(frame, pt1, pt2, color, 2,  tipLength=0.1)
-                #     # frame = self.fots_marker_motion.img
-                #     # #TODO remove
-                #     # frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-                #     # cv2.imwrite("marker_flow.jpg", frame)
-                #     # #! visualize motion vectors
-                #     # motion_xx = self._data.output["motion_vectors"][0, :, :, 0]
-                #     # motion_yy = self._data.output["motion_vectors"][0, :, :, 1]
-                #     # print("motion_yy shape ", motion_yy.shape)
-                #     # for w in range(0, motion_xx.shape[0], 40):
-                #     #     for h in range(0, motion_xx.shape[1], 40):
-                #     #         init_x = int(w)
-                #     #         init_y = int(h)
-                #     #         x = int(w + motion_xx[w,h].cpu().numpy())
-                #     #         y = int(h + motion_yy[w,h].cpu().numpy())
-                #     #         if x >= motion_xx.shape[0] or x < 0 or y >= motion_xx.shape[1] or y < 0:
-                #     #             continue
-
-                #     #         arrow_scale = 0.3                
-                #     #         pt1 = (init_y, init_x)
-                #     #         pt2 = (y+int(arrow_scale*(y-init_y)), x+int(arrow_scale*(x-init_x)))
-                #     #         cv2.arrowedLine(frame, pt1, pt2, (255,0,0), 2,  tipLength=0.2)
-
-                #     # visualize contact center with red cross
-                #     # if len(self._data.output["traj"][i]) > 1:     
-                #     #     traj = []
-                #     #     traj.append(self._data.output["traj"][i][0])            
-                #     #     cv2.circle(frame,(int(traj[0][0]/self.taxim.sensor_params.pixmm + frame.shape[0]/2), int(traj[0][1]/self.taxim.sensor_params.pixmm + frame.shape[1]/2)), 5, (255,0,0), -1) 
-                #     #     # cv2.circle(frame,(int(traj[0][0]/self.taxim.sensor_params.pixmm + 320), int(traj[0][1]/self.taxim.sensor_params.pixmm + 240)), 5, (255,0,0), -1) 
-
-                #         # should = self.should_be.cpu().numpy()[0]
-                #         # cv2.circle(frame,(should[1], should[0]), 4, (0,255,0), -1)
-                #     #frame = cv2.normalize(frame, None, alpha = 0, beta = 255, norm_type = cv2.NORM_MINMAX, dtype = cv2.CV_32F).astype(np.uint8)                
-                # else: # simulate tactile RGB image
+                if "tactile_rgb" in self._data.output.keys():
                     # get tactile image
-                frame = self.data.output["tactile_rgb"][i].permute(1, 2, 0).cpu().numpy()
-                frame = cv2.normalize(frame, None, alpha = 0, beta = 255, norm_type = cv2.NORM_MINMAX, dtype = cv2.CV_32F)
-                    #TODO remove
+                    frame = self.data.output["tactile_rgb"][i].permute(1, 2, 0).cpu().numpy()
+                    frame = cv2.normalize(frame, None, alpha = 0, beta = 255, norm_type = cv2.NORM_MINMAX, dtype = cv2.CV_32F)
                     # frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-                    # cv2.imwrite("tact_rgb.jpg", frame)
-                frame = frame.astype(np.uint8)
+                    # cv2.imwrite(f"tact_rgb{self._frame[i]}.jpg", frame)
+                    frame = frame.astype(np.uint8)
+                
+                if "marker_motion" in self._data.output.keys():
+                    if not "tactile_rgb" in self._data.output.keys():
+                        frame = np.zeros(self.marker_motion_simulator.cfg.tactile_img_res).astype(np.uint8) 
+
+                    # like the `_generate` function of FOTS MarkerMotion sim
+                    marker_data = self.data.output["marker_motion"][i]
+                    # position values are in pix
+                    x_pos_of_all_markers = marker_data[:,:,0].cpu().numpy() # = columns, shape (num_markers_row, num_markers_col)
+                    y_pos_of_all_markers  = marker_data[:,:,1].cpu().numpy() # = row
+                    color = (255, 255, 255)
+
+                    num_markers_row = x_pos_of_all_markers.shape[0]
+                    num_markers_col = x_pos_of_all_markers.shape[1]
+                    for k in range(num_markers_col):
+                        for j in range(num_markers_row):
+                            init_x_pos = int(self.marker_motion_simulator.init_marker_pos[0][j,k])    # get initial x position of marker [j,k]
+                            init_y_pos = int(self.marker_motion_simulator.init_marker_pos[1][j,k]) # get initial y position of marker [j,k]
+                            x_pos = int(x_pos_of_all_markers[j, k]) # x is column-wise definied
+                            y_pos = int(y_pos_of_all_markers[j, k]) # y row-wise
+                            if ((x_pos >= frame.shape[1])
+                                or (x_pos < 0)
+                                or (y_pos >= frame.shape[0])
+                                or (y_pos < 0)):
+                                continue
+                            # cv2.circle(frame,(column,row), 6, (255,255,255), 1, lineType=8)
+
+                            arrow_scale = 0.001 #10 #0.0001 #0.25     
+                            pt1 = (init_x_pos, init_y_pos)
+                            # pt2 = (column+int(arrow_scale*(column-init_column)), row+int(arrow_scale*(row-init_row)))
+                            pt2 = (x_pos, y_pos)
+                            cv2.arrowedLine(frame, pt1, pt2, color, 2,  tipLength=0.1)
+
+                    # visualize contact center with red cross
+                    # if len(self._data.output["traj"][i]) > 1:     
+                    #     traj = []
+                    #     traj.append(self._data.output["traj"][i][0])            
+                    #     cv2.circle(frame,(int(traj[0][0]/self.taxim.sensor_params.pixmm + frame.shape[0]/2), int(traj[0][1]/self.taxim.sensor_params.pixmm + frame.shape[1]/2)), 5, (255,0,0), -1) 
+                    #     # cv2.circle(frame,(int(traj[0][0]/self.taxim.sensor_params.pixmm + 320), int(traj[0][1]/self.taxim.sensor_params.pixmm + 240)), 5, (255,0,0), -1) 
+
+                        # should = self.should_be.cpu().numpy()[0]
+                        # cv2.circle(frame,(should[1], should[0]), 4, (0,255,0), -1)
+                    #frame = cv2.normalize(frame, None, alpha = 0, beta = 255, norm_type = cv2.NORM_MINMAX, dtype = cv2.CV_32F).astype(np.uint8)                
+
                 #TODO remove this tmp workaround for different res
                 # frame = cv2.resize(frame, (120, 160)) #(self._sensor_params.height, self._sensor_params.width)
                 

@@ -10,14 +10,29 @@ import inspect
 import torch
 import weakref
 from abc import ABC, abstractmethod
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from ..gelsight_sensor import GelSightSensor
+    from ..simulation_approaches.gelsight_simulator_cfg import GelSightSimulatorCfg
 
 class GelSightSimulator(ABC):
     """Base class for implementing an optical simulation approach.
     
     
     """
-    def __init__(self, cfg):
+    def __init__(self, sensor: GelSightSensor, cfg: GelSightSimulatorCfg):
         self.cfg = cfg
+        self.sensor = sensor
+
+        if self.cfg.device is None:
+            # use same device as simulation
+            self._device = self.sensor.device
+        else: 
+            self._device = self.cfg.device
+        
+        self._num_envs = self.sensor._num_envs
+        
         self._initialize_impl()
 
     @abstractmethod

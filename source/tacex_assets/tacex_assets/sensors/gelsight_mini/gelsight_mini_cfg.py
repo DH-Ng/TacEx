@@ -6,6 +6,7 @@ from isaaclab.sensors import SensorBaseCfg, TiledCameraCfg
 from tacex_assets import TACEX_ASSETS_DATA_DIR
 from tacex import GelSightSensor, GelSightSensorCfg
 from tacex.simulation_approaches.gpu_taxim import TaximSimulator, TaximSimulatorCfg
+from tacex.simulation_approaches.fots import FOTSMarkerSimulatorCfg
 
 """Configuration for the gelsight mini sensor."""
 @configclass
@@ -36,7 +37,7 @@ class GelSightMiniCfg(GelSightSensorCfg):
 
     update_period: float = 0.0
     
-    data_types: List[str] = ["tactile_rgb", "height_map"]
+    data_types: List[str] = ["tactile_rgb", "marker_motion", "height_map"]
 
     optical_sim_cfg = TaximSimulatorCfg(
         calib_folder_path= f"{TACEX_ASSETS_DATA_DIR}/Sensors/GelSight_Mini/calibs/480x640",
@@ -45,6 +46,20 @@ class GelSightMiniCfg(GelSightSensorCfg):
         tactile_img_res= tactile_img_res,
     )
 
+    marker_motion_sim_cfg = FOTSMarkerSimulatorCfg(
+        lamb = [0.00125,0.0021,0.0038],
+        pyramid_kernel_size = [51, 21, 11, 5], #[11, 11, 11, 11, 11, 5], 
+        kernel_size = 5,
+        marker_params = FOTSMarkerSimulatorCfg.MarkerParams(
+            num_markers_col=25, #11,
+            num_markers_row=20, #9,
+            x0=26,
+            y0=15,
+            dx=29,
+            dy=26
+        ),
+        tactile_img_res = (480, 640),
+    )
     compute_indentation_depth_class = "optical_sim"
 
     device: str = "cuda" # use gpu per default #TODO currently gpu mandatory, also enable cpu only usage?    
