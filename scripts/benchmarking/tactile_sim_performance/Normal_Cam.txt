@@ -1,0 +1,7 @@
+num_envs: 100 
+Total amount of 'in-contact' frames per env (ran pattern 3 times): 2185
+Avg physics_sim time for one frame per env:      1.1570ms 
+Avg tactile_sim time for one frame per env:      1.0938ms 
+---
+
+-> normal camera

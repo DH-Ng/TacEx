@@ -9,9 +9,7 @@ from isaaclab.app import AppLauncher
 parser = argparse.ArgumentParser(description="Ball rolling experiment with a Franka, which is equipped with one GelSight Mini Sensor.")
 parser.add_argument("--num_envs", type=int, default=2, help="Number of environments to spawn.")
 parser.add_argument("--sys", type=bool, default=True, help="Whether to track system utilization.")
-parser.add_argument("--debug_vis", type=bool, default=True, help="Whether to render tactile images in the gui.")
-
-# append AppLauncher cli args
+parser.add_argument("--debug_vis", default=False, action="store_true", help="Whether to render tactile images in the# append AppLauncher cli args")
 AppLauncher.add_app_launcher_args(parser)
 # parse the arguments
 
@@ -132,7 +130,7 @@ class BallRollingSceneCfg(InteractiveSceneCfg):
         ),
         device = "cuda",
         tactile_img_res = (480, 640),
-        debug_vis= args_cli.debug_vis, # for being able to see sensor output in the gui
+        debug_vis=True, # for being able to see sensor output in the gui
         # optical_sim_cfg=None,
         # update Taxim cfg
         marker_motion_sim_cfg=None,
@@ -189,6 +187,7 @@ def _movement_pattern(ball_position, sim_device, ball_radius=0.01, gel_length=20
 
 def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
     """Runs the simulation loop."""
+    # update sensor config based on args
     #Create controller
     diff_ik_cfg = DifferentialIKControllerCfg(command_type="pose", use_relative_mode=False, ik_method="dls")
     diff_ik_controller = DifferentialIKController(diff_ik_cfg, num_envs=scene.num_envs, device=sim.device)
@@ -242,7 +241,7 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
     print("Number of steps till reset: ", len(ee_goals)*goal_change_num_step*2)
     # Simulation loop
     while simulation_app.is_running():
-        get_utilization_percentages()
+        # get_utilization_percentages()
         # reset at the beginning of the simulation and after doing pattern 2 times
         if count % (len(ee_goals)*goal_change_num_step*2) == 0:   # reset after 900 steps, cause every 50 steps we change action -> pattern once = 450 steps
             print(f"[INFO]: Reset number {num_resets}...")
@@ -278,13 +277,13 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
                 print("Total amount of 'in-contact' frames per env: ", len(frame_times_physics))
                 print("Avg physics_sim time per env:    {:8.4f}ms".format(np.mean(np.array(frame_times_physics)/scene.num_envs)))
                 print("Avg tactile_sim time per env:    {:8.4f}ms".format(np.mean(np.array(frame_times_tactile)/scene.num_envs)))
-                system_utilization_analytics = get_utilization_percentages(reset=True)
-                print(
-                    f"| CPU:{system_utilization_analytics[0]}% | "
-                    f"RAM:{system_utilization_analytics[1]}% | "
-                    f"GPU Compute:{system_utilization_analytics[2]}% | "
-                    f"GPU Memory: {system_utilization_analytics[3]:.2f}% |"
-                )
+                # system_utilization_analytics = get_utilization_percentages(reset=True)
+                # print(
+                #     f"| CPU:{system_utilization_analytics[0]}% | "
+                #     f"RAM:{system_utilization_analytics[1]}% | "
+                #     f"GPU Compute:{system_utilization_analytics[2]}% | "
+                #     f"GPU Memory: {system_utilization_analytics[3]:.2f}% |"
+                # )
                 print("")
 
                 #! write down the average simulation times
@@ -298,12 +297,12 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
                         f.write("Avg physics_sim time for one frame per env:    {:8.4f}ms \n".format(np.mean(np.array(frame_times_physics)/scene.num_envs)))
                         f.write("Avg tactile_sim time for one frame per env:    {:8.4f}ms \n".format(np.mean(np.array(frame_times_tactile)/scene.num_envs)))
                         f.write("---")
-                        f.write(
-                            f"| CPU:{system_utilization_analytics[0]}% | "
-                            f"RAM:{system_utilization_analytics[1]}% | "
-                            f"GPU Compute:{system_utilization_analytics[2]}% | "
-                            f"GPU Memory: {system_utilization_analytics[3]:.2f}% |"
-                        )
+                        # f.write(
+                        #     f"| CPU:{system_utilization_analytics[0]}% | "
+                        #     f"RAM:{system_utilization_analytics[1]}% | "
+                        #     f"GPU Compute:{system_utilization_analytics[2]}% | "
+                        #     f"GPU Memory: {system_utilization_analytics[3]:.2f}% |"
+                        # )
                         print("")
                         f.write("\n")
                     frame_times_physics = []
@@ -351,19 +350,19 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
             # if current_goal_idx == 3:
             #     joint_pos_des[:, 6] = -joint_pos_des[:, 6] 
 
+        ###
+        physics_start = time.time()
+        # perform physics step
         # apply actions
         scene["robot"].set_joint_position_target(joint_pos_des, robot_entity_cfg.joint_ids)
         scene.write_data_to_sim()
 
-        ###
-        physics_start = time.time()
-        # perform physics step
         sim.step(render=False)
-        physics_end = time.time()
-        ###
 
         # update isaac buffers()
         scene.update(sim_dt)
+        physics_end = time.time()
+        ###
 
         ### update sensors
         tactile_sim_start = time.time()
@@ -392,14 +391,14 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
 
         count += 1
 
-        system_utilization_analytics = get_utilization_percentages(reset=False)
-        print(
-            f"| CPU:{system_utilization_analytics[0]}% | "
-            f"RAM:{system_utilization_analytics[1]}% | "
-            f"GPU Compute:{system_utilization_analytics[2]}% | "
-            f"GPU Memory: {system_utilization_analytics[3]:.2f}% |"
-        )
-        print("")
+        # system_utilization_analytics = get_utilization_percentages(reset=False)
+        # print(
+        #     f"| CPU:{system_utilization_analytics[0]}% | "
+        #     f"RAM:{system_utilization_analytics[1]}% | "
+        #     f"GPU Compute:{system_utilization_analytics[2]}% | "
+        #     f"GPU Memory: {system_utilization_analytics[3]:.2f}% |"
+        # )
+        # print("")
         
     
 def main():
