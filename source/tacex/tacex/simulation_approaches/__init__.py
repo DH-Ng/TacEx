@@ -1,2 +1,1 @@
 from .gelsight_simulator import GelSightSimulator
-

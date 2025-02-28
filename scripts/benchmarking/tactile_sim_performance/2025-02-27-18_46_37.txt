@@ -1,0 +1,5 @@
+num_envs: 75 
+Total amount of 'in-contact' frames per env (ran pattern 3 times): 2186
+Avg physics_sim time for one frame per env:      0.0749ms 
+Avg tactile_sim time for one frame per env:      3.6179ms 
+---| CPU:0.3% | RAM:61.2% | GPU Compute:86% |  GPU Memory: 97.75% |

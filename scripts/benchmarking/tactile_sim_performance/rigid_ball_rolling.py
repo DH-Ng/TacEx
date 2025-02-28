@@ -8,6 +8,9 @@ from isaaclab.app import AppLauncher
 # add argparse arguments
 parser = argparse.ArgumentParser(description="Ball rolling experiment with a Franka, which is equipped with one GelSight Mini Sensor.")
 parser.add_argument("--num_envs", type=int, default=2, help="Number of environments to spawn.")
+parser.add_argument("--sys", type=bool, default=True, help="Whether to track system utilization.")
+parser.add_argument("--debug_vis", type=bool, default=True, help="Whether to render tactile images in the gui.")
+
 # append AppLauncher cli args
 AppLauncher.add_app_launcher_args(parser)
 # parse the arguments
@@ -33,7 +36,7 @@ from isaaclab.managers import SceneEntityCfg
 
 from isaaclab.utils import configclass
 from isaaclab.utils.math import transform_points, sample_uniform
-import isaaclab.utils.math as orbit_math
+import isaaclab.utils.math as lab_math
 
 from isaaclab.scene import InteractiveScene, InteractiveSceneCfg
 from isaaclab.controllers import DifferentialIKController, DifferentialIKControllerCfg
@@ -44,8 +47,8 @@ from isaaclab.utils.math import subtract_frame_transforms
 import isaaclab.utils.math as isaac_lab_math
 
 from pxr import UsdGeom, Usd, Sdf, PhysxSchema, UsdPhysics, Gf, UsdShade, Vt
-from isaacsim.util.debug_draw import _debug_draw
-draw = _debug_draw.acquire_debug_draw_interface()
+# from isaacsim.util.debug_draw import _debug_draw
+# draw = _debug_draw.acquire_debug_draw_interface()
 
 from isaacsim.core.prims import XFormPrim
 
@@ -60,13 +63,19 @@ import torch
 import warp as wp
 import cv2
 import time
+from pathlib import Path
+import datetime
 
+import psutil
+import pynvml
 
 from tacex_assets.robots.franka.franka_gsmini_single_adapter_rigid import FRANKA_PANDA_ARM_GSMINI_SINGLE_ADAPTER_HIGH_PD_CFG
 from tacex_assets import TACEX_ASSETS_DATA_DIR
 from tacex_assets.sensors.gelsight_mini.gelsight_mini_cfg import GelSightMiniCfg
 
 from tacex import GelSightSensor
+from tacex.simulation_approaches.gpu_taxim import TaximSimulatorCfg
+
 
 @configclass
 class BallRollingSceneCfg(InteractiveSceneCfg):
@@ -117,15 +126,23 @@ class BallRollingSceneCfg(InteractiveSceneCfg):
         sensor_camera_cfg = GelSightMiniCfg.SensorCameraCfg(
             prim_path_appendix = "/Camera",
             update_period= 0,
-            resolution = (480, 640),
+            resolution = (60,80), #(120, 160),
             data_types = ["depth"],
             clipping_range = (0.024, 0.034),
         ),
+        device = "cuda",
         tactile_img_res = (480, 640),
-        debug_vis=True # for being able to see sensor output in the gui
+        debug_vis= args_cli.debug_vis, # for being able to see sensor output in the gui
+        # optical_sim_cfg=None,
+        # update Taxim cfg
+        marker_motion_sim_cfg=None,
+        data_types=["tactile_rgb"], #marker_motion
+    )
+    gsmini = gsmini.replace(
+        optical_sim_cfg = gsmini.optical_sim_cfg.replace(device="cuda")
     )
 
-def movement_pattern(ball_position, sim_device, ball_radius=0.01, gel_length=20.75/1000, gel_width=25.25/1000, gel_height=4.25/1000):
+def _movement_pattern(ball_position, sim_device, ball_radius=0.01, gel_length=20.75/1000, gel_width=25.25/1000, gel_height=4.25/1000):
     """ Computes the goal positions for the ee of the Franka arm, so that the ball is being rolled around.
         The goal positions are computed based on the current position of the ball and the gel dimensions.
 
@@ -185,7 +202,7 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
 
     # Define goals for the end effector of the franka arm
     ball_position = scene["ball"].data.root_pos_w[:, :3] - scene.env_origins
-    ee_goals = movement_pattern(ball_position, sim.device, ball_radius=0.005)
+    ee_goals = _movement_pattern(ball_position, sim.device, ball_radius=0.005)
 
     # Track the given command
     current_goal_idx = 0
@@ -215,13 +232,17 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
     frame_times_physics = []
     frame_times_tactile = []
     num_resets = 0
-    file_name = "rigid_ball_rolling_tactile_perf.txt"
+
+    timestamp = "{:%Y-%m-%d-%H_%M_%S}".format(datetime.datetime.now())
+    output_dir = Path(__file__).parent.resolve()
+    file_name = str(output_dir) + f"/{timestamp}.txt"
 
     goal_change_num_step = 50
     print(f"Starting simulation with {scene.num_envs} envs")
     print("Number of steps till reset: ", len(ee_goals)*goal_change_num_step*2)
     # Simulation loop
     while simulation_app.is_running():
+        get_utilization_percentages()
         # reset at the beginning of the simulation and after doing pattern 2 times
         if count % (len(ee_goals)*goal_change_num_step*2) == 0:   # reset after 900 steps, cause every 50 steps we change action -> pattern once = 450 steps
             print(f"[INFO]: Reset number {num_resets}...")
@@ -229,7 +250,6 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
             stage = omni.usd.get_context().get_stage() 
             # reset time
             count = 0
-            # print("Robot bodies ", scene["robot"].body_names)
             # reset robot joint state 
             joint_pos = scene["robot"].data.default_joint_pos.clone()
             joint_vel = scene["robot"].data.default_joint_vel.clone()
@@ -240,15 +260,12 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
 
             # reset ball states 
             ball_root_state = scene["ball"].data.default_root_state.clone()
-            ball_root_state[:, :3] += scene.env_origins #? why do I need to add the env_origins here, but when I compute the desired ee pos, I need to subtract them?
+            ball_root_state[:, :3] += scene.env_origins 
             scene["ball"].write_root_state_to_sim(ball_root_state)
-
-            # reset soft gel
-            # deformableView
 
             # reset goal
             current_goal_idx = 0
-            #print("Changed goal to: ", current_goal_idx)
+
             # reset actions
             ik_commands[:] = ee_goals[current_goal_idx]
             joint_pos_des = joint_pos[:, robot_entity_cfg.joint_ids].clone()
@@ -259,29 +276,48 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
             if len(frame_times_physics) != 0:
                 print("num_envs: ", scene.num_envs)
                 print("Total amount of 'in-contact' frames per env: ", len(frame_times_physics))
-                print("avg physics_sim time per env:    {:8.4f}ms".format(np.mean(np.array(frame_times_physics)/scene.num_envs)))
-                print("avg tactile_sim time per env:    {:8.4f}ms".format(np.mean(np.array(frame_times_tactile)/scene.num_envs)))
+                print("Avg physics_sim time per env:    {:8.4f}ms".format(np.mean(np.array(frame_times_physics)/scene.num_envs)))
+                print("Avg tactile_sim time per env:    {:8.4f}ms".format(np.mean(np.array(frame_times_tactile)/scene.num_envs)))
+                system_utilization_analytics = get_utilization_percentages(reset=True)
+                print(
+                    f"| CPU:{system_utilization_analytics[0]}% | "
+                    f"RAM:{system_utilization_analytics[1]}% | "
+                    f"GPU Compute:{system_utilization_analytics[2]}% | "
+                    f"GPU Memory: {system_utilization_analytics[3]:.2f}% |"
+                )
                 print("")
 
                 #! write down the average simulation times
-                if num_resets==4:
-                    print("writing performance data into ", file_name)
-
+                if num_resets==3:
+                    print("*"*15)
+                    print("Writing performance data into ", file_name)
+                    print("*"*15)
                     with open(file_name, "a+") as f:
                         f.write(f"num_envs: {scene.num_envs} \n")
                         f.write(f"Total amount of 'in-contact' frames per env (ran pattern {num_resets} times): {len(frame_times_physics)}\n")
-                        f.write("avg physics_sim time for one frame per env:    {:8.4f}ms \n".format(np.mean(np.array(frame_times_physics)/scene.num_envs)))
-                        f.write("avg tactile_sim time for one frame per env:    {:8.4f}ms \n".format(np.mean(np.array(frame_times_tactile)/scene.num_envs)))
+                        f.write("Avg physics_sim time for one frame per env:    {:8.4f}ms \n".format(np.mean(np.array(frame_times_physics)/scene.num_envs)))
+                        f.write("Avg tactile_sim time for one frame per env:    {:8.4f}ms \n".format(np.mean(np.array(frame_times_tactile)/scene.num_envs)))
+                        f.write("---")
+                        f.write(
+                            f"| CPU:{system_utilization_analytics[0]}% | "
+                            f"RAM:{system_utilization_analytics[1]}% | "
+                            f"GPU Compute:{system_utilization_analytics[2]}% | "
+                            f"GPU Memory: {system_utilization_analytics[3]:.2f}% |"
+                        )
+                        print("")
                         f.write("\n")
                     frame_times_physics = []
                     frame_times_tactile = []
+
+                    # clean up sim objects
+                    scene["gsmini"].__del__()
                     break
             num_resets += 1
 
         elif count % goal_change_num_step == 0:
             # update movement pattern according to the ball position
             ball_position = scene["ball"].data.root_pos_w[:, :3] - scene.env_origins
-            ee_goals = movement_pattern(ball_position, sim.device, ball_radius=0.005) #movement_pattern(ball_position, sim.device, ball_radius=0.0039)
+            ee_goals = _movement_pattern(ball_position, sim.device, ball_radius=0.005) #movement_pattern(ball_position, sim.device, ball_radius=0.0039)
     
             # change goal
             current_goal_idx = (current_goal_idx + 1) % len(ee_goals)
@@ -319,61 +355,53 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
         scene["robot"].set_joint_position_target(joint_pos_des, robot_entity_cfg.joint_ids)
         scene.write_data_to_sim()
 
+        ###
         physics_start = time.time()
-
-        # # # perform physics step
+        # perform physics step
         sim.step(render=False)
+        physics_end = time.time()
+        ###
+
         # update isaac buffers()
         scene.update(sim_dt)
 
-        physics_end = time.time()
-        # print("physics_sim time:    {:8.4f}ms".format(1000 * (physics_end - physics_start)))
-
-        count += 1
-        # update sensors
+        ### update sensors
         tactile_sim_start = time.time()
         gsmini = scene["gsmini"]
         gsmini.update(dt=sim_dt)
-        
-        # if gsmini._marker_sim:
-        #     case_pos = scene["robot"].data.body_state_w[:, robot_entity_cfg.body_ids[1], :3] + 0.024
-        #     case_rot = scene["robot"].data.body_state_w[:, robot_entity_cfg.body_ids[1], 3:7] 
-        #     object_pos_b, object_rot_b = subtract_frame_transforms(
-        #         case_pos,  case_rot, scene["ball"].data.root_pos_w[:, :3].clone(), scene["ball"].data.root_quat_w
-        #     )
-
-        #     rot_x, rot_y, rot_z = isaac_lab_math.euler_xyz_from_quat(object_rot_b)
-        #     rot_z = isaac_lab_math.wrap_to_pi(rot_z)
-        #     gsmini.theta = rot_z
-        #     # retrieve tactile data -> triggers tactile sim
-        #     marker_motion = gsmini.data.output["marker_motion"]
-        # else:
         tactile_rgb = gsmini.data.output["tactile_rgb"]
-
         tactile_sim_end = time.time()
-        # print("tactile_sim time:    {:8.4f}ms".format(1000 * (tactile_sim_end - tactile_sim_start)))
+        ###
 
         #- add frame times, if sensor was in contact
-        # contact_idx, = torch.where(gsmini.press_depth > 0)
-        # if contact_idx.shape[0] != 0:
-        #     frame_times_physics.append(1000 * (physics_end - physics_start))
-        #     frame_times_tactile.append(1000 * (tactile_sim_end - tactile_sim_start))
-        #     # # draw trajectory -> you cannot really see anything significant
-        #     # points = ee_pose_w[:, 0:3].cpu().numpy()
-        #     # draw.draw_points(points, [(255,0,0,0.5)]*points.shape[0], [15]*points.shape[0])
-        # gsmini.update_gui_windows()
+        contact_idx, = torch.where(gsmini.press_depth > 0)
+        if contact_idx.shape[0] != 0:
+            frame_times_physics.append(1000 * (physics_end - physics_start))
+            frame_times_tactile.append(1000 * (tactile_sim_end - tactile_sim_start))
         sim.render()
 
         # update buffers()
         # scene.update(sim_dt)
 
         # obtain quantities from simulation for markers
-        ee_offset = torch.tensor([0, 0, 0.13, 0, 0, 0, 0], device=sim.device).repeat(scene.num_envs, 1)
-        ee_pose_w = scene["robot"].data.body_state_w[:, robot_entity_cfg.body_ids[0], 0:7] - ee_offset
-        # update marker positions
-        ee_marker.visualize(ee_pose_w[:, 0:3], ee_pose_w[:, 3:7])
-        goal_marker.visualize(ik_commands[:, 0:3] + scene.env_origins, ik_commands[:, 3:7])
+        # ee_offset = torch.tensor([0, 0, 0.13, 0, 0, 0, 0], device=sim.device).repeat(scene.num_envs, 1)
+        # ee_pose_w = scene["robot"].data.body_state_w[:, robot_entity_cfg.body_ids[0], 0:7] - ee_offset
+        # # update marker positions
+        # ee_marker.visualize(ee_pose_w[:, 0:3], ee_pose_w[:, 3:7])
+        # goal_marker.visualize(ik_commands[:, 0:3] + scene.env_origins, ik_commands[:, 3:7])
 
+        count += 1
+
+        system_utilization_analytics = get_utilization_percentages(reset=False)
+        print(
+            f"| CPU:{system_utilization_analytics[0]}% | "
+            f"RAM:{system_utilization_analytics[1]}% | "
+            f"GPU Compute:{system_utilization_analytics[2]}% | "
+            f"GPU Memory: {system_utilization_analytics[3]:.2f}% |"
+        )
+        print("")
+        
+    
 def main():
     """Main function."""
     # Load kit helper
@@ -383,7 +411,9 @@ def main():
     sim.set_camera_view([2.5, 2.5, 2.5], [0.0, 0.0, 0.0])
     # Design scene
     scene_cfg = BallRollingSceneCfg(num_envs=args_cli.num_envs, env_spacing=1.05, replicate_physics=False)
+
     scene = InteractiveScene(scene_cfg) 
+
     sim.reset()
 
     # Now we are ready!
@@ -391,6 +421,50 @@ def main():
     # Run the simulator
     run_simulator(sim, scene)
 
+"""
+System diagnosis
+-> adapted from benchmark_cameras.py script of IsaacLab
+"""
+def get_utilization_percentages(reset: bool = False, max_values: list[float] = [0.0, 0.0, 0.0, 0.0]) -> list[float]:
+    """Get the maximum CPU, RAM, GPU utilization (processing), and
+    GPU memory usage percentages since the last time reset was true."""
+    if reset:
+        max_values[:] = [0, 0, 0, 0]  # Reset the max values
+
+    # CPU utilization
+    cpu_usage = psutil.cpu_percent(interval=0.1)
+    max_values[0] = max(max_values[0], cpu_usage)
+
+    # RAM utilization
+    memory_info = psutil.virtual_memory()
+    ram_usage = memory_info.percent
+    max_values[1] = max(max_values[1], ram_usage)
+
+    # GPU utilization using pynvml
+    if torch.cuda.is_available():
+
+        if args_cli.sys:
+            pynvml.nvmlInit()  # Initialize NVML
+            for i in range(torch.cuda.device_count()):
+                handle = pynvml.nvmlDeviceGetHandleByIndex(i)
+
+                # GPU Utilization
+                gpu_utilization = pynvml.nvmlDeviceGetUtilizationRates(handle)
+                gpu_processing_utilization_percent = gpu_utilization.gpu  # GPU core utilization
+                max_values[2] = max(max_values[2], gpu_processing_utilization_percent)
+
+                # GPU Memory Usage
+                memory_info = pynvml.nvmlDeviceGetMemoryInfo(handle)
+                gpu_memory_total = memory_info.total
+                gpu_memory_used = memory_info.used
+                gpu_memory_utilization_percent = (gpu_memory_used / gpu_memory_total) * 100
+                max_values[3] = max(max_values[3], gpu_memory_utilization_percent)
+
+            pynvml.nvmlShutdown()  # Shutdown NVML after usage
+    else:
+        gpu_processing_utilization_percent = None
+        gpu_memory_utilization_percent = None
+    return max_values
 
 if __name__ == "__main__":
     try:

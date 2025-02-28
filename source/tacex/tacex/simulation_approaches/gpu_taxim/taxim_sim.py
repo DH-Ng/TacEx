@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 import torch
+import torchvision.transforms.functional as F
 
 from .sim import Taxim
 from ..gelsight_simulator import GelSightSimulator
@@ -50,11 +51,17 @@ class TaximSimulator(GelSightSimulator):
         self.img_res = self.cfg.tactile_img_res
 
     def optical_simulation(self):
+        height_map = self.sensor._data.output["height_map"]
+        # up/downscale height map if camera res different than tactile img res
+        if height_map.shape != self.cfg.tactile_img_res:
+            height_map = F.resize(height_map, self.cfg.tactile_img_res)
+
+        if self._device == "cpu":
+            height_map = height_map.cpu()
         
-        #shifted_height_map = self._taxim._get_shifted_height_map(self._indentation_depth, self.height_map)
         #todo only render img where indentation_depth > 0
         tactile_rgb_img = self._taxim.render(
-            self.sensor._data.output["height_map"], 
+            height_map, 
             with_shadow=self.cfg.with_shadow,
             press_depth=self._indentation_depth,
             orig_hm_fmt=False,
@@ -62,8 +69,8 @@ class TaximSimulator(GelSightSimulator):
         return tactile_rgb_img
 
     def compute_indentation_depth(self):
-        self.height_map = self.sensor._data.output["height_map"] / 1000 # convert height map from mm to meter
-        min_distance_obj = self.height_map.amin((1,2))
+        height_map = self.sensor._data.output["height_map"] / 1000 # convert height map from mm to meter
+        min_distance_obj = height_map.amin((1,2))
         # smallest distance between object and sensor case
         dist_obj_sensor_case = min_distance_obj - self.cfg.gelpad_to_camera_min_distance
 

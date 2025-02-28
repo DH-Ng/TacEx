@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 import torch
+import torchvision.transforms.functional as F
 
 from .sim import MarkerMotion
 from ..gelsight_simulator import GelSightSimulator
@@ -35,7 +36,7 @@ class FOTSMarkerSimulator(GelSightSimulator):
         else:
             raise RuntimeError("Currently FOTS simulation approach has to be used in combination with GPU-Taxim as optical-simulator.")
 
-        # todo make size adaptable? I mean with env_ids. This way we would always simulate everythings
+        # todo make height map size adaptable? Only simulate where depth > 0. This way we wouldnt always simulate everythings
         self._indentation_depth = torch.zeros((self.sensor._num_envs), device=self._device)
         """Indentation depth, i.e. how deep the object is pressed into the gelpad.
         Values are in mm.
@@ -72,7 +73,17 @@ class FOTSMarkerSimulator(GelSightSimulator):
 
     def marker_motion_simulation(self):
         self._indentation_depth = self.sensor._indentation_depth
-        height_map_shifted = self._taxim._get_shifted_height_map(self._indentation_depth, self.sensor._data.output["height_map"])
+        height_map = self.sensor._data.output["height_map"]
+
+        # up/downscale height map if camera res different than tactile img res
+        if height_map.shape != self.cfg.tactile_img_res:
+            height_map = F.resize(height_map, self.cfg.tactile_img_res)
+
+        if self._device == "cpu":
+            height_map = height_map.cpu()
+            self._indentation_depth = self.sensor._indentation_depth.cpu()
+
+        height_map_shifted = self._taxim._get_shifted_height_map(self._indentation_depth, height_map)
         deformed_gel, contact_mask = self._taxim._compute_gel_pad_deformation(height_map_shifted)
         deformed_gel = deformed_gel.max() - deformed_gel
 

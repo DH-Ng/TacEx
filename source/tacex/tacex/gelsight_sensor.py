@@ -75,6 +75,12 @@ class GelSightSensor(SensorBase):
 
         #todo remove
         self.test = 0
+    
+    def __del__(self):
+        """Unsubscribes from callbacks."""
+        # unsubscribe callbacks
+        super().__del__()
+
     # def __str__(self) -> str:
     #     """Returns: A string containing information about the instance."""
     #     # message for class
@@ -181,6 +187,10 @@ class GelSightSensor(SensorBase):
         # Initialize parent class
         super()._initialize_impl()
 
+        # set device, if specified (per default the same as the simulation)
+        if self.cfg.device is not None:
+            self._device = self.cfg.device
+
         prim_paths_expr = self.cfg.prim_path
         print(f"Initializing GelSight Sensor {prim_paths_expr}...")
         self._view = XFormPrim(prim_paths_expr=prim_paths_expr, name=f"{prim_paths_expr}")
@@ -206,7 +216,22 @@ class GelSightSensor(SensorBase):
         self._indentation_depth = torch.zeros((self._num_envs), device=self._device)
 
         if self.cfg.sensor_camera_cfg is not None:
-            self.camera_cfg: TiledCameraCfg = TiledCameraCfg(
+            # self.camera_cfg: TiledCameraCfg = TiledCameraCfg(
+            #         prim_path= prim_paths_expr + self.cfg.sensor_camera_cfg.prim_path_appendix, 
+            #         update_period= self.cfg.sensor_camera_cfg.update_period,
+            #         height= self.cfg.sensor_camera_cfg.resolution[0],
+            #         width= self.cfg.sensor_camera_cfg.resolution[1],
+            #         data_types= self.cfg.sensor_camera_cfg.data_types,
+            #         spawn= None, # use camera which is part of the GelSight Mini Asset
+            #         # spawn=sim_utils.PinholeCameraCfg(
+            #         #    focal_length=24.0, focus_distance=400.0, horizontal_aperture=20.955, clipping_range=(0.1, 1.0e5)
+            #         # ),      
+            #         #depth_clipping_behavior="max", # doesnt work, cause "max" value is taking from spawn config, which we dont have
+            # )
+            # self.camera = TiledCamera(cfg=self.camera_cfg)
+            
+            # use normal camera
+            self.camera_cfg: CameraCfg = CameraCfg(
                     prim_path= prim_paths_expr + self.cfg.sensor_camera_cfg.prim_path_appendix, 
                     update_period= self.cfg.sensor_camera_cfg.update_period,
                     height= self.cfg.sensor_camera_cfg.resolution[0],
@@ -218,8 +243,8 @@ class GelSightSensor(SensorBase):
                     # ),      
                     #depth_clipping_behavior="max", # doesnt work, cause "max" value is taking from spawn config, which we dont have
             )
-            # self.camera = Camera(cfg=self.camera_cfg)
-            self.camera = TiledCamera(cfg=self.camera_cfg)
+            self.camera = Camera(cfg=self.camera_cfg)
+
             # need to initialize the camera manually. It only happens automatically if we define the camera sensor in the environment config
             self.camera._initialize_impl() 
             self.camera._is_initialized = True
@@ -347,6 +372,9 @@ class GelSightSensor(SensorBase):
             pass
 
     def _debug_vis_callback(self, event):
+        if not self._windows:
+            return
+        
         # Update the GUI windows
         for i, prim in enumerate(self._view.prims):
             # creates an attribut, which can be found in the GUI under "Raw Usd Properties -> "Extra Properties"
@@ -502,6 +530,9 @@ class GelSightSensor(SensorBase):
         super()._invalidate_initialize_callback(event)
         # set all existing views to None to invalidate them
         self._view = None
+
+        self.camera._invalidate_initialize_callbacks()
+        self.camera.__del__()
 
         if hasattr(self, "_windows"):
             self._windows = None

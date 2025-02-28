@@ -44,6 +44,7 @@ class GelSightMiniCfg(GelSightSensorCfg):
         gelpad_height= gelpad_dimensions.height,
         gelpad_to_camera_min_distance= 0.024,
         tactile_img_res= tactile_img_res,
+        device = "cuda",
     )
 
     marker_motion_sim_cfg = FOTSMarkerSimulatorCfg(
@@ -59,9 +60,8 @@ class GelSightMiniCfg(GelSightSensorCfg):
             dy=26
         ),
         tactile_img_res = (480, 640),
+        device = "cuda",
     )
     compute_indentation_depth_class = "optical_sim"
 
     device: str = "cuda" # use gpu per default #TODO currently gpu mandatory, also enable cpu only usage?    
-
-

@@ -17,6 +17,7 @@ INSTALL_REQUIRES = [
     f"torch_scatter @ file://localhost{EXTENSION_PATH}/install_requirements/torch_scatter-2.1.2+pt24cu118-cp310-cp310-linux_x86_64.whl", # needed for gpu taxim
     #f"torch_scatter @ https://data.pyg.org/whl/torch-2.5.0%2Bcu118/torch_scatter-2.1.2%2Bpt25cu118-cp310-cp310-linux_x86_64.whl",
     "psutil",
+    "pynvml",
 ]
 #torch_scatter-2.1.2+pt24cu118-cp310-cp310-linux_x86_64.whl
 
