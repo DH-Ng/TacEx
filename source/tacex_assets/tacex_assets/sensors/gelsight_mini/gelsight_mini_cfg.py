@@ -43,6 +43,7 @@ class GelSightMiniCfg(GelSightSensorCfg):
         calib_folder_path= f"{TACEX_ASSETS_DATA_DIR}/Sensors/GelSight_Mini/calibs/480x640",
         gelpad_height= gelpad_dimensions.height,
         gelpad_to_camera_min_distance= 0.024,
+        with_shadow=False,
         tactile_img_res= tactile_img_res,
         device = "cuda",
     )

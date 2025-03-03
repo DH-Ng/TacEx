@@ -29,6 +29,7 @@
 docker/artifacts/
 *.tmp
 
+
 # Isaac-Sim packman
 _isaac_sim*
 _repo
@@ -36,3 +37,5 @@ _build
 .lastformat
 
 _isaac_lab*
+
+**/*/.container.cfg

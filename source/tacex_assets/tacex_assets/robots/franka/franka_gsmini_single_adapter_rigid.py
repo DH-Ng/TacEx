@@ -24,6 +24,8 @@ from tacex_assets import TACEX_ASSETS_DATA_DIR
 # Configuration
 ##
 
+#todo find a good way to save the prim path of the sensor for the user?
+#-> currently, we need to look into the asset to figure out the prim name (in this case its /gelsight_mini_case)
 FRANKA_PANDA_ARM_GSMINI_SINGLE_ADAPTER_CFG = ArticulationCfg(
     spawn=sim_utils.UsdFileCfg(
        usd_path=f"{TACEX_ASSETS_DATA_DIR}/Robots/Franka/GelSight_Mini/Single_Adapter/physx_rigid_gelpad.usd",

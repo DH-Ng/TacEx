@@ -211,7 +211,7 @@ class BallRollingEnvCfg(DirectRLEnvCfg):
     observation_space = 14 # 3 for ee pos, 2 for orient (roll, pitch), 2 for goal (x,y) and 2 for obj-pos (x,y), 5 for actions
     state_space = 0
 
-    ball_radius = 0.01
+    ball_radius = 0.005
     x_bounds = (0.225, 0.75)
     y_bounds = (-0.375, 0.375)
     too_far_away_threshold = 0.35
@@ -277,10 +277,6 @@ class BallRollingEnv(DirectRLEnv):
         self.processed_actions = torch.zeros((self.num_envs, self._ik_controller.action_dim), device=self.device)
         self.prev_actions = torch.zeros_like(self.actions)
 
-        # ik controller for moving ee to ball position after reset -> not relative mode!
-        reset_ik_cfg = DifferentialIKControllerCfg(command_type="pose", use_relative_mode=False, ik_method="dls")
-        self._reset_ik_controller = DifferentialIKController(reset_ik_cfg, num_envs=self.num_envs, device=self.device)
-        
         # add handle for debug visualization (this is set to a valid handle inside set_debug_vis)
         self.set_debug_vis(self.cfg.debug_vis)
 
@@ -388,7 +384,7 @@ class BallRollingEnv(DirectRLEnv):
         ee_pos_curr_b, ee_quat_curr_b = self._compute_frame_pose()
         joint_pos = self._robot.data.joint_pos[:, :]
         # compute the delta in joint-space
-        if self.ee_pos_curr_b.norm() != 0:
+        if ee_pos_curr_b.norm() != 0:
             jacobian = self._compute_frame_jacobian()
             joint_pos_des = self._ik_controller.compute(ee_pos_curr_b, ee_quat_curr_b, jacobian, joint_pos)
         else:
