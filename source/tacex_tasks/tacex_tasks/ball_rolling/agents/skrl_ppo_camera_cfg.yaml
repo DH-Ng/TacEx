@@ -23,7 +23,7 @@ models:
         activations: relu
       - name: net
         input: concatenate([features_extractor, STATES["proprio_obs"]])
-        layers: [512]
+        layers: [256, 128, 64]
         activations: elu
     output: ACTIONS
   value:  # see deterministic_model parameters
@@ -40,7 +40,7 @@ models:
         activations: relu
       - name: net
         input: concatenate([features_extractor, STATES["proprio_obs"]])
-        layers: [512]
+        layers: [256, 128, 64]
         activations: elu
     output: ONE
 
@@ -97,5 +97,5 @@ agent:
 # https://skrl.readthedocs.io/en/latest/api/trainers/sequential.html
 trainer:
   class: SequentialTrainer
-  timesteps: 320000
+  timesteps: 2400000
   environment_info: log

@@ -434,6 +434,9 @@ class BallRollingHeightMapEnv(DirectRLEnv):
         # Distance of the end-effector to the object: (num_envs,)
         object_ee_distance = torch.norm(obj_pos - ee_frame_pos, dim=1) 
         reaching_penalty = self.cfg.reaching_penalty["weight"]*torch.square(object_ee_distance)
+        # Add big penalty, if way too far away
+        reaching_penalty = torch.where(object_ee_distance > self.cfg.too_far_away_threshold, reaching_penalty+10, reaching_penalty)
+        
         # use tanh-kernel
         object_ee_distance_tanh = 1 - torch.tanh(object_ee_distance / self.cfg.reaching_reward_tanh["std"])
         # for giving agent incentive to touch the obj

@@ -337,7 +337,7 @@ class GelSightSensor(SensorBase):
         self._get_height_map()
         
         # -- pressing depth
-        #self._indentation_depth[:] = self.compute_indentation_depth_func() # type: ignore
+        # self._indentation_depth[:] = self.compute_indentation_depth_func() # type: ignore #todo uncomment
 
         if (self.optical_simulator is not None) and ("tactile_rgb" in self._data.output.keys()) :
             # self.optical_simulator.height_map = self._data.output["height_map"]
