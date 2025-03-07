@@ -35,7 +35,7 @@ class TaximSimulator(GelSightSimulator):
             self._device = self.cfg.device
             
 
-        self._taxim = Taxim(calib_folder=calib_folder, device=self._device)
+        self._taxim: Taxim = Taxim(calib_folder=calib_folder, device=self._device)
 
         # todo make size adaptable? I mean with env_ids. This way we would always simulate everythings
         self._indentation_depth = torch.zeros((self._num_envs), device=self._device)
@@ -46,8 +46,13 @@ class TaximSimulator(GelSightSimulator):
         It is used for shifting the height map for the Taxim simulation.
         """
     
+        self.tactile_rgb_img = self._taxim.render(
+            torch.zeros((self._num_envs, self.cfg.tactile_img_res[0], self.cfg.tactile_img_res[1]),device=self._device),
+            with_shadow=self.cfg.with_shadow,
+            press_depth=self._indentation_depth,
+            orig_hm_fmt=False,
+        )
         # if camera resolution is different than the tactile RGB res, scale img
-
         self.img_res = self.cfg.tactile_img_res
 
     def optical_simulation(self):
@@ -59,14 +64,17 @@ class TaximSimulator(GelSightSimulator):
         if self._device == "cpu":
             height_map = height_map.cpu()
         
-        #todo only render img where indentation_depth > 0
-        tactile_rgb_img = self._taxim.render(
-            height_map, 
-            with_shadow=self.cfg.with_shadow,
-            press_depth=self._indentation_depth,
-            orig_hm_fmt=False,
-        )
-        return tactile_rgb_img
+        # only render img where indentation_depth > 0
+        if height_map[self._indentation_depth > 0].shape[0] > 0:
+            self.tactile_rgb_img[self._indentation_depth > 0] = self._taxim.render(
+                height_map[self._indentation_depth > 0],
+                with_shadow=self.cfg.with_shadow,
+                press_depth=self._indentation_depth[self._indentation_depth > 0],
+                orig_hm_fmt=False,
+            )
+        # use background img 
+        self.tactile_rgb_img[self._indentation_depth <= 0] = self._taxim._bg_proc
+        return self.tactile_rgb_img
 
     def compute_indentation_depth(self):
         height_map = self.sensor._data.output["height_map"] / 1000 # convert height map from mm to meter

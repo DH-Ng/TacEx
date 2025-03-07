@@ -69,7 +69,7 @@ class MarkerMotion():
     def _shear(self, center_x, center_y, lamb, shear_x, shear_y, xx, yy):
         # TODO: add force and torque effect
         g = np.exp(-(((xx - center_x) ** 2 + (yy - center_y) ** 2)) * lamb)
-
+        #todo use max delta s, like in the paper
         dx, dy = shear_x * g, shear_y * g
 
         xx_ = xx + dx
@@ -125,6 +125,7 @@ class MarkerMotion():
         return img
 
     def _motion_callback(self, init_marker_x_pos, init_marker_y_pos, depth_map, contact_mask, traj):
+        # extract whoch markers are in contact
         for i in range(self.num_markers_col):
             for j in range(self.num_markers_row):
                 y_pos = int(init_marker_y_pos[j, i]) # row-wise defined
@@ -144,22 +145,33 @@ class MarkerMotion():
         if len(traj) >= 2:
             # under shear load
             # print("traj diff x,y ", (traj[-1][0]-traj[0][0]), (traj[-1][1]-traj[0][1]))
-            new_x_pos, new_y_pos = self._shear(int(traj[0][0]*self.mm2pix + self.tactile_img_height/2), 
-                                int(traj[0][1]*self.mm2pix + self.tactile_img_width/2 ),
-                                self.lamb[1],
-                                int((traj[-1][0]-traj[0][0])*self.mm2pix),
-                                int((traj[-1][1]-traj[0][1])*self.mm2pix),
-                                new_x_pos,
-                                new_y_pos)
+            # new_x_pos, new_y_pos = self._shear(
+            #     int(traj[0][0]*self.mm2pix + self.tactile_img_height/2), 
+            #     int(traj[0][1]*self.mm2pix + self.tactile_img_width/2 ),
+            #     self.lamb[1],
+            #     int((traj[-1][0]-traj[0][0])*self.mm2pix),
+            #     int((traj[-1][1]-traj[0][1])*self.mm2pix),
+            #     new_x_pos,
+            #     new_y_pos
+            # )
+            new_x_pos, new_y_pos = self._shear(
+                int(traj[0][0]*self.mm2pix + self.tactile_img_width/2), 
+                int(traj[0][1]*self.mm2pix + self.tactile_img_height/2),
+                self.lamb[1],
+                int((traj[-1][0]-traj[0][0])*self.mm2pix),
+                int((traj[-1][1]-traj[0][1])*self.mm2pix),
+                new_x_pos,
+                new_y_pos
+            )
             # under twist load
             # print("theta is ", np.rad2deg(traj[-1][2]-traj[0][2]))
-            # theta = max(min(traj[-1][2]-traj[0][2], 50 / 180.0 * math.pi), -50 / 180.0 * math.pi) # -50 = max angle, traj rotation is in rad!
-            # new_x_pos,new_y_pos = self._twist(int(traj[-1][0]*self.mm2pix + self.tactile_img_height/2), 
-            #                     int(traj[-1][1]*self.mm2pix + self.tactile_img_width/2),
-            #                     self.lamb[2],
-            #                     theta,
-            #                     new_x_pos,
-            #                     new_y_pos)
+            theta = max(min(traj[-1][2]-traj[0][2], 50 / 180.0 * math.pi), -50 / 180.0 * math.pi) # -50 = max angle, traj rotation is in rad!
+            new_x_pos,new_y_pos = self._twist(int(traj[-1][0]*self.mm2pix + self.tactile_img_width/2), 
+                                int(traj[-1][1]*self.mm2pix + self.tactile_img_height/2),
+                                self.lamb[2],
+                                theta,
+                                new_x_pos,
+                                new_y_pos)
         return new_x_pos, new_y_pos
 
     def marker_sim(self, depth_map, contact_mask, traj):

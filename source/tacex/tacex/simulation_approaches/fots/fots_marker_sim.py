@@ -6,6 +6,9 @@ from typing import TYPE_CHECKING
 import torch
 import torchvision.transforms.functional as F
 
+from isaaclab.utils.math import euler_xyz_from_quat
+from isaaclab.sensors import FrameTransformer, FrameTransformerCfg
+
 from .sim import MarkerMotion
 from ..gelsight_simulator import GelSightSimulator
 from ..gpu_taxim import TaximSimulator
@@ -71,7 +74,16 @@ class FOTSMarkerSimulator(GelSightSimulator):
             self.sensor._data.output["traj"].append([])
         self.theta = torch.zeros((self._num_envs), device=self._device)
 
+        # use IsaacLab FrameTransformer for keeping track of relative positon/rotation
+        self.frame_transformer: FrameTransformer = FrameTransformer(self.cfg.frame_transformer_cfg)
+        
+        # need to initialize manually
+        self.frame_transformer._initialize_impl() 
+        self.frame_transformer._is_initialized = True
+        print(self.frame_transformer)
+    
     def marker_motion_simulation(self):
+        self.frame_transformer.update(dt=0)
         self._indentation_depth = self.sensor._indentation_depth
         height_map = self.sensor._data.output["height_map"]
 
@@ -93,39 +105,43 @@ class FOTSMarkerSimulator(GelSightSimulator):
                 # compute contact center based on contact_mask
                 contact_points = torch.argwhere(contact_mask[h])
                 mean = torch.mean(contact_points.float(), dim=0).cpu().numpy()
-                # angle = 0
-                # if len(self.sensor._data.output["traj"][h]) == 0:
-                #     should_be = (self._data.output["height_map"]==self._data.output["height_map"].min()).nonzero()[0]
-                #     print("should be in pix: ", should_be)
-                #     print("should be in mm: ", (should_be[0]).cpu().numpy()*self.taxim.sensor_params.pixmm, (should_be[1]).cpu().numpy()*self.taxim.sensor_params.pixmm)
-                #     self.should_be = (self._data.output["height_map"]==self._data.output["height_map"].min()).nonzero()                
-                #     print("mean", mean)
-
-                mean[0] = (mean[0]-self.marker_motion_sim.tactile_img_width/2)/self.marker_motion_sim.mm2pix
-                mean[1] = (mean[1]-self.marker_motion_sim.tactile_img_height/2)/self.marker_motion_sim.mm2pix
+                #print("should be pix ", mean[1], mean[0])
+                # rows = height = y values
+                mean[0] = (mean[0]-self.marker_motion_sim.tactile_img_height/2)/self.marker_motion_sim.mm2pix
+                # columns = width = x values
+                mean[1] = (mean[1]-self.marker_motion_sim.tactile_img_width/2)/self.marker_motion_sim.mm2pix
+                #self.sensor._data.output["traj"][h].append([mean[1], mean[0], self.theta[h].cpu().numpy()])
+                #print("should be ", mean[1], mean[0])
                 
-                # if len(self.sensor._data.output["traj"]) >= 2:
-                #     self._data.output["motion_vectors"] = self.camera.data.output["motion_vectors"][:, :, :, :2]
-                #     # compute rotation angle
-                #     # a = mean - np.array(self.sensor._data.output["traj"][0][0], self.sensor._data.output["traj"][0][1])
-                #     # #TODO create fixed variable for init contact, when it comes to contact -> no need to create array everytime
-                #     # b = np.array([self.sensor._data.output["traj"][-1][0], self.sensor._data.output["traj"][-1][1]]) - np.array([self.sensor._data.output["traj"][0][0], self.sensor._data.output["traj"][0][1]])
-                #     # print("a ", a)
-                #     # print("b ", b)
-                #     # angle = np.arccos((np.dot(a, b)/(np.linalg.norm(a)*np.linalg.norm(b))))
-                #     # print("angle ", np.rad2deg(angle))
-                self.sensor._data.output["traj"][h].append([mean[1], mean[0], self.theta[h].cpu().numpy()])
+                # rel position/orientation of obj to sensor
+                rel_pos = self.frame_transformer.data.target_pos_source.cpu().numpy()[h,0,:] # target_pos_source shape is (num_envs, num_targets, 3)
+                rel_pos *= 1000 # convert to mm
+                # print("rel_pos in pix ", self.cfg.mm_to_pixel*rel_pos[0] + self.marker_motion_sim.tactile_img_width/2, self.cfg.mm_to_pixel*rel_pos[1] + self.marker_motion_sim.tactile_img_height/2)
+                # print("rel_pos ", rel_pos)
+                rel_orient = self.frame_transformer.data.target_quat_source[h] #-> only one target_frame
+                roll, pitch, yaw = euler_xyz_from_quat(rel_orient)
+                theta = yaw.cpu().numpy()
+                # angle = 0
+
+                #self.sensor._data.output["traj"][h].append([rel_pos[0], rel_pos[1], theta])
+                # print("")
+
+                self.sensor._data.output["traj"][h].append([mean[1], mean[0], theta])
+                
+                #todo vectorize with pytorch 
+                marker_x_pos, marker_y_pos = self.marker_motion_sim.marker_sim(
+                    deformed_gel[h].cpu().numpy(), 
+                    contact_mask[h].cpu().numpy(), 
+                    self.sensor._data.output["traj"][h]
+                )
             else:
                 self.sensor._data.output["traj"][h] = []
-        
-            #todo vectorize with pytorch 
-            marker_x_pos, marker_y_pos = self.marker_motion_sim.marker_sim(
-                deformed_gel[h].cpu().numpy(), 
-                contact_mask[h].cpu().numpy(), 
-                self.sensor._data.output["traj"][h]
-            )
+                marker_x_pos = self.marker_motion_sim.init_marker_x_pos
+                marker_y_pos = self.marker_motion_sim.init_marker_y_pos
+                
             self.marker_data[h, :, :, 0] = torch.tensor(marker_x_pos, device=self._device)
             self.marker_data[h, :, :, 1] = torch.tensor(marker_y_pos, device=self._device)
+            
         return self.marker_data
 
     # def compute_indentation_depth(self):

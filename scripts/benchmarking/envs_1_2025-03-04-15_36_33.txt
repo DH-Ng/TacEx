@@ -1,0 +1,106 @@
+Sensor Config: 
+{
+  "class_type": "tacex.gelsight_sensor:GelSightSensor",
+  "prim_path": "/World/envs/env_.*/Robot/gelsight_mini_case",
+  "update_period": 0.0,
+  "history_length": 0,
+  "debug_vis": true,
+  "case_dimensions": {
+    "width": 0.032,
+    "length": 0.028,
+    "height": 0.024
+  },
+  "gelpad_dimensions": {
+    "width": 0.02075,
+    "length": 0.02525,
+    "height": 0.0045
+  },
+  "sensor_camera_cfg": {
+    "prim_path_appendix": "/Camera",
+    "update_period": 0,
+    "resolution": [
+      60,
+      80
+    ],
+    "data_types": [
+      "depth"
+    ],
+    "clipping_range": [
+      0.024,
+      0.034
+    ]
+  },
+  "data_types": [
+    "marker_motion"
+  ],
+  "optical_sim_cfg": {
+    "simulation_approach_class": "tacex.simulation_approaches.gpu_taxim.taxim_sim:TaximSimulator",
+    "device": "cuda",
+    "calib_folder_path": "/workspace/tacex/source/tacex_assets/tacex_assets/data/Sensors/GelSight_Mini/calibs/480x640",
+    "with_shadow": false,
+    "tactile_img_res": [
+      480,
+      640
+    ],
+    "gelpad_height": 0.0045,
+    "gelpad_to_camera_min_distance": 0.024
+  },
+  "marker_motion_sim_cfg": {
+    "simulation_approach_class": "tacex.simulation_approaches.fots.fots_marker_sim:FOTSMarkerSimulator",
+    "device": "cuda",
+    "calib_folder_path": "",
+    "with_shadow": false,
+    "tactile_img_res": [
+      480,
+      640
+    ],
+    "lamb": [
+      0.00125,
+      0.0021,
+      0.0038
+    ],
+    "pyramid_kernel_size": [
+      51,
+      21,
+      11,
+      5
+    ],
+    "kernel_size": 5,
+    "marker_params": {
+      "num_markers_col": 25,
+      "num_markers_row": 20,
+      "x0": 26,
+      "y0": 15,
+      "dx": 29,
+      "dy": 26
+    },
+    "init_marker_pos": [
+      [
+        []
+      ],
+      [
+        []
+      ]
+    ],
+    "ball_radius": 2.35,
+    "mm_to_pixel": 19.58
+  },
+  "compute_indentation_depth_class": "optical_sim",
+  "device": "cuda",
+  "tactile_img_res": [
+    480,
+    640
+  ]
+}
+GPU Info: 
+Name: NVIDIA GeForce RTX 4090 Laptop GPU 
+Driver: 550.144.03 
+
+Performance data: 
+num_envs: 1 
+Total amount of 'in-contact' frames per env (ran pattern 3 times): 1549
+Total sim time:  53.3281ms 
+Avg physics_sim time for one frame per env:     19.5859ms 
+Avg tactile_sim time for one frame per env:      3.6931ms 
+
+| CPU:5.3% | RAM:55.0% | GPU Compute:41% | GPU Memory: 41.18% |

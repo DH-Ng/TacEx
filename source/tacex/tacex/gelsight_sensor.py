@@ -245,7 +245,7 @@ class GelSightSensor(SensorBase):
             # )
             # self.camera = Camera(cfg=self.camera_cfg)
 
-            # need to initialize the camera manually. It only happens automatically if we define the camera sensor in the environment config
+            # need to initialize the camera manually, since its not part of the scene cfg
             self.camera._initialize_impl() 
             self.camera._is_initialized = True
 
@@ -337,7 +337,7 @@ class GelSightSensor(SensorBase):
         self._get_height_map()
         
         # -- pressing depth
-        self._indentation_depth[:] = self.compute_indentation_depth_func() # type: ignore
+        #self._indentation_depth[:] = self.compute_indentation_depth_func() # type: ignore
 
         if (self.optical_simulator is not None) and ("tactile_rgb" in self._data.output.keys()) :
             # self.optical_simulator.height_map = self._data.output["height_map"]

@@ -3,6 +3,7 @@ import torch
 from dataclasses import dataclass, MISSING
 from typing import TYPE_CHECKING, Any, Dict, Sequence, Tuple, Union, List
 from isaaclab.utils import class_to_dict, to_camel_case, configclass
+from isaaclab.sensors import FrameTransformerCfg, OffsetCfg
 
 from ..gelsight_simulator_cfg import GelSightSimulatorCfg
 from .fots_marker_sim import FOTSMarkerSimulator
@@ -65,3 +66,5 @@ class FOTSMarkerSimulatorCfg(GelSightSimulatorCfg):
     # Used for computing the indentation depth out of the 
     # camera height map.
     # """
+
+    frame_transformer_cfg: FrameTransformerCfg = MISSING

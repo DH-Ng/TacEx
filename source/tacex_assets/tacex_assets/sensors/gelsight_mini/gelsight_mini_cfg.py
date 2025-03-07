@@ -1,7 +1,7 @@
 from dataclasses import dataclass, MISSING
 from typing import Any, Dict, Sequence, Tuple, Union, List
 from isaaclab.utils import class_to_dict, to_camel_case, configclass
-from isaaclab.sensors import SensorBaseCfg, TiledCameraCfg
+from isaaclab.sensors import SensorBaseCfg, TiledCameraCfg, FrameTransformerCfg
 
 from tacex_assets import TACEX_ASSETS_DATA_DIR
 from tacex import GelSightSensor, GelSightSensorCfg
@@ -49,7 +49,7 @@ class GelSightMiniCfg(GelSightSensorCfg):
     )
 
     marker_motion_sim_cfg = FOTSMarkerSimulatorCfg(
-        lamb = [0.00125,0.0021,0.0038],
+        lamb = [0.00125,0.00021,0.00038],
         pyramid_kernel_size = [51, 21, 11, 5], #[11, 11, 11, 11, 11, 5], 
         kernel_size = 5,
         marker_params = FOTSMarkerSimulatorCfg.MarkerParams(
@@ -62,6 +62,7 @@ class GelSightMiniCfg(GelSightSensorCfg):
         ),
         tactile_img_res = (480, 640),
         device = "cuda",
+        frame_transformer_cfg = MISSING
     )
     compute_indentation_depth_class = "optical_sim"
 

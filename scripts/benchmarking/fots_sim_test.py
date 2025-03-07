@@ -11,7 +11,7 @@ from isaaclab.app import AppLauncher
 parser = argparse.ArgumentParser(description="Ball rolling experiment with a Franka, which is equipped with one GelSight Mini Sensor.")
 parser.add_argument("--num_envs", type=int, default=10, help="Number of environments to spawn.")
 parser.add_argument("--sys", type=bool, default=True, help="Whether to track system utilization.")
-parser.add_argument("--debug_vis", default=False, action="store_true", help="Whether to render tactile images in the# append AppLauncher cli args")
+parser.add_argument("--debug_vis", default=True, action="store_true", help="Whether to render tactile images in the# append AppLauncher cli args")
 AppLauncher.add_app_launcher_args(parser)
 # parse the arguments
 
@@ -51,8 +51,7 @@ import isaaclab.utils.math as lab_math
 from isaaclab.markers.config import FRAME_MARKER_CFG
 from isaaclab.markers import VisualizationMarkers
 
-from isaaclab.sensors import FrameTransformer, FrameTransformerCfg
-from isaaclab.sensors.frame_transformer.frame_transformer_cfg import OffsetCfg
+from isaaclab.sensors import FrameTransformer, FrameTransformerCfg, OffsetCfg
 from isaaclab.envs import ViewerCfg
 
 from isaaclab.markers import POSITION_GOAL_MARKER_CFG  # isort: skip
@@ -68,6 +67,7 @@ from tacex_assets.sensors.gelsight_mini.gelsight_mini_cfg import GelSightMiniCfg
 
 from tacex import GelSightSensor
 from tacex.simulation_approaches.gpu_taxim import TaximSimulatorCfg
+from tacex.simulation_approaches.fots import FOTSMarkerSimulatorCfg
 
 import time
 import psutil
@@ -171,7 +171,7 @@ class BallRollingEnvCfg(DirectRLEnvCfg):
                 max_angular_velocity=1000.0,
                 max_linear_velocity=1000.0,
                 max_depenetration_velocity=5.0,
-                kinematic_enabled=False,
+                kinematic_enabled=True,
                 disable_gravity=False,
             )
         )
@@ -191,7 +191,12 @@ class BallRollingEnvCfg(DirectRLEnvCfg):
                         },
                 ),
     )
-
+    
+    #setup marker for FOTS frame_transformer
+    marker_cfg = FRAME_MARKER_CFG.copy()
+    marker_cfg.markers["frame"].scale = (0.01, 0.01, 0.01)
+    marker_cfg.prim_path = "/Visuals/FrameTransformer"
+    
     gsmini = GelSightMiniCfg(
         prim_path="/World/envs/env_.*/Robot/gelsight_mini_case",
         sensor_camera_cfg = GelSightMiniCfg.SensorCameraCfg(
@@ -204,18 +209,46 @@ class BallRollingEnvCfg(DirectRLEnvCfg):
         device = "cuda",
         tactile_img_res = (480, 640),
         debug_vis=True, # for being able to see sensor output in the gui
-        # optical_sim_cfg=None,
+        #optical_sim_cfg=None,
         # update Taxim cfg
-        marker_motion_sim_cfg=None,
-        data_types=["tactile_rgb"], #marker_motion
+
+        # update FOTS cfg
+        marker_motion_sim_cfg=FOTSMarkerSimulatorCfg(
+            lamb = [0.00125,0.00021,0.00038],
+            pyramid_kernel_size = [51, 21, 11, 5], #[11, 11, 11, 11, 11, 5], 
+            kernel_size = 5,
+            marker_params = FOTSMarkerSimulatorCfg.MarkerParams(
+                num_markers_col=25, #11,
+                num_markers_row=20, #9,
+                x0=26,
+                y0=15,
+                dx=29,
+                dy=26
+            ),
+            tactile_img_res = (480, 640),
+            device = "cuda",
+            frame_transformer_cfg = FrameTransformerCfg(
+                prim_path="/World/envs/env_.*/Robot/gelsight_mini_gelpad", #"/World/envs/env_.*/Robot/gelsight_mini_case",
+                # you have to make sure that the asset frame center is correct, otherwise wrong shear/twist motions
+                source_frame_offset=OffsetCfg(
+                    rot=(0.0, 0.92388, -0.38268, 0.0) # values for the robot used here
+                ),
+                target_frames=[
+                    FrameTransformerCfg.FrameCfg(prim_path="/World/envs/env_.*/ball")
+                ],
+                debug_vis=True,
+                visualizer_cfg=marker_cfg,
+            )
+        ),
+        data_types=["marker_motion"], #marker_motion
     )
     # settings for optical sim
-    gsmini = gsmini.replace(
-        optical_sim_cfg = gsmini.optical_sim_cfg.replace(
-            with_shadow=False,
-            device="cuda",
-        )
-    )
+    # gsmini = gsmini.replace(
+    #     optical_sim_cfg = gsmini.optical_sim_cfg.replace(
+    #         with_shadow=False,
+    #         device="cpu",
+    #     )
+    # )
 
     ik_controller_cfg = DifferentialIKControllerCfg(command_type="pose", use_relative_mode=False, ik_method="dls")
 
@@ -396,6 +429,7 @@ class BallRollingEnv(DirectRLEnv):
             self.current_goal_idx = (self.current_goal_idx+1)  % len(self.pattern_offsets)
         self.ik_commands[:, :3] = ball_pos + self.pattern_offsets[self.current_goal_idx]
         
+
         # add some randomization for diverse tactile signals
         self.ik_commands[:, :2] += sample_uniform(
             -0.002, 
@@ -415,6 +449,12 @@ class BallRollingEnv(DirectRLEnv):
             joint_pos_des = self._ik_controller.compute(ee_pos_curr_b, ee_quat_curr_b, jacobian, joint_pos)
         else:
             joint_pos_des = joint_pos.clone()
+
+        # # apply rotation for testing purposes
+        if self.current_goal_idx == 3 or self.current_goal_idx == 4:
+            joint_pos_des[:, 6] = -joint_pos_des[:, 6] # joint with id 6 = hand 
+
+
         self._robot.set_joint_position_target(joint_pos_des)
 
         self.step_count += 1
@@ -586,7 +626,7 @@ def run_simulator(env: BallRollingEnv):
     frame_times_physics = []
     frame_times_tactile = []
 
-    save_after_num_resets = 3
+    save_after_num_resets = 10
     current_num_resets = 0
     # GPU utilization using pynvml
     if torch.cuda.is_available():
@@ -685,17 +725,18 @@ def run_simulator(env: BallRollingEnv):
             frame_times_physics.append(1000 * (physics_end - physics_start))
             frame_times_tactile.append(1000 * (tactile_sim_end - tactile_sim_start))
         
-        print("Current total amount of 'in-contact' frames per env: ", len(frame_times_physics))
-        print("Total sim time currently: {:8.4f}ms".format(time.time()-total_sim_time))
-        print("Avg physics_sim time per env:    {:8.4f}ms".format(np.mean(np.array(frame_times_physics)/env.num_envs)))
-        print("Avg tactile_sim time per env:    {:8.4f}ms".format(np.mean(np.array(frame_times_tactile)/env.num_envs)))
-        system_utilization_analytics = _get_utilization_percentages(reset=False)
-        print(
-            f"| CPU:{system_utilization_analytics[0]}% | "
-            f"RAM:{system_utilization_analytics[1]}% | "
-            f"GPU Compute:{system_utilization_analytics[2]}% | "
-            f"GPU Memory: {system_utilization_analytics[3]:.2f}% |"
-        )
+        # print("Current total amount of 'in-contact' frames per env: ", len(frame_times_physics))
+        # print("Total sim time currently: {:8.4f}ms".format(time.time()-total_sim_time))
+        # print("Avg physics_sim time per env:    {:8.4f}ms".format(np.mean(np.array(frame_times_physics)/env.num_envs)))
+        # print("Avg tactile_sim time per env:    {:8.4f}ms".format(np.mean(np.array(frame_times_tactile)/env.num_envs)))
+        
+        # system_utilization_analytics = _get_utilization_percentages(reset=False)
+        # print(
+        #     f"| CPU:{system_utilization_analytics[0]}% | "
+        #     f"RAM:{system_utilization_analytics[1]}% | "
+        #     f"GPU Compute:{system_utilization_analytics[2]}% | "
+        #     f"GPU Memory: {system_utilization_analytics[3]:.2f}% |"
+        # )
         print("")
         
 
