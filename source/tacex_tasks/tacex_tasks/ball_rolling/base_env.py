@@ -90,7 +90,6 @@ class BallRollingEnvCfg(DirectRLEnvCfg):
     sim: SimulationCfg = SimulationCfg(
         dt=0.01, #1 / 120, #0.001
         render_interval=decimation,
-        disable_contact_processing=True,
         #device="cpu",
         physx=PhysxCfg(
             enable_ccd=True, # needed for more stable ball_rolling
@@ -141,7 +140,7 @@ class BallRollingEnvCfg(DirectRLEnvCfg):
                     disable_gravity=False,
             ),
         ),
-        init_state=RigidObjectCfg.InitialStateCfg(pos=(0.5, 0, 0.01)),
+        init_state=RigidObjectCfg.InitialStateCfg(pos=(0.5, 0, 0.0055)),
     )
 
     # sensors
@@ -430,6 +429,9 @@ class BallRollingEnv(DirectRLEnv):
         # Distance of the end-effector to the object: (num_envs,)
         object_ee_distance = torch.norm(obj_pos - ee_frame_pos, dim=1) 
         reaching_penalty = self.cfg.reaching_penalty["weight"]*torch.square(object_ee_distance)
+        # Add big penalty, if way too far away
+        reaching_penalty = torch.where(object_ee_distance > self.cfg.too_far_away_threshold-0.05, reaching_penalty+10, reaching_penalty)
+        
         # use tanh-kernel
         object_ee_distance_tanh = 1 - torch.tanh(object_ee_distance / self.cfg.reaching_reward_tanh["std"])
         # for giving agent incentive to touch the obj
@@ -567,8 +569,10 @@ class BallRollingEnv(DirectRLEnv):
         desired_pos_b, _ = subtract_frame_transforms(
             self._robot.data.root_link_state_w[:, :3], self._robot.data.root_link_state_w[:, 3:7], self._desired_pos_w
         )
+
+        #for testing performance of sensor during RL
         height_map = self.gsmini._data.output["height_map"]
-        print("shape ", height_map.shape)
+
         obs = torch.cat(
             (
                 ee_pos_curr_b,

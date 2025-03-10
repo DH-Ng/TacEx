@@ -42,6 +42,7 @@ from isaaclab.controllers.differential_ik_cfg import DifferentialIKControllerCfg
 from isaaclab.controllers.differential_ik import DifferentialIKController
 import isaaclab.utils.math as math_utils
 
+
 # from tactile_sim import GsMiniSensorCfg, GsMiniSensor
 from tacex_assets import TACEX_ASSETS_DATA_DIR
 from tacex_assets.robots.franka.franka_gsmini_single_adapter_rigid import FRANKA_PANDA_ARM_GSMINI_SINGLE_ADAPTER_HIGH_PD_CFG
@@ -90,7 +91,6 @@ class BallRollingHeightMapEnvCfg(DirectRLEnvCfg):
     sim: SimulationCfg = SimulationCfg(
         dt=0.01, #1 / 120, #0.001
         render_interval=decimation,
-        disable_contact_processing=True,
         #device="cpu",
         physx=PhysxCfg(
             enable_ccd=True, # needed for more stable ball_rolling
@@ -435,7 +435,7 @@ class BallRollingHeightMapEnv(DirectRLEnv):
         object_ee_distance = torch.norm(obj_pos - ee_frame_pos, dim=1) 
         reaching_penalty = self.cfg.reaching_penalty["weight"]*torch.square(object_ee_distance)
         # Add big penalty, if way too far away
-        reaching_penalty = torch.where(object_ee_distance > self.cfg.too_far_away_threshold, reaching_penalty+10, reaching_penalty)
+        reaching_penalty = torch.where(object_ee_distance > self.cfg.too_far_away_threshold-0.05, reaching_penalty+10, reaching_penalty)
         
         # use tanh-kernel
         object_ee_distance_tanh = 1 - torch.tanh(object_ee_distance / self.cfg.reaching_reward_tanh["std"])

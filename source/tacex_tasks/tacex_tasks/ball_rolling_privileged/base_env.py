@@ -86,7 +86,6 @@ class BallRollingEnvCfg(DirectRLEnvCfg):
     sim: SimulationCfg = SimulationCfg(
         dt=0.01, #1 / 120, #0.001
         render_interval=decimation,
-        disable_contact_processing=True,
         #device="cpu",
         physx=PhysxCfg(
             enable_ccd=True, # needed for more stable ball_rolling

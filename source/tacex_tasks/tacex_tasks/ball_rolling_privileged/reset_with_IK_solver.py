@@ -146,7 +146,7 @@ class BallRollingIKResetEnv(BallRollingEnv):
         self.episode_length_buf[env_ids] = 0
         #------------------------------------------------------
 
-        # spawn robot at random position
+        # spawn obj at random position
         obj_pos = self.object.data.default_root_state[env_ids] 
         obj_pos[:, :3] += self.scene.env_origins[env_ids]
         obj_pos[:, :2] += sample_uniform(
