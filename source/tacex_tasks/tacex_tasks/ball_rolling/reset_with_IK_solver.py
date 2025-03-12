@@ -49,10 +49,11 @@ from tacex_assets import TACEX_ASSETS_DATA_DIR
 from tacex_assets.robots.franka.franka_gsmini_single_adapter_rigid import FRANKA_PANDA_ARM_GSMINI_SINGLE_ADAPTER_HIGH_PD_CFG
 
 from .base_env import BallRollingEnv, BallRollingEnvCfg
+from .height_map_env import BallRollingHeightMapEnv, BallRollingHeightMapEnvCfg
 
 @configclass
-class BallRollingIKResetEnvCfg(BallRollingEnvCfg):
-
+class BallRollingIKResetEnvCfg(BallRollingHeightMapEnvCfg):
+# class BallRollingIKResetEnvCfg(BallRollingEnvCfg):
     # use an proper ik solver for computing desired ee pose after resets
     ik_solver_cfg = {
         "urdf_path": f"{TACEX_ASSETS_DATA_DIR}/Robots/Franka/GelSight_Mini/Single_Adapter/physx_rigid_gelpad.urdf",
@@ -64,17 +65,21 @@ class BallRollingIKResetEnvCfg(BallRollingEnvCfg):
     ik_controller_cfg = DifferentialIKControllerCfg(command_type="pose", use_relative_mode=True, ik_method="dls")
 
     #MARK: reward configuration
+    reaching_penalty = {"weight": -0.2} 
+    reaching_reward_tanh = {"std": 0.2, "weight": 0.4}
+    at_obj_reward = {"weight": 1, "minimal_distance": 0.01}
+    off_the_ground_penalty = {"weight": -1, "max_height": 0.025}
     tracking_reward = {"weight":0.3, "w": 1, "v": 1, "alpha":1e-5, "minimal_distance": 0.01}
     # fine_tracking_reward = {"weight":0.01, "std": 0.23, "minimal_distance": 0.005}
     success_reward = {"weight": 10, "threshold": 0.005} # 0.0025 we count it as a sucess when dist obj <-> goal is less than the threshold
-    height_penalty = {"weight": -0.5, "min_height": 0.008}  # ball has diameter of 1cm, plate 0.5 cm -> 0.005m + 0.0025m = 0.0075m is above the ball
+    height_penalty = {"weight": -0.1, "min_height": 0.008}  # ball has diameter of 1cm, plate 0.5 cm -> 0.005m + 0.0025m = 0.0075m is above the ball
     orient_penalty = {"weight": -0.1}
 
+    episode_length_s = 8.3333/2
+    too_far_away_threshold = 0.25
 
-    episode_length_s = 1 #8.3333
-    too_far_away_threshold = 0.5 #0.03
-    
-class BallRollingIKResetEnv(BallRollingEnv):
+# class BallRollingIKResetEnv(BallRollingEnv):  
+class BallRollingIKResetEnv(BallRollingHeightMapEnv):
     """RL env in which the robot has to push/roll a ball to a goal position.
 
     This base env uses (absolute) joint positions.
@@ -132,31 +137,12 @@ class BallRollingIKResetEnv(BallRollingEnv):
     #MARK: pre-physics step calls    
     # same as base_env
     #uncomment if you only want to check behavior of IK solver for reset
-    def _apply_action(self):
-        pass
+    # def _apply_action(self):
+    #     pass
 
     #MARK: dones
-    def _get_dones(self) -> tuple[torch.Tensor, torch.Tensor]: # which environment is done
-        obj_pos = self.object.data.root_link_pos_w - self.scene.env_origins
-        out_of_bounds_x = (obj_pos[:, 0] < self.cfg.x_bounds[0]) | (obj_pos[:, 0] > self.cfg.x_bounds[1])
-        out_of_bounds_y = (obj_pos[:, 1] < self.cfg.y_bounds[0]) | (obj_pos[:, 1] > self.cfg.y_bounds[1])
-
-        obj_goal_distance = torch.norm(self._desired_pos_w[:, :2] - self.scene.env_origins[:, :2] - obj_pos[:,:2], dim=1)
-        obj_too_far_away = obj_goal_distance > 1
-            
-        ee_frame_pos = self._ee_frame.data.target_pos_w[..., 0, :] - self.scene.env_origins # end-effector positions in world frame: (num_envs, 3)
-        ee_too_far_away = torch.norm(obj_pos - ee_frame_pos, dim=1) > self.cfg.too_far_away_threshold
-        
-        reset_cond = (
-            out_of_bounds_x
-            | out_of_bounds_y
-            | obj_too_far_away
-            | ee_too_far_away
-        )
-
-        time_out = self.episode_length_buf >= self.max_episode_length - 1 # episode length limit
-
-        return reset_cond, time_out
+    # def _get_dones(self) -> tuple[torch.Tensor, torch.Tensor]:
+    #     # same as base env
     
     #MARK: rewards
     def _get_rewards(self) -> torch.Tensor:        
@@ -166,12 +152,25 @@ class BallRollingIKResetEnv(BallRollingEnv):
         obj_pos[:,2] += 0.005  # ball has diameter of 1cm -> r=0.005m, plate height (above ground)=0.0025
         ee_frame_pos = self._ee_frame.data.target_pos_w[..., 0, :] # end-effector positions in world frame: (num_envs, 3)
         
+        # Distance of the end-effector to the object: (num_envs,)
+        object_ee_distance = torch.norm(obj_pos - ee_frame_pos, dim=1) 
+        reaching_penalty = self.cfg.reaching_penalty["weight"]*torch.square(object_ee_distance)
+        # use tanh-kernel
+        object_ee_distance_tanh = 1 - torch.tanh(object_ee_distance / self.cfg.reaching_reward_tanh["std"])
+        # for giving agent incentive to touch the obj
+        at_obj_reward = (object_ee_distance < self.cfg.at_obj_reward["minimal_distance"]) * self.cfg.at_obj_reward["weight"]
+
+        # add big penalty if ball goes flying
+        off_the_ground = torch.where(obj_pos[:, 2] > self.cfg.off_the_ground_penalty["max_height"], self.cfg.off_the_ground_penalty["weight"], 0)
+
         # distance between obj and goal: (num_envs,)
         obj_goal_distance = torch.norm(self._desired_pos_w[:, :2] - self.object.data.root_link_state_w[:, :2], dim=1)
         tracking_goal = -(
             self.cfg.tracking_reward["w"]*obj_goal_distance
             + self.cfg.tracking_reward["v"]*torch.log(obj_goal_distance + self.cfg.tracking_reward["alpha"])
         ) 
+        # only apply when ee is at object (with this our tracking goal always needs to be positive, otherwise reaching part wont work anymore)
+        tracking_goal = (object_ee_distance < self.cfg.tracking_reward["minimal_distance"]) * tracking_goal
         tracking_goal *= self.cfg.tracking_reward["weight"]
 
         # additional reward, when object is close to the goal
@@ -204,6 +203,10 @@ class BallRollingIKResetEnv(BallRollingEnv):
             self.curriculum_phase_id = 1
 
         rewards = (
+            + reaching_penalty
+            + self.cfg.reaching_reward_tanh["weight"] * object_ee_distance_tanh
+            + at_obj_reward
+            + off_the_ground
             + tracking_goal
             # + fine_tracking_reward
             + success_reward
@@ -214,6 +217,10 @@ class BallRollingIKResetEnv(BallRollingEnv):
         )
         
         self.extras["log"] = {
+            "reaching_penalty": reaching_penalty.float().mean(),
+            "reaching_reward_tanh": (self.cfg.reaching_reward_tanh["weight"] * object_ee_distance_tanh).mean(),
+            "at_obj_reward": at_obj_reward.float().mean(),
+            "off_the_ground_penalty": off_the_ground.float().mean(),
             "tracking_goal": tracking_goal.float().mean(),
             # "fine_tracking_reward": fine_tracking_reward.float().mean(),
             "success_reward": success_reward.float().mean(),
@@ -223,6 +230,8 @@ class BallRollingIKResetEnv(BallRollingEnv):
             "action_rate_penalty": (self.cfg.action_rate_penalty_scale[self.curriculum_phase_id] * action_rate_penalty).mean(), 
             "joint_vel_penalty": (self.cfg.joint_vel_penalty_scale[self.curriculum_phase_id] * joint_vel_penalty).mean(),
             # task metrics
+            "Metric/num_ee_at_obj": torch.sum(object_ee_distance < self.cfg.tracking_reward["minimal_distance"]),
+            "Metric/ee_obj_error": object_ee_distance.mean(),
             "Metric/obj_goal_error": obj_goal_distance.mean()
         }
         return rewards
@@ -230,23 +239,6 @@ class BallRollingIKResetEnv(BallRollingEnv):
     #MARK: reset
     def _reset_idx(self, env_ids: torch.Tensor | None):
         super()._reset_idx(env_ids)
-        #---------------- From the DirectRLEnv class ----------
-        # self.scene.reset(env_ids)
-        # # apply events such as randomization for environments that need a reset
-        # if self.cfg.events:
-        #     if "reset" in self.event_manager.available_modes:
-        #         env_step_count = self._sim_step_counter // self.cfg.decimation
-        #         self.event_manager.apply(mode="reset", env_ids=env_ids, global_env_step_count=env_step_count)
-
-        # # reset noise models
-        # if self.cfg.action_noise_model:
-        #     self._action_noise_model.reset(env_ids)
-        # if self.cfg.observation_noise_model:
-        #     self._observation_noise_model.reset(env_ids)
-
-        # # reset the episode length buffer
-        # self.episode_length_buf[env_ids] = 0
-        #------------------------------------------------------
 
         # spawn obj at random position
         obj_pos = self.object.data.default_root_state[env_ids] 
@@ -259,12 +251,12 @@ class BallRollingIKResetEnv(BallRollingEnv):
         )
         self.object.write_root_state_to_sim(obj_pos, env_ids=env_ids)
 
-        # compute desired ee pose so that its at the ball  
+        # compute desired ee pose so that ee is at the ball after reset
+
         # make sure that ee pose is in robot frame
         self.des_reset_ee_pos[env_ids, :] = obj_pos[:, :3].clone() - self.scene.env_origins[env_ids]
         # add offset between gelsight mini case frame (which is at the bottom of the sensor) to the gelpad
-        self.des_reset_ee_pos[env_ids, 2] += 0.135 # cant set it too close to the ball, otherwise "teleporting" robot there is gonna kick ball away
-         
+        self.des_reset_ee_pos[env_ids, 2] += 0.134 # cant set it too close to the ball, otherwise "teleporting" robot there is gonna kick ball away   
         # convert desired pos into transformation matrix
         goal_poses = pk.Transform3d(
             pos=self.des_reset_ee_pos[env_ids], 
@@ -285,7 +277,7 @@ class BallRollingIKResetEnv(BallRollingEnv):
         self._robot.write_joint_state_to_sim(joint_pos, joint_vel, env_ids=env_ids)
         
         # set commands: random target position 
-        self._desired_pos_w[env_ids, :2] = self.object.data.default_root_state[env_ids][:,:2] + self.scene.env_origins[env_ids][:,:2]
+        self._desired_pos_w[env_ids, :2] = obj_pos[:, :2].clone() #+ self.scene.env_origins[env_ids][:,:2]
         self._desired_pos_w[env_ids, :2] += sample_uniform(
             self.cfg.obj_pos_randomization_range[self.curriculum_phase_id][0], 
             self.cfg.obj_pos_randomization_range[self.curriculum_phase_id][1],

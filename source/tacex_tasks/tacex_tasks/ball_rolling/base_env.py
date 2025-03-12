@@ -105,7 +105,7 @@ class BallRollingEnvCfg(DirectRLEnvCfg):
     )
 
     # scene
-    scene: InteractiveSceneCfg = InteractiveSceneCfg(num_envs=1024, env_spacing=1.5, replicate_physics=True)
+    scene: InteractiveSceneCfg = InteractiveSceneCfg(num_envs=1024, env_spacing=1, replicate_physics=True)
 
     # use robot with stiff PD control for better IK tracking
     robot: ArticulationCfg = FRANKA_PANDA_ARM_GSMINI_SINGLE_ADAPTER_HIGH_PD_CFG.replace(
@@ -571,7 +571,7 @@ class BallRollingEnv(DirectRLEnv):
         )
 
         #for testing performance of sensor during RL
-        height_map = self.gsmini._data.output["height_map"]
+        #height_map = self.gsmini._data.output["height_map"]
 
         obs = torch.cat(
             (
