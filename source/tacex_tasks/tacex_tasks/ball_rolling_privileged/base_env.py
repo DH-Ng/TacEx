@@ -107,14 +107,23 @@ class BallRollingEnvCfg(DirectRLEnvCfg):
     robot: ArticulationCfg = FRANKA_PANDA_ARM_GSMINI_SINGLE_ADAPTER_HIGH_PD_CFG.replace(
         prim_path="/World/envs/env_.*/Robot",
         init_state=ArticulationCfg.InitialStateCfg(
+                        # joint_pos={
+                        #     "panda_joint1": 0.0,
+                        #     "panda_joint2": 0.0,
+                        #     "panda_joint3": 0.0,
+                        #     "panda_joint4": -2.46,
+                        #     "panda_joint5": 0.0,
+                        #     "panda_joint6": 2.5,
+                        #     "panda_joint7": 0.741,
+                        # },
                         joint_pos={
-                            "panda_joint1": 0.0,
-                            "panda_joint2": 0.0,
-                            "panda_joint3": 0.0,
-                            "panda_joint4": -2.46,
-                            "panda_joint5": 0.0,
-                            "panda_joint6": 2.5,
-                            "panda_joint7": 0.741,
+                            "panda_joint1": 1.7708,
+                            "panda_joint2": -1.4144,
+                            "panda_joint3": -1.8118,
+                            "panda_joint4": -2.2496,
+                            "panda_joint5": -1.5990,
+                            "panda_joint6": 1.8559,
+                            "panda_joint7": 1.6493,
                         },
                 ),
     )
@@ -205,7 +214,7 @@ class BallRollingEnvCfg(DirectRLEnvCfg):
     obj_pos_randomization_range = [[-0.1, 0.1], [-0.25, 0.25]]
 
     # env
-    episode_length_s = 8.3333 # 500 timesteps
+    episode_length_s = 8.3333/2 # 500 timesteps
     action_space = 5 # we use relative task_space actions: (dx, dy, dz, droll, dpitch) -> dyaw is ommitted
     observation_space = 14 # 3 for ee pos, 2 for orient (roll, pitch), 2 for goal (x,y) and 2 for obj-pos (x,y), 5 for actions
     state_space = 0
@@ -510,12 +519,12 @@ class BallRollingEnv(DirectRLEnv):
         # spawn robot at random position
         obj_pos = self.object.data.default_root_state[env_ids] 
         obj_pos[:, :3] += self.scene.env_origins[env_ids]
-        obj_pos[:, :2] += sample_uniform(
-            self.cfg.obj_pos_randomization_range[self.curriculum_phase_id][0], 
-            self.cfg.obj_pos_randomization_range[self.curriculum_phase_id][1],
-            (len(env_ids), 2), 
-            self.device
-        )
+        # obj_pos[:, :2] += sample_uniform(
+        #     self.cfg.obj_pos_randomization_range[self.curriculum_phase_id][0], 
+        #     self.cfg.obj_pos_randomization_range[self.curriculum_phase_id][1],
+        #     (len(env_ids), 2), 
+        #     self.device
+        # )
         self.object.write_root_state_to_sim(obj_pos, env_ids=env_ids)
 
         # reset robot state 

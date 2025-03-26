@@ -56,9 +56,9 @@ class BallRollingIKResetEnvCfg(BallRollingEnvCfg):
     # use an proper ik solver for computing desired ee pose after resets
     ik_solver_cfg = {
         "urdf_path": f"{TACEX_ASSETS_DATA_DIR}/Robots/Franka/GelSight_Mini/Single_Adapter/physx_rigid_gelpad.urdf",
-        "ee_link_name": "gelsight_mini_gelpad", #gelsight_mini_gelpad
-        "max_iterations": 20,
-        "num_retries": 4,
+        "ee_link_name": "panda_hand", #gelsight_mini_gelpad
+        "max_iterations": 100,
+        "num_retries": 1,
         "learning_rate": 0.2
     }
     ik_controller_cfg = DifferentialIKControllerCfg(command_type="pose", use_relative_mode=True, ik_method="dls")
@@ -161,7 +161,7 @@ class BallRollingIKResetEnv(BallRollingEnv):
         # make sure that ee pose is in robot frame
         self.des_reset_ee_pos[env_ids, :] = obj_pos[:, :3].clone() - self.scene.env_origins[env_ids]
         # add offset between gelsight mini case frame (which is at the bottom of the sensor) to the gelpad
-        self.des_reset_ee_pos[env_ids, 2] += 0.028 #+0.131 # cant set it too close to the ball, otherwise "teleporting" robot there is gonna kick ball away
+        self.des_reset_ee_pos[env_ids, 2] += 0.131 # cant set it too close to the ball, otherwise "teleporting" robot there is gonna kick ball away
          
         # convert desired pos into transformation matrix
         goal_poses = pk.Transform3d(
@@ -178,11 +178,11 @@ class BallRollingIKResetEnv(BallRollingEnv):
         # # num goals x num retries can look at errors directly
         # print(sol.err_pos)
         # print(sol.err_rot)
-        indices = torch.argmin(sol.err_pos, dim=1)
-        best_sol_currently = sol.solutions[torch.arange(indices.size(0)), indices]
+        # indices = torch.argmin(sol.err_pos, dim=1)
+        # best_sol_currently = sol.solutions[torch.arange(indices.size(0)), indices]
 
         # write the computed IK values into the joint state of the robot
-        joint_pos = torch.clamp(best_sol_currently, self.robot_dof_lower_limits, self.robot_dof_upper_limits)
+        joint_pos = torch.clamp(sol.solutions[:,0], self.robot_dof_lower_limits, self.robot_dof_upper_limits)
         joint_vel = torch.zeros_like(joint_pos)
         self._robot.set_joint_position_target(joint_pos, env_ids=env_ids)
         self._robot.write_joint_state_to_sim(joint_pos, joint_vel, env_ids=env_ids)

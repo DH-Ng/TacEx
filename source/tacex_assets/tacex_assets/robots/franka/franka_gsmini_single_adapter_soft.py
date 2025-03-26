@@ -53,15 +53,15 @@ FRANKA_PANDA_ARM_WITH_ONE_GSMINI_CFG = ArticulationCfg(
     actuators={
         "panda_shoulder": ImplicitActuatorCfg(
             joint_names_expr=["panda_joint[1-4]"],
-            effort_limit=87.0,
-            velocity_limit=2.175,
+            effort_limit_sim=87.0,
+            velocity_limit_sim=2.175,
             stiffness=80.0,
             damping=4.0,
         ),
         "panda_forearm": ImplicitActuatorCfg(
             joint_names_expr=["panda_joint[5-7]"],
-            effort_limit=12.0,
-            velocity_limit=2.61,
+            effort_limit_sim=12.0,
+            velocity_limit_sim=2.61,
             stiffness=80.0,
             damping=4.0,
         ),
