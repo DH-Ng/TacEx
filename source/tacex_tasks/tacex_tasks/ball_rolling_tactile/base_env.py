@@ -532,7 +532,7 @@ class BallRollingEnv(DirectRLEnv):
 
         # penalize ee being too close to the ground
         height_penalty = torch.where(
-            (ee_frame_pos[:, 2] < self.cfg.height_penalty["min_height"]) | (ee_frame_pos[:, 2] < self.cfg.height_penalty["max_height"]), 
+            (ee_frame_pos[:, 2] < self.cfg.height_penalty["min_height"]) | (ee_frame_pos[:, 2] > self.cfg.height_penalty["max_height"]), 
             self.cfg.height_penalty["weight"]*(1-ee_frame_pos[:, 2]*10), 
             0.0
         )

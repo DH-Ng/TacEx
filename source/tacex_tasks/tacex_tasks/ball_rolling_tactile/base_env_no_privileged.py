@@ -223,11 +223,11 @@ class BallRollingEnvNoPrivilegedCfg(BallRollingEnvCfg):
     #MARK: reward configuration
     reaching_penalty = {"weight": -0.2} 
     reaching_reward_tanh = {"std": 0.2, "weight": 0.4}
-    at_obj_reward = {"weight": 2.5, "minimal_distance": 0.012}
-    tracking_reward = {"weight":1, "w": 1, "v": 1, "alpha":1e-5, "minimal_distance": 0.01}
+    at_obj_reward = {"weight": 1.25, "minimal_distance": 0.012}
+    tracking_reward = {"weight":1.0, "w": 1, "v": 1, "alpha":1e-5, "minimal_distance": 0.01}
     off_the_ground_penalty = {"weight": -15, "max_height": 0.025}
-    success_reward = {"weight": 10, "threshold": 0.005} # 0.0025 we count it as a sucess when dist obj <-> goal is less than the threshold
-    height_penalty = {"weight": -1.25, "min_height": 0.005, "max_height": 0.01}  # ball has diameter of 1cm, plate 0.5 cm -> 0.005m + 0.0025m = 0.0075m is above the ball
+    success_reward = {"weight": 10.0, "threshold": 0.005} # 0.0025 we count it as a sucess when dist obj <-> goal is less than the threshold
+    height_penalty = {"min_weight": -1.75, "max_weight": -0.5, "min_height": 0.0065, "max_height": 0.015}  # ball has diameter of 1cm, plate 0.5 cm -> 0.005m + 0.0025m = 0.0075m is above the ball
     orient_penalty = {"weight": -0.25}
 
     # curriculum settings
@@ -249,11 +249,12 @@ class BallRollingEnvNoPrivilegedCfg(BallRollingEnvCfg):
     # observation_space = 14
     state_space = 0
 
-    ball_radius = 0.005
+    ball_radius = 0.005 # don't change, because rewards are tuned for this size 
+
     x_bounds = (0.2, 0.75)
     y_bounds = (-0.375, 0.375)
-    too_far_away_threshold = 0.1 #0.15
-    min_height_threshold = 0.001
+    too_far_away_threshold = 0.15 #0.2 #0.15
+    min_height_threshold = 0.002
 
 class BallRollingEnvNoPrivileged(BallRollingEnv):
     """RL env in which the robot has to push/roll a ball to a goal position.
@@ -406,17 +407,22 @@ class BallRollingEnvNoPrivileged(BallRollingEnv):
         # for compensating that obj_pos is based on the center of the ball
         obj_pos[:, 2] += 0.005  # ball has diameter of 1cm -> r=0.005m, plate height (above ground)=0.0025
         ee_frame_pos = self._ee_frame.data.target_pos_w[..., 0, :] # end-effector positions in world frame: (num_envs, 3)
-        
+                
         # Distance of the end-effector to the object: (num_envs,)
         object_ee_distance = torch.norm(obj_pos - ee_frame_pos, dim=1) 
-        #- no reaching part, because current_ball pos is not part of the observations
-        # reaching_penalty = self.cfg.reaching_penalty["weight"]*torch.square(object_ee_distance)
-        # # use tanh-kernel
-        # object_ee_distance_tanh = 1 - torch.tanh(object_ee_distance / self.cfg.reaching_reward_tanh["std"])
-        # object_ee_distance_tanh *= self.cfg.reaching_reward_tanh["weight"]
-
         # for giving agent incentive to touch the obj
-        at_obj_reward = torch.where(object_ee_distance < self.cfg.at_obj_reward["minimal_distance"], self.cfg.at_obj_reward["weight"], -self.cfg.at_obj_reward["weight"])
+        at_obj_reward = torch.where(object_ee_distance < self.cfg.at_obj_reward["minimal_distance"], self.cfg.at_obj_reward["weight"], -0.4*self.cfg.at_obj_reward["weight"])
+
+        #- reaching part, but now its ee to goal (but only if ee touches ball) because current_ball pos is not part of the observations
+        goal_ee_distance = torch.norm(self._goal_pos_w[:, :2] - ee_frame_pos[:, :2], dim=1)
+        goal_reaching_penalty = self.cfg.reaching_penalty["weight"]*torch.square(goal_ee_distance)
+        # use tanh-kernel for additional reward
+        goal_ee_distance_tanh = torch.where(
+            object_ee_distance < self.cfg.at_obj_reward["minimal_distance"], 
+            1 - torch.tanh(goal_ee_distance / self.cfg.reaching_reward_tanh["std"]),
+            0.0
+        )
+        goal_ee_distance_tanh *= self.cfg.reaching_reward_tanh["weight"]
 
         # add penalty if ball goes flying
         off_the_ground = torch.where(obj_pos[:, 2] > self.cfg.off_the_ground_penalty["max_height"], self.cfg.off_the_ground_penalty["weight"], 0.0)
@@ -433,11 +439,17 @@ class BallRollingEnvNoPrivileged(BallRollingEnv):
 
         # penalize ee being too close to the ground
         height_penalty = torch.where(
-            (ee_frame_pos[:, 2] < self.cfg.height_penalty["min_height"]) | (ee_frame_pos[:, 2] < self.cfg.height_penalty["max_height"]), 
-            self.cfg.height_penalty["weight"]*(1-ee_frame_pos[:, 2]*10), 
+            (ee_frame_pos[:, 2] < self.cfg.height_penalty["min_height"]), 
+            self.cfg.height_penalty["min_weight"]*(self.cfg.height_penalty["min_height"]-ee_frame_pos[:, 2])*10, 
             0.0
         )
-        
+        # penalize ee being too high
+        height_penalty = torch.where(
+            (ee_frame_pos[:, 2] > self.cfg.height_penalty["max_height"]), 
+            self.cfg.height_penalty["max_weight"]*(ee_frame_pos[:, 2]-self.cfg.height_penalty["max_height"])*10, 
+            height_penalty
+        )
+
         # penalize when ee orient is too big
         ee_frame_orient = euler_xyz_from_quat(self._ee_frame.data.target_quat_source[..., 0, :])
         x = wrap_to_pi(ee_frame_orient[0]-math.pi) # our panda hand asset has rotation from (180,0,-45) -> we substract 180 for defining the rotation limits
@@ -447,7 +459,13 @@ class BallRollingEnvNoPrivileged(BallRollingEnv):
             | (torch.abs(y) > math.pi/8)
         ) * self.cfg.orient_penalty["weight"]
 
-        success_reward = torch.where(obj_goal_distance < self.cfg.success_reward["threshold"], self.cfg.success_reward["weight"], 0.0)
+        success_reward = torch.where(
+            obj_goal_distance < self.cfg.success_reward["threshold"], 
+            self.cfg.success_reward["weight"], 
+            0.0
+        )
+        # only apply success_reward when ee is at the ball
+        success_reward = (object_ee_distance < self.cfg.tracking_reward["minimal_distance"]) * success_reward
         
         # Penalize the rate of change of the actions using L2 squared kernel.
         action_rate_penalty = torch.sum(torch.square(self.actions - self.prev_actions), dim=1)
@@ -460,8 +478,8 @@ class BallRollingEnvNoPrivileged(BallRollingEnv):
             self.curriculum_phase_id = 1
 
         rewards = (
-            # + reaching_penalty
-            # + object_ee_distance_tanh
+            + goal_reaching_penalty
+            + goal_ee_distance_tanh
             + at_obj_reward
             + off_the_ground
             + tracking_goal
@@ -473,8 +491,8 @@ class BallRollingEnvNoPrivileged(BallRollingEnv):
         )
         
         self.extras["log"] = {
-            # "reaching_penalty": reaching_penalty.float().mean(),
-            # "reaching_reward_tanh": object_ee_distance_tanh.mean(),
+            "goal_reaching_penalty": goal_reaching_penalty.float().mean(),
+            "goal_ee_distance_tanh": goal_ee_distance_tanh.mean(),
             "at_obj_reward": at_obj_reward.float().mean(),
             "off_the_ground_penalty": off_the_ground.float().mean(),
             "tracking_goal": tracking_goal.float().mean(),
