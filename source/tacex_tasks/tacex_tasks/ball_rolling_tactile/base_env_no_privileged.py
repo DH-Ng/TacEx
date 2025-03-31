@@ -4,9 +4,13 @@
 # SPDX-License-Identifier: BSD-3-Clause
 
 from __future__ import annotations
+from typing import TYPE_CHECKING
 
 import torch
 import math
+import numpy as np
+
+from isaacsim.core.api.simulation_context import SimulationContext
 
 from isaacsim.core.utils.stage import get_current_stage
 from isaacsim.core.utils.torch.transformations import tf_combine, tf_inverse, tf_vector
@@ -43,17 +47,21 @@ from isaaclab.controllers.differential_ik import DifferentialIKController
 import isaaclab.utils.math as math_utils
 from isaaclab.utils.noise import GaussianNoiseCfg, UniformNoiseCfg, NoiseModelCfg
 
+
+
 # from tactile_sim import GsMiniSensorCfg, GsMiniSensor
 from tacex_assets import TACEX_ASSETS_DATA_DIR
 from tacex_assets.robots.franka.franka_gsmini_single_adapter_rigid import FRANKA_PANDA_ARM_GSMINI_SINGLE_ADAPTER_HIGH_PD_CFG
 from tacex_assets.sensors.gelsight_mini.gelsight_mini_cfg import GelSightMiniCfg
 
+from tacex_tasks.utils import DirectLiveVisualizer
+
 from tacex import GelSightSensor
 from tacex.simulation_approaches.fots import FOTSMarkerSimulator, FOTSMarkerSimulatorCfg
 
+
 from .base_env import BallRollingEnv, BallRollingEnvCfg
 
-import pytorch_kinematics as pk
 
 class CustomEnvWindow(BaseEnvWindow):
     """Window manager for the RL environment."""
@@ -80,8 +88,6 @@ class BallRollingEnvNoPrivilegedCfg(BallRollingEnvCfg):
 
     # viewer settings
     viewer: ViewerCfg = ViewerCfg()
-    # viewer.eye = (1.9, 1.4, 0.3)
-    # viewer.lookat = (-1.5, -1.9, -1.1)
     viewer.eye = (1, -0.5, 0.1)
     viewer.lookat = (-19.4, 18.2, -1.1)
 
@@ -183,7 +189,7 @@ class BallRollingEnvNoPrivilegedCfg(BallRollingEnvCfg):
         device = "cuda",
         tactile_img_res = (480, 640),
         debug_vis=True, # for being able to see sensor output in the gui
-                # update Taxim cfg
+        # update Taxim cfg
         optical_sim_cfg=None,
 
         # update FOTS cfg
@@ -223,11 +229,11 @@ class BallRollingEnvNoPrivilegedCfg(BallRollingEnvCfg):
     #MARK: reward configuration
     reaching_penalty = {"weight": -0.2} 
     reaching_reward_tanh = {"std": 0.2, "weight": 0.4}
-    at_obj_reward = {"weight": 1.25, "minimal_distance": 0.012}
+    at_obj_reward = {"weight": 2.5, "minimal_distance": 0.012}
     tracking_reward = {"weight":1.0, "w": 1, "v": 1, "alpha":1e-5, "minimal_distance": 0.01}
     off_the_ground_penalty = {"weight": -15, "max_height": 0.025}
     success_reward = {"weight": 10.0, "threshold": 0.005} # 0.0025 we count it as a sucess when dist obj <-> goal is less than the threshold
-    height_penalty = {"min_weight": -1.75, "max_weight": -0.5, "min_height": 0.0065, "max_height": 0.015}  # ball has diameter of 1cm, plate 0.5 cm -> 0.005m + 0.0025m = 0.0075m is above the ball
+    height_penalty = {"min_weight": -0.5, "max_weight": -0.5, "min_height": 0.006, "max_height": 0.015}  # ball has diameter of 1cm, plate 0.5 cm -> 0.005m + 0.0025m = 0.0075m is above the ball
     orient_penalty = {"weight": -0.25}
 
     # curriculum settings
@@ -253,7 +259,7 @@ class BallRollingEnvNoPrivilegedCfg(BallRollingEnvCfg):
 
     x_bounds = (0.2, 0.75)
     y_bounds = (-0.375, 0.375)
-    too_far_away_threshold = 0.15 #0.2 #0.15
+    too_far_away_threshold = 0.02 #0.125 #0.2 #0.15
     min_height_threshold = 0.002
 
 class BallRollingEnvNoPrivileged(BallRollingEnv):
@@ -313,6 +319,16 @@ class BallRollingEnvNoPrivileged(BallRollingEnv):
         self._goal_pos_w = torch.zeros((self.num_envs, 3), device=self.device) 
         # make height of goal pos fixed
         self._goal_pos_w[:, 2] = 0.00125
+
+        # add plots
+        self.live_vis = DirectLiveVisualizer(self.cfg.debug_vis, self.num_envs, self._window, visualizer_name="Actions")
+        self.live_vis.terms["actions"] = self.actions
+        self.live_vis.create_visualizer()
+
+        self.live_vis_obs = DirectLiveVisualizer(self.cfg.debug_vis, self.num_envs, self._window, visualizer_name="Observations")
+        # self.live_vis_obs.terms["proprio"] = self._get_observations()["policy"]["proprio_obs"]
+        self.live_vis_obs.terms["vision"] = self._get_observations()["policy"]["vision_obs"]
+        self.live_vis_obs.create_visualizer()
 
         # add handle for debug visualization (this is set to a valid handle inside set_debug_vis)
         self.set_debug_vis(self.cfg.debug_vis)
@@ -411,11 +427,14 @@ class BallRollingEnvNoPrivileged(BallRollingEnv):
         # Distance of the end-effector to the object: (num_envs,)
         object_ee_distance = torch.norm(obj_pos - ee_frame_pos, dim=1) 
         # for giving agent incentive to touch the obj
-        at_obj_reward = torch.where(object_ee_distance < self.cfg.at_obj_reward["minimal_distance"], self.cfg.at_obj_reward["weight"], -0.4*self.cfg.at_obj_reward["weight"])
+        at_obj_reward = torch.where(object_ee_distance < self.cfg.at_obj_reward["minimal_distance"], self.cfg.at_obj_reward["weight"], 0)
 
         #- reaching part, but now its ee to goal (but only if ee touches ball) because current_ball pos is not part of the observations
         goal_ee_distance = torch.norm(self._goal_pos_w[:, :2] - ee_frame_pos[:, :2], dim=1)
-        goal_reaching_penalty = self.cfg.reaching_penalty["weight"]*torch.square(goal_ee_distance)
+        goal_reaching_penalty = torch.square(goal_ee_distance)
+        goal_reaching_penalty = torch.where(object_ee_distance < self.cfg.tracking_reward["minimal_distance"], goal_reaching_penalty, 1.25*goal_reaching_penalty)
+        goal_reaching_penalty *= self.cfg.reaching_penalty["weight"]
+
         # use tanh-kernel for additional reward
         goal_ee_distance_tanh = torch.where(
             object_ee_distance < self.cfg.at_obj_reward["minimal_distance"], 
@@ -423,7 +442,7 @@ class BallRollingEnvNoPrivileged(BallRollingEnv):
             0.0
         )
         goal_ee_distance_tanh *= self.cfg.reaching_reward_tanh["weight"]
-
+        
         # add penalty if ball goes flying
         off_the_ground = torch.where(obj_pos[:, 2] > self.cfg.off_the_ground_penalty["max_height"], self.cfg.off_the_ground_penalty["weight"], 0.0)
 
@@ -478,15 +497,15 @@ class BallRollingEnvNoPrivileged(BallRollingEnv):
             self.curriculum_phase_id = 1
 
         rewards = (
-            + goal_reaching_penalty
-            + goal_ee_distance_tanh
+            # + goal_reaching_penalty
+            # + goal_ee_distance_tanh
             + at_obj_reward
             + off_the_ground
-            + tracking_goal
-            + success_reward
+            # + tracking_goal
+            # + success_reward
             + orient_penalty
             + height_penalty
-            + self.cfg.action_rate_penalty_scale[self.curriculum_phase_id] * action_rate_penalty
+            # + self.cfg.action_rate_penalty_scale[self.curriculum_phase_id] * action_rate_penalty
             + self.cfg.joint_vel_penalty_scale[self.curriculum_phase_id] * joint_vel_penalty
         )
         
@@ -495,8 +514,8 @@ class BallRollingEnvNoPrivileged(BallRollingEnv):
             "goal_ee_distance_tanh": goal_ee_distance_tanh.mean(),
             "at_obj_reward": at_obj_reward.float().mean(),
             "off_the_ground_penalty": off_the_ground.float().mean(),
-            "tracking_goal": tracking_goal.float().mean(),
-            "success_reward": success_reward.float().mean(),
+            # "tracking_goal": tracking_goal.float().mean(),
+            # "success_reward": success_reward.float().mean(),
             # penalties for nice looking behavior
             "orientation_penalty": orient_penalty.float().mean(),
             "height_penalty": height_penalty.mean(),
@@ -583,7 +602,8 @@ class BallRollingEnvNoPrivileged(BallRollingEnv):
             dim=-1,
         )
         vision_obs = self.gsmini._data.output["height_map"]
-        
+        vision_obs = vision_obs.reshape((self.num_envs,64,64,1)) # add a channel to the depth image
+
         obs = {
             "proprio_obs": proprio_obs,
             "vision_obs": vision_obs
@@ -600,4 +620,8 @@ class BallRollingEnvNoPrivileged(BallRollingEnv):
         #         (len(env_ids), 2), 
         #         self.device
         #     )
+
+        # self.live_vis.terms["actions"][:] = self.actions[:]
+        # self.live_vis_obs.terms["proprio"] = proprio_obs
+        self.live_vis_obs.terms["vision"] = vision_obs
         return {"policy": obs}

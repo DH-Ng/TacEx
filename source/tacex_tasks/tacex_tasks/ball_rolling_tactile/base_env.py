@@ -687,7 +687,7 @@ class BallRollingEnv(DirectRLEnv):
             dim=-1,
         )
         vision_obs = self.gsmini._data.output["height_map"]
-        
+
         obs = {
             "proprio_obs": proprio_obs,
             "vision_obs": vision_obs
