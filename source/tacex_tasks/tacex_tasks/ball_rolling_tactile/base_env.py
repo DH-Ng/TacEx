@@ -157,7 +157,7 @@ class BallRollingEnvCfg(DirectRLEnvCfg):
             usd_path=f"{TACEX_ASSETS_DATA_DIR}/Props/ball_wood.usd", 
             #scale=(2, 1, 0.6),
             rigid_props=RigidBodyPropertiesCfg(
-                    solver_position_iteration_count=16,
+                    solver_position_iteration_count=120,
                     solver_velocity_iteration_count=1,
                     max_angular_velocity=1000.0,
                     max_linear_velocity=1000.0,
@@ -433,7 +433,7 @@ class BallRollingEnv(DirectRLEnv):
         
     def _pre_physics_step(self, actions: torch.Tensor):
         self.prev_actions[:] = self.actions
-        self.actions[:] = actions.clamp(-5,5) 
+        self.actions[:] = actions.clamp(-5.0,5.0) 
         #! preprocess the action and turn it into IK action
         # self.processed_actions[:, :5] = self.actions
         # # fixed z rotation

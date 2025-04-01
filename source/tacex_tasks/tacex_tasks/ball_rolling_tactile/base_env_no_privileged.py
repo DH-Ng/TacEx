@@ -165,7 +165,7 @@ class BallRollingEnvNoPrivilegedCfg(BallRollingEnvCfg):
             usd_path=f"{TACEX_ASSETS_DATA_DIR}/Props/ball_wood.usd", 
             #scale=(2, 1, 0.6),
             rigid_props=RigidBodyPropertiesCfg(
-                    solver_position_iteration_count=16,
+                    solver_position_iteration_count=120,
                     solver_velocity_iteration_count=1,
                     max_angular_velocity=1000.0,
                     max_linear_velocity=1000.0,
@@ -227,14 +227,14 @@ class BallRollingEnvNoPrivilegedCfg(BallRollingEnvCfg):
     # observation_noise_model = 
 
     #MARK: reward configuration
-    reaching_penalty = {"weight": -0.2} 
+    reaching_penalty = {"weight": -0.2}
     reaching_reward_tanh = {"std": 0.2, "weight": 0.4}
-    at_obj_reward = {"weight": 2.5, "minimal_distance": 0.012}
-    tracking_reward = {"weight":1.0, "w": 1, "v": 1, "alpha":1e-5, "minimal_distance": 0.01}
+    at_obj_reward = {"weight": 2.5, "minimal_distance": 0.004}
+    tracking_reward = {"weight":1.0, "w": 1, "v": 1, "alpha":1e-5, "minimal_distance": 0.004}
     off_the_ground_penalty = {"weight": -15, "max_height": 0.025}
     success_reward = {"weight": 10.0, "threshold": 0.005} # 0.0025 we count it as a sucess when dist obj <-> goal is less than the threshold
     height_penalty = {"min_weight": -0.5, "max_weight": -0.5, "min_height": 0.006, "max_height": 0.015}  # ball has diameter of 1cm, plate 0.5 cm -> 0.005m + 0.0025m = 0.0075m is above the ball
-    orient_penalty = {"weight": -0.25}
+    orient_penalty = {"weight": -0.5}
 
     # curriculum settings
     curriculum_steps = [8.5e6] # after this amount of common_steps (= total steps), we make the task more difficult
@@ -291,27 +291,6 @@ class BallRollingEnvNoPrivileged(BallRollingEnv):
         self.robot_dof_upper_limits = self._robot.data.soft_joint_pos_limits[0, :, 1].to(device=self.device)
         self.robot_dof_speed_scales = torch.ones_like(self.robot_dof_lower_limits)
         
-        #### Stuff for IK actions ##################################################
-        # create the differential IK controller
-        self._ik_controller = DifferentialIKController(
-            cfg=self.cfg.ik_controller_cfg, num_envs=self.num_envs, device=self.device
-        )
-        # Obtain the frame index of the end-effector
-        body_ids, body_names = self._robot.find_bodies("panda_hand")
-        # save only the first body index
-        self._body_idx = body_ids[0]
-        self._body_name = body_names[0]
-        
-        # For a fixed base robot, the frame index is one less than the body index.
-        # This is because the root body is not included in the returned Jacobians.
-        self._jacobi_body_idx = self._body_idx - 1
-        # self._jacobi_joint_ids = self._joint_ids # we take every joint
-        
-        # ee offset w.r.t panda hand -> based on the asset
-        self._offset_pos = torch.tensor([0.0, 0.0, 0.131], device=self.device).repeat(self.num_envs, 1)
-        self._offset_rot = torch.tensor([1.0, 0.0, 0.0, 0.0], device=self.device).repeat(self.num_envs, 1) 
-        ####################################################################
-
         # create auxiliary variables for computing applied action, observations and rewards
         self.processed_actions = torch.zeros((self.num_envs, self._ik_controller.action_dim), device=self.device)
         self.prev_actions = torch.zeros_like(self.actions)
@@ -326,9 +305,14 @@ class BallRollingEnvNoPrivileged(BallRollingEnv):
         self.live_vis.create_visualizer()
 
         self.live_vis_obs = DirectLiveVisualizer(self.cfg.debug_vis, self.num_envs, self._window, visualizer_name="Observations")
-        # self.live_vis_obs.terms["proprio"] = self._get_observations()["policy"]["proprio_obs"]
+        self.live_vis_obs.terms["proprio"] = self._get_observations()["policy"]["proprio_obs"]
         self.live_vis_obs.terms["vision"] = self._get_observations()["policy"]["vision_obs"]
         self.live_vis_obs.create_visualizer()
+
+        self.metric_vis = DirectLiveVisualizer(self.cfg.debug_vis, self.num_envs, self._window, visualizer_name="Metrics")
+        self.metric_vis.terms["ee_height"] = torch.zeros((self.num_envs,1))
+        self.metric_vis.terms["ee_distance"] = torch.zeros((self.num_envs,1))
+        self.metric_vis.create_visualizer()
 
         # add handle for debug visualization (this is set to a valid handle inside set_debug_vis)
         self.set_debug_vis(self.cfg.debug_vis)
@@ -525,6 +509,9 @@ class BallRollingEnvNoPrivileged(BallRollingEnv):
             "Metric/ee_obj_error": object_ee_distance.mean(),
             "Metric/obj_goal_error": obj_goal_distance.mean()
         }
+        ee_height = ee_frame_pos[:, 2]
+        self.metric_vis.terms["ee_height"] = ee_height.reshape(-1,1)
+        self.metric_vis.terms["ee_distance"] = object_ee_distance.reshape(-1,1)
         return rewards
 
     #MARK: reset
@@ -602,8 +589,14 @@ class BallRollingEnvNoPrivileged(BallRollingEnv):
             dim=-1,
         )
         vision_obs = self.gsmini._data.output["height_map"]
-        vision_obs = vision_obs.reshape((self.num_envs,64,64,1)) # add a channel to the depth image
-
+        
+        # normalize images
+        normalized = vision_obs.view(vision_obs.size(0), -1)
+        normalized -= normalized.min(1, keepdim=True)[0]
+        normalized /= normalized.max(1, keepdim=True)[0]
+        normalized = (normalized*255).type(dtype=torch.int)
+        vision_obs = normalized.reshape((self.num_envs,64,64,1)) # add a channel to the depth image for debug_vis
+        
         obs = {
             "proprio_obs": proprio_obs,
             "vision_obs": vision_obs
@@ -622,6 +615,6 @@ class BallRollingEnvNoPrivileged(BallRollingEnv):
         #     )
 
         # self.live_vis.terms["actions"][:] = self.actions[:]
-        # self.live_vis_obs.terms["proprio"] = proprio_obs
+        self.live_vis_obs.terms["proprio"] = proprio_obs
         self.live_vis_obs.terms["vision"] = vision_obs
         return {"policy": obs}
