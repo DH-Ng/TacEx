@@ -54,7 +54,24 @@ python scripts/rsl_rl/train.py --task=Template-Isaac-Velocity-Rough-Anymal-D-v0
 ### Building Isaac Lab Base Image
 
 Currently, there is no Docker image for Isaac Lab publicly available. Hence, you'd need to build the docker image
-for Isaac Lab locally by following the steps [here](https://isaac-sim.github.io/IsaacLab/main/source/deployment/index.html).
+for Isaac Lab locally by following the steps for the  and building the container [here](https://isaac-sim.github.io/IsaacLab/main/source/deployment/docker.html#docker-guide).
+
+>[!NOTE]
+>**Prerequisites**
+> - Have Nvidia drivers, Docker and the Nvidia Container Toolkit, see [container setup](https://docs.isaacsim.omniverse.nvidia.com/latest/installation/install_container.html#container-setup) (i.e. 
+> - Setup Nvidia api key:
+>   - install the ngc client https://org.ngc.nvidia.com/setup/installers/cli (for the config just press enter twice. i.e. use the default config)
+>   - setup the your [api key](https://org.ngc.nvidia.com/setup/api-key)
+![image](https://github.com/user-attachments/assets/f773bcc2-fed0-4266-9fb2-10e23b9f874f)
+
+**In a nutshell**:  
+```bash
+# clone the IsaacLab repo
+git clone https://github.com/isaac-sim/IsaacLab.git
+cd ./IsaacLab
+# activate the script to build the docker container
+./docker/container.py start 
+```
 
 Once you have built the base Isaac Lab image, you can check it exists by doing:
 
