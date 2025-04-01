@@ -37,12 +37,12 @@ from isaaclab.envs import ViewerCfg
 
 from isaaclab.markers import POSITION_GOAL_MARKER_CFG  # isort: skip
 from isaaclab.markers import CUBOID_MARKER_CFG  # isort: skip
+from isaaclab.markers.visualization_markers import VisualizationMarkersCfg
 
 from isaaclab.controllers.differential_ik_cfg import DifferentialIKControllerCfg
 from isaaclab.controllers.differential_ik import DifferentialIKController
 import isaaclab.utils.math as math_utils
-
-import pytorch_kinematics as pk
+from isaaclab.utils.noise import GaussianNoiseCfg, UniformNoiseCfg, NoiseModelCfg
 
 # from tactile_sim import GsMiniSensorCfg, GsMiniSensor
 from tacex_assets import TACEX_ASSETS_DATA_DIR
@@ -51,6 +51,9 @@ from tacex_assets.sensors.gelsight_mini.gelsight_mini_cfg import GelSightMiniCfg
 
 from tacex import GelSightSensor
 from tacex.simulation_approaches.fots import FOTSMarkerSimulator, FOTSMarkerSimulatorCfg
+
+from tacex_tasks.utils import DirectLiveVisualizer
+
 
 class CustomEnvWindow(BaseEnvWindow):
     """Window manager for the RL environment."""
@@ -77,15 +80,13 @@ class BallRollingEnvCfg(DirectRLEnvCfg):
 
     # viewer settings
     viewer: ViewerCfg = ViewerCfg()
-    # viewer.eye = (1.9, 1.4, 0.3)
-    # viewer.lookat = (-1.5, -1.9, -1.1)
     viewer.eye = (1, -0.5, 0.1)
     viewer.lookat = (-19.4, 18.2, -1.1)
 
     viewer.origin_type = "env"
     viewer.env_idx = 0
     viewer.resolution = (1280, 720)   
-
+    
     debug_vis = True
 
     ui_window_class_type = CustomEnvWindow
@@ -93,7 +94,7 @@ class BallRollingEnvCfg(DirectRLEnvCfg):
     decimation = 1
     # simulation
     sim: SimulationCfg = SimulationCfg(
-        dt=1 / 120,
+        dt=1 / 120, #0.001
         render_interval=decimation,
         #device="cpu",
         physx=PhysxCfg(
@@ -110,25 +111,33 @@ class BallRollingEnvCfg(DirectRLEnvCfg):
     )
 
     # scene
-    scene: InteractiveSceneCfg = InteractiveSceneCfg(num_envs=1000, env_spacing=1, replicate_physics=True)
+    scene: InteractiveSceneCfg = InteractiveSceneCfg(num_envs=1024, env_spacing=1, replicate_physics=True)
 
     # use robot with stiff PD control for better IK tracking
     robot: ArticulationCfg = FRANKA_PANDA_ARM_GSMINI_SINGLE_ADAPTER_HIGH_PD_CFG.replace(
         prim_path="/World/envs/env_.*/Robot",
         init_state=ArticulationCfg.InitialStateCfg(
-                        joint_pos={
-                            "panda_joint1": 1.7708,
-                            "panda_joint2": -1.4144,
-                            "panda_joint3": -1.8118,
-                            "panda_joint4": -2.2496,
-                            "panda_joint5": -1.5990,
-                            "panda_joint6": 1.8559,
-                            "panda_joint7": 1.6493,
-                        },
-                ),
+            joint_pos={
+                "panda_joint1": 0.0,
+                "panda_joint2": 0.44,
+                "panda_joint3": 0.0,
+                "panda_joint4": -2.369,
+                "panda_joint5": 0.0,
+                "panda_joint6": 2.82,
+                "panda_joint7": 0.741,
+            },
+            # joint_pos={
+            #     "panda_joint1": 1.7708,
+            #     "panda_joint2": -1.4164,
+            #     "panda_joint3": -1.8159,
+            #     "panda_joint4": -2.2501,
+            #     "panda_joint5": -1.6057,
+            #     "panda_joint6": 1.8573,
+            #     "panda_joint7": 1.6513,
+            # },
+        ),
     )
-# 1.7708, -1.4144, -1.8118, -2.2496, -1.5990,  1.8559,  1.6493
-# 0, 0.42, 0, -2.38, 0, 2.77, 0.62
+
     ik_controller_cfg = DifferentialIKControllerCfg(command_type="pose", use_relative_mode=True, ik_method="dls")
 
     # rigid body ball
@@ -138,7 +147,7 @@ class BallRollingEnvCfg(DirectRLEnvCfg):
             usd_path=f"{TACEX_ASSETS_DATA_DIR}/Props/ball_wood.usd", 
             #scale=(2, 1, 0.6),
             rigid_props=RigidBodyPropertiesCfg(
-                    solver_position_iteration_count=16,
+                    solver_position_iteration_count=120,
                     solver_velocity_iteration_count=1,
                     max_angular_velocity=1000.0,
                     max_linear_velocity=1000.0,
@@ -146,7 +155,7 @@ class BallRollingEnvCfg(DirectRLEnvCfg):
                     disable_gravity=False,
             ),
         ),
-        init_state=RigidObjectCfg.InitialStateCfg(pos=(0.5, 0, 0.0055)),
+        init_state=RigidObjectCfg.InitialStateCfg(pos=(0.5, 0, 0.01)),
     )
 
     # sensors
@@ -162,7 +171,7 @@ class BallRollingEnvCfg(DirectRLEnvCfg):
         device = "cuda",
         tactile_img_res = (480, 640),
         debug_vis=True, # for being able to see sensor output in the gui
-                # update Taxim cfg
+        # update Taxim cfg
         optical_sim_cfg=None,
 
         # update FOTS cfg
@@ -193,24 +202,21 @@ class BallRollingEnvCfg(DirectRLEnvCfg):
         data_types=["height_map"], #marker_motion
     )
 
-    # use an proper ik solver for computing desired ee pose after resets
-    ik_solver_cfg = {
-        "urdf_path": f"{TACEX_ASSETS_DATA_DIR}/Robots/Franka/GelSight_Mini/Single_Adapter/physx_rigid_gelpad.urdf",
-        "ee_link_name": "panda_hand", #gelsight_mini_gelpad
-        "max_iterations": 100,
-        "num_retries": 1,
-        "learning_rate": 0.2
-    }
-    # actions are in task space
-    ik_controller_cfg = DifferentialIKControllerCfg(command_type="pose", use_relative_mode=True, ik_method="dls")
+    # noise models
+    action_noise_model = NoiseModelCfg(
+        noise_cfg = UniformNoiseCfg(n_min=-0.001, n_max=0.001, operation="add")
+    )
+    # observation_noise_model = 
 
     #MARK: reward configuration
-    lost_contact_penalty = {"weight": -1.0, "threshold": 0.01}
-    off_the_ground_penalty = {"weight": -1.0, "max_height": 0.025}
-    tracking_reward = {"weight":0.3, "w": 1, "v": 1, "alpha":1e-5, "minimal_distance": 0.01}
+    reaching_penalty = {"weight": -0.2}
+    reaching_reward_tanh = {"std": 0.2, "weight": 0.4}
+    at_obj_reward = {"weight": 2.5, "minimal_distance": 0.004}
+    tracking_reward = {"weight":1.0, "w": 1, "v": 1, "alpha":1e-5, "minimal_distance": 0.004}
+    off_the_ground_penalty = {"weight": -15, "max_height": 0.025}
     success_reward = {"weight": 10.0, "threshold": 0.005} # 0.0025 we count it as a sucess when dist obj <-> goal is less than the threshold
-    height_penalty = {"weight": -1.0, "min_height": 0.0085}  # ball has diameter of 1cm, plate 0.5 cm -> 0.005m + 0.0025m = 0.0075m is above the ball
-    orient_penalty = {"weight": -1.0}
+    height_penalty = {"min_weight": -0.5, "max_weight": -0.5, "min_height": 0.0125-0.005, "max_height": 0.0125}  # ball has diameter of 1cm, plate height = 0.5 cm -> 0.01m + 0.0025m = 0.0125m is above the ball
+    orient_penalty = {"weight": -0.5}
 
     # curriculum settings
     curriculum_steps = [8.5e6] # after this amount of common_steps (= total steps), we make the task more difficult
@@ -219,22 +225,24 @@ class BallRollingEnvCfg(DirectRLEnvCfg):
     action_rate_penalty_scale = [-1e-4, -1e-2] # give list for curriculum learning (-1e2 after common_step_count > currciculum_steps)
     joint_vel_penalty_scale = [-1e-4, -1e-2] 
 
-    obj_pos_randomization_range = [[-0.2, 0.3], [-0.2, 0.2]]
+    obj_pos_randomization_range = [[-0.125, 0.125], [-0.2, 0.2]]
 
     # env
-    episode_length_s = 8.3333*2 # 1000*2 timesteps (dt = 1/120 -> 8.3333/(1/120) = 1000)
-    action_space = 5 # we use relative task_space actions: (dx, dy, dz, droll, dpitch) -> dyaw is ommitted
+    episode_length_s = 8.3333/2 # 1000/2 timesteps (dt = 1/120 -> 8.3333/(1/120) = 1000)
+    action_space = 6 # we use relative task_space actions: (dx, dy, dz, droll, dpitch) -> dyaw is ommitted
     observation_space = {
-        "proprio_obs": 12, # 3 for ee pos, 2 for orient (roll, pitch), 2 for init goal-pos (x,y), 5 for actions
+        "proprio_obs": 14, #16, # 3 for ee pos, 2 for orient (roll, pitch), 2 for init goal-pos (x,y), 5 for actions
         "vision_obs": [64,64,1], # from tactile sensor
     }
+    # observation_space = 14
     state_space = 0
 
-    ball_radius = 0.005
+    ball_radius = 0.005 # don't change, because rewards are tuned for this size 
+
     x_bounds = (0.2, 0.75)
     y_bounds = (-0.375, 0.375)
-    too_far_away_threshold = 0.015
-    min_height_threshold = 0.008
+    too_far_away_threshold = 0.02 #0.125 #0.2 #0.15
+    min_height_threshold = 0.002
 
 class BallRollingEnv(DirectRLEnv):
     """RL env in which the robot has to push/roll a ball to a goal position.
@@ -261,13 +269,11 @@ class BallRollingEnv(DirectRLEnv):
         # for training curriculum 
         self.curriculum_phase_id = 0
 
-
         self.robot_dof_lower_limits = self._robot.data.soft_joint_pos_limits[0, :, 0].to(device=self.device)
         self.robot_dof_upper_limits = self._robot.data.soft_joint_pos_limits[0, :, 1].to(device=self.device)
         self.robot_dof_speed_scales = torch.ones_like(self.robot_dof_lower_limits)
-        
 
-        #### For Task Space actions ##################################################
+        #### Stuff for IK actions ##################################################
         # create the differential IK controller
         self._ik_controller = DifferentialIKController(
             cfg=self.cfg.ik_controller_cfg, num_envs=self.num_envs, device=self.device
@@ -294,41 +300,36 @@ class BallRollingEnv(DirectRLEnv):
 
         self._goal_pos_w = torch.zeros((self.num_envs, 3), device=self.device) 
         # make height of goal pos fixed
-        self._goal_pos_w[:, 2] = 0.00125
+        self._goal_pos_w[:, 2] = self.cfg.ball_radius + 0.0025 # plate height above ground = 0.0025
+
+        # add plots
+        self.visualizers = {
+            "Actions": DirectLiveVisualizer(self.cfg.debug_vis, self.num_envs, self._window, visualizer_name="Actions"),
+            "Observations": DirectLiveVisualizer(self.cfg.debug_vis, self.num_envs, self._window, visualizer_name="Observations"),
+            "Rewards": DirectLiveVisualizer(self.cfg.debug_vis, self.num_envs, self._window, visualizer_name="Rewards"),
+            "Metrics": DirectLiveVisualizer(self.cfg.debug_vis, self.num_envs, self._window, visualizer_name="Metrics"),
+        }
+        self.visualizers["Actions"].terms["actions"] = self.actions
+
+        self.visualizers["Observations"].terms["proprio"] = self._get_observations()["policy"]["proprio_obs"]
+        self.visualizers["Observations"].terms["sensor_output"] = self._get_observations()["policy"]["vision_obs"]
+        self.visualizers["Observations"].terms["sensor_output"] = self._get_observations()["policy"]["vision_obs"]
+        self.visualizers["Observations"].terms["sensor_output"] = self._get_observations()["policy"]["vision_obs"]
+
+        self.visualizers["Rewards"].terms["ee_height"] = torch.zeros((self.num_envs,1))
+        self.visualizers["Rewards"].terms["ee_distance"] = torch.zeros((self.num_envs,1))
+        self.visualizers["Rewards"].terms["ee_height"] = torch.zeros((self.num_envs,1))
+        self.visualizers["Rewards"].terms["ee_distance"] = torch.zeros((self.num_envs,1))
+
+        self.visualizers["Metrics"].terms["ee_height"] = torch.zeros((self.num_envs,1))
+        self.visualizers["Metrics"].terms["ee_distance"] = torch.zeros((self.num_envs,1))
+
+        for vis in self.visualizers.values():
+            vis.create_visualizer()
 
         # add handle for debug visualization (this is set to a valid handle inside set_debug_vis)
         self.set_debug_vis(self.cfg.debug_vis)
-
-        #### IK Solver ##########################
-        ik_chain = pk.build_chain_from_urdf(open(self.cfg.ik_solver_cfg["urdf_path"], mode="rb").read())
-        #ik_chain.print_tree()
-        # extract a specific serial chain such for inverse kinematics
-        ik_chain = pk.SerialChain(ik_chain, self.cfg.ik_solver_cfg["ee_link_name"])
-        #ik_chain.print_tree()
-        ik_chain = ik_chain.to(dtype=torch.float32, device=self.device)
-        
-        # get robot joint limits
-        ik_chain_lim = torch.tensor(ik_chain.get_joint_limits(), device=self.device)
-
-        # create the IK object
-        # see the constructor for more options and their explanations, such as convergence tolerances
-        self.ik_solver = pk.PseudoInverseIK(
-            ik_chain, 
-            max_iterations=self.cfg.ik_solver_cfg["max_iterations"], 
-            num_retries=self.cfg.ik_solver_cfg["num_retries"],
-            joint_limits=ik_chain_lim.T,
-            early_stopping_any_converged=True,
-            early_stopping_no_improvement="all",#"all", None
-            debug=False,
-            lr=self.cfg.ik_solver_cfg["learning_rate"]
-        )
-        self.des_reset_ee_pos = torch.zeros((self.num_envs, 3), device=self.device)
-        # self.des_reset_ee_rot = lab_math.matrix_from_quat(torch.tensor([0,1,0,0],device=self.device).repeat(self.num_envs, 1))
-        self.des_reset_ee_rot = torch.tensor(
-            [[1,0,0],
-            [0,-1,0],
-            [0,0,-1]], device=self.device
-        ).unsqueeze(0).repeat(self.num_envs, 1, 1)
+        self._marker_indices = torch.zeros((self.num_envs), device=self.device)
 
     def _setup_scene(self):
         self._robot = Articulation(self.cfg.robot)
@@ -417,11 +418,13 @@ class BallRollingEnv(DirectRLEnv):
         
     def _pre_physics_step(self, actions: torch.Tensor):
         self.prev_actions[:] = self.actions
-        self.actions[:] = actions.clamp(-1,1) 
+        self.actions[:] = actions #.clamp(-1.0, 1.0) 
         #! preprocess the action and turn it into IK action
-        self.processed_actions[:, :5] = self.actions
-        # fixed z rotation
-        self.processed_actions[:, 5] = 0 # dont change the z rotation
+        # self.processed_actions[:, :5] = self.actions
+        # # fixed z rotation
+        # self.processed_actions[:, 5] = 0 # dont change the z rotation
+
+        self.processed_actions[:, :6] = self.actions
 
         # obtain ee positions and orientation w.r.t root (=base) frame
         self.ee_pos_curr_b, self.ee_quat_curr_b = self._compute_frame_pose()
@@ -430,32 +433,32 @@ class BallRollingEnv(DirectRLEnv):
     
     def _apply_action(self):
         # # obtain quantities from simulation
-        # ee_pos_curr_b, ee_quat_curr_b = self._compute_frame_pose()
-        # joint_pos = self._robot.data.joint_pos[:, :]
-        # # compute the delta in joint-space
-        # if ee_pos_curr_b.norm() != 0:
-        #     jacobian = self._compute_frame_jacobian()
-        #     joint_pos_des = self._ik_controller.compute(ee_pos_curr_b, ee_quat_curr_b, jacobian, joint_pos)
-        # else:
-        #     joint_pos_des = joint_pos.clone()
-        # self._robot.set_joint_position_target(joint_pos_des)
+        ee_pos_curr_b, ee_quat_curr_b = self._compute_frame_pose()
+        joint_pos = self._robot.data.joint_pos[:, :]
+        # compute the delta in joint-space
+        if ee_pos_curr_b.norm() != 0:
+            jacobian = self._compute_frame_jacobian()
+            joint_pos_des = self._ik_controller.compute(ee_pos_curr_b, ee_quat_curr_b, jacobian, joint_pos)
+        else:
+            joint_pos_des = joint_pos.clone()
+        self._robot.set_joint_position_target(joint_pos_des)
 
-        pass
+        # pass
 
     # post-physics step calls    
 
     #MARK: dones
     def _get_dones(self) -> tuple[torch.Tensor, torch.Tensor]: # which environment is done
-        obj_pos_b = self.object.data.root_link_pos_w - self.scene.env_origins
-        out_of_bounds_x = (obj_pos_b[:, 0] < self.cfg.x_bounds[0]) | (obj_pos_b[:, 0] > self.cfg.x_bounds[1])
-        out_of_bounds_y = (obj_pos_b[:, 1] < self.cfg.y_bounds[0]) | (obj_pos_b[:, 1] > self.cfg.y_bounds[1])
+        obj_pos = self.object.data.root_link_pos_w - self.scene.env_origins
+        out_of_bounds_x = (obj_pos[:, 0] < self.cfg.x_bounds[0]) | (obj_pos[:, 0] > self.cfg.x_bounds[1])
+        out_of_bounds_y = (obj_pos[:, 1] < self.cfg.y_bounds[0]) | (obj_pos[:, 1] > self.cfg.y_bounds[1])
 
-        obj_goal_distance = torch.norm(self._goal_pos_w[:, :2] - self.scene.env_origins[:, :2] - obj_pos_b[:, :2], dim=1)
+        obj_goal_distance = torch.norm(self._goal_pos_w[:, :2] - self.scene.env_origins[:, :2] - obj_pos[:,:2], dim=1)
         obj_too_far_away = obj_goal_distance > 1
             
         ee_frame_pos = self._ee_frame.data.target_pos_w[..., 0, :] - self.scene.env_origins # end-effector positions in world frame: (num_envs, 3)
-        ee_too_far_away = torch.norm(obj_pos_b - ee_frame_pos, dim=1) > self.cfg.too_far_away_threshold
-        
+        ee_too_far_away = torch.norm(obj_pos - ee_frame_pos, dim=1) > self.cfg.too_far_away_threshold
+
         # reset when ee orient is too large
         ee_frame_orient = euler_xyz_from_quat(self._ee_frame.data.target_quat_source[..., 0, :])
         x = wrap_to_pi(ee_frame_orient[0]-math.pi) # our panda hand asset has rotation from (180,0,-45) -> we substract 180 for defining the rotation limits
@@ -467,6 +470,9 @@ class BallRollingEnv(DirectRLEnv):
 
         min_height = ee_frame_pos[:, 2] < self.cfg.min_height_threshold
 
+        # reset env if success
+        success = (obj_goal_distance < self.cfg.tracking_reward["minimal_distance"])
+        
         reset_cond = (
             out_of_bounds_x
             | out_of_bounds_y
@@ -474,6 +480,7 @@ class BallRollingEnv(DirectRLEnv):
             | ee_too_far_away
             | orient_cond
             | min_height
+            | success
         )
 
         time_out = self.episode_length_buf >= self.max_episode_length - 1 # episode length limit
@@ -487,12 +494,26 @@ class BallRollingEnv(DirectRLEnv):
         # for compensating that obj_pos is based on the center of the ball
         obj_pos[:, 2] += 0.005  # ball has diameter of 1cm -> r=0.005m, plate height (above ground)=0.0025
         ee_frame_pos = self._ee_frame.data.target_pos_w[..., 0, :] # end-effector positions in world frame: (num_envs, 3)
-        
-        # Distance of the end-effector to the object: (num_envs, 3)
+                
+        # Distance of the end-effector to the object: (num_envs,)
         object_ee_distance = torch.norm(obj_pos - ee_frame_pos, dim=1) 
-        # make sure that ee stays at ball
-        lost_contact_penalty = torch.where(object_ee_distance > self.cfg.lost_contact_penalty["threshold"], self.cfg.lost_contact_penalty["weight"], 0.0)
+        # for giving agent incentive to touch the obj
+        at_obj_reward = torch.where(object_ee_distance < self.cfg.at_obj_reward["minimal_distance"], self.cfg.at_obj_reward["weight"], 0)
 
+        #- reaching part, but now its ee to goal (but only if ee touches ball) because current_ball pos is not part of the observations
+        goal_ee_distance = torch.norm(self._goal_pos_w[:, :2] - ee_frame_pos[:, :2], dim=1)
+        goal_reaching_penalty = torch.square(goal_ee_distance)
+        goal_reaching_penalty = torch.where(object_ee_distance < self.cfg.tracking_reward["minimal_distance"], goal_reaching_penalty, 1.25*goal_reaching_penalty)
+        goal_reaching_penalty *= self.cfg.reaching_penalty["weight"]
+
+        # use tanh-kernel for additional reward
+        goal_ee_distance_tanh = torch.where(
+            object_ee_distance < self.cfg.at_obj_reward["minimal_distance"], 
+            1 - torch.tanh(goal_ee_distance / self.cfg.reaching_reward_tanh["std"]),
+            0.0
+        )
+        goal_ee_distance_tanh *= self.cfg.reaching_reward_tanh["weight"]
+        
         # add penalty if ball goes flying
         off_the_ground = torch.where(obj_pos[:, 2] > self.cfg.off_the_ground_penalty["max_height"], self.cfg.off_the_ground_penalty["weight"], 0.0)
 
@@ -503,12 +524,22 @@ class BallRollingEnv(DirectRLEnv):
             + self.cfg.tracking_reward["v"]*torch.log(obj_goal_distance + self.cfg.tracking_reward["alpha"])
         ) 
         # only apply when ee is at object (with this our tracking goal always needs to be positive, otherwise reaching part wont work anymore)
-        # tracking_goal = (object_ee_distance < self.cfg.tracking_reward["minimal_distance"]) * tracking_goal
+        tracking_goal = (object_ee_distance < self.cfg.tracking_reward["minimal_distance"]) * tracking_goal
         tracking_goal *= self.cfg.tracking_reward["weight"]
 
         # penalize ee being too close to the ground
-        height_penalty = torch.where((ee_frame_pos[:, 2] < self.cfg.height_penalty["min_height"]), self.cfg.height_penalty["weight"], 0.0)
-        
+        height_penalty = torch.where(
+            (ee_frame_pos[:, 2] < self.cfg.height_penalty["min_height"]), 
+            self.cfg.height_penalty["min_weight"]*(self.cfg.height_penalty["min_height"]-ee_frame_pos[:, 2])*10, 
+            0.0
+        )
+        # penalize ee being too high
+        height_penalty = torch.where(
+            (ee_frame_pos[:, 2] > self.cfg.height_penalty["max_height"]), 
+            self.cfg.height_penalty["max_weight"]*(ee_frame_pos[:, 2]-self.cfg.height_penalty["max_height"])*10, 
+            height_penalty
+        )
+
         # penalize when ee orient is too big
         ee_frame_orient = euler_xyz_from_quat(self._ee_frame.data.target_quat_source[..., 0, :])
         x = wrap_to_pi(ee_frame_orient[0]-math.pi) # our panda hand asset has rotation from (180,0,-45) -> we substract 180 for defining the rotation limits
@@ -517,8 +548,14 @@ class BallRollingEnv(DirectRLEnv):
             (torch.abs(x) > math.pi/8)
             | (torch.abs(y) > math.pi/8)
         ) * self.cfg.orient_penalty["weight"]
-        
-        success_reward = torch.where(obj_goal_distance < self.cfg.success_reward["threshold"], self.cfg.success_reward["weight"], 0.0)
+
+        success_reward = torch.where(
+            obj_goal_distance < self.cfg.success_reward["threshold"], 
+            self.cfg.success_reward["weight"], 
+            0.0
+        )
+        # only apply success_reward when ee is at the ball
+        success_reward = (object_ee_distance < self.cfg.tracking_reward["minimal_distance"]) * success_reward
         
         # Penalize the rate of change of the actions using L2 squared kernel.
         action_rate_penalty = torch.sum(torch.square(self.actions - self.prev_actions), dim=1)
@@ -531,22 +568,26 @@ class BallRollingEnv(DirectRLEnv):
             self.curriculum_phase_id = 1
 
         rewards = (
-            + lost_contact_penalty
+            # + goal_reaching_penalty
+            # + goal_ee_distance_tanh
+            + at_obj_reward
             + off_the_ground
-            + tracking_goal
-            + success_reward
-            + orient_penalty
+            # + tracking_goal
+            # + success_reward
+            # + orient_penalty
             + height_penalty
-            + self.cfg.action_rate_penalty_scale[self.curriculum_phase_id] * action_rate_penalty
+            # + self.cfg.action_rate_penalty_scale[self.curriculum_phase_id] * action_rate_penalty
             + self.cfg.joint_vel_penalty_scale[self.curriculum_phase_id] * joint_vel_penalty
         )
         
         self.extras["log"] = {
-            "lost_contact_penalty": lost_contact_penalty.float().mean(),
+            "goal_reaching_penalty": goal_reaching_penalty.float().mean(),
+            "goal_ee_distance_tanh": goal_ee_distance_tanh.mean(),
+            "at_obj_reward": at_obj_reward.float().mean(),
             "off_the_ground_penalty": off_the_ground.float().mean(),
-            "tracking_goal": tracking_goal.float().mean(),
-            "success_reward": success_reward.float().mean(),
-            # penalties to ensure good behavior
+            # "tracking_goal": tracking_goal.float().mean(),
+            # "success_reward": success_reward.float().mean(),
+            # penalties for nice looking behavior
             "orientation_penalty": orient_penalty.float().mean(),
             "height_penalty": height_penalty.mean(),
             "action_rate_penalty": (self.cfg.action_rate_penalty_scale[self.curriculum_phase_id] * action_rate_penalty).mean(), 
@@ -555,63 +596,25 @@ class BallRollingEnv(DirectRLEnv):
             "Metric/ee_obj_error": object_ee_distance.mean(),
             "Metric/obj_goal_error": obj_goal_distance.mean()
         }
+        ee_height = ee_frame_pos[:, 2]
+        self.metric_vis.terms["ee_height"] = ee_height.reshape(-1,1)
+        self.metric_vis.terms["ee_distance"] = object_ee_distance.reshape(-1,1)
         return rewards
-        
+
+    #MARK: reset
     def _reset_idx(self, env_ids: torch.Tensor | None):
         super()._reset_idx(env_ids)
 
         # spawn obj at random position
         obj_pos = self.object.data.default_root_state[env_ids] 
-        obj_pos[:, :2] += self.scene.env_origins[env_ids, :2]
-        # obj_pos[:, :2] += sample_uniform(
-        #     self.cfg.obj_pos_randomization_range[self.curriculum_phase_id][0], 
-        #     self.cfg.obj_pos_randomization_range[self.curriculum_phase_id][1],
-        #     (len(env_ids), 2), 
-        #     self.device
-        # )
+        obj_pos[:, :3] += self.scene.env_origins[env_ids]
         self.object.write_root_state_to_sim(obj_pos, env_ids=env_ids)
 
         # reset robot state
-        joint_pos = (
-            self._robot.data.default_joint_pos[env_ids]
-            # + sample_uniform(
-            #     -0.00125,
-            #     0.00125,
-            #     (len(env_ids), self._robot.num_joints),
-            #     self.device,
-            # )
-        )
-        joint_vel = torch.zeros_like(joint_pos)
-        self._robot.set_joint_position_target(joint_pos, env_ids=env_ids)
-        self._robot.write_joint_state_to_sim(joint_pos, joint_vel, env_ids=env_ids)
+        joint_pos = self._robot.data.default_joint_pos[env_ids]
+        # randomize joints 3 and 4 a little bit
+        joint_pos[:, 2:4] += sample_uniform(-0.0015, 0.0015, (len(env_ids), 2), self.device) 
         
-        # compute desired ee pose so that its at the ball  
-        # make sure that ee pose is in robot frame
-        self.des_reset_ee_pos[env_ids, :] = obj_pos[:, :3].clone() - self.scene.env_origins[env_ids]
-        # add offset between gelsight mini case frame (which is at the bottom of the sensor) to the gelpad
-        self.des_reset_ee_pos[env_ids, 2] += 0.1375 # cant set it too close to the ball, otherwise "teleporting" robot there is gonna kick ball away
-         
-        # convert desired pos into transformation matrix
-        goal_poses = pk.Transform3d(
-            pos=self.des_reset_ee_pos[env_ids], 
-            rot=self.des_reset_ee_rot[env_ids],
-            device=self.device
-        )
-        # solve via IK for desired joint pos 
-        sol = self.ik_solver.solve(goal_poses)
-        # # num goals x num retries x DOF tensor of joint angles; if not converged, best solution found so far
-        # print(sol.solutions.shape)
-        # # num goals x num retries can check for the convergence of each run
-        # print(sol.converged)
-        # # num goals x num retries can look at errors directly
-        # print(sol.err_pos)
-        # print(sol.err_rot)
-        # indices = torch.argmin(sol.err_pos, dim=1)
-        # best_sol_currently = sol.solutions[torch.arange(indices.size(0)), indices]
-
-        # write the computed IK values into the joint state of the robot
-        joint_pos = torch.clamp(sol.solutions[:,0], self.robot_dof_lower_limits, self.robot_dof_upper_limits)
-        print(joint_pos)
         joint_vel = torch.zeros_like(joint_pos)
         self._robot.set_joint_position_target(joint_pos, env_ids=env_ids)
         self._robot.write_joint_state_to_sim(joint_pos, joint_vel, env_ids=env_ids)
@@ -625,9 +628,8 @@ class BallRollingEnv(DirectRLEnv):
         )
 
         # reset actions
-        self.actions[env_ids, :] = 0.0
-        self.prev_actions[env_ids, :] = 0.0
-        self._ik_controller.reset(env_ids)
+        self.actions[env_ids] = 0.0
+        self.prev_actions[env_ids] = 0.0
 
         # reset sensors
         self.gsmini.reset(env_ids=env_ids)
@@ -640,8 +642,8 @@ class BallRollingEnv(DirectRLEnv):
         ee_frame_orient = euler_xyz_from_quat(ee_quat_curr_b)
         x = wrap_to_pi(ee_frame_orient[0]).unsqueeze(1) # add dimension for concatenating with other observations
         y = wrap_to_pi(ee_frame_orient[1]).unsqueeze(1) 
- 
-        # obj position in the robots root frame
+        z = wrap_to_pi(ee_frame_orient[2]).unsqueeze(1) 
+        # # obj position in the robots root frame
         # object_pos_b, _ = subtract_frame_transforms(
         #     self._robot.data.root_link_state_w[:, :3], self._robot.data.root_link_state_w[:, 3:7], self.object.data.root_link_pos_w[:, :3]
         # )
@@ -653,6 +655,8 @@ class BallRollingEnv(DirectRLEnv):
                 ee_pos_curr_b,
                 x,
                 y,
+                z,
+                # object_pos_b[:, :2],
                 goal_pos_b[:, :2],  
                 self.actions
             ),
@@ -660,23 +664,35 @@ class BallRollingEnv(DirectRLEnv):
         )
         vision_obs = self.gsmini._data.output["height_map"]
         
+        # normalize images
+        normalized = vision_obs.view(vision_obs.size(0), -1)
+        normalized -= normalized.min(1, keepdim=True)[0]
+        normalized /= normalized.max(1, keepdim=True)[0]
+        normalized = (normalized*255).type(dtype=torch.int)
+        vision_obs = normalized.reshape((self.num_envs,64,64,1)) # add a channel to the depth image for debug_vis
+        
         obs = {
             "proprio_obs": proprio_obs,
             "vision_obs": vision_obs
         }
         
+        # obs = proprio_obs
         # change goal_pos for env with long enough episodes
-        env_ids = ((self.episode_length_buf +1) % int(self.max_episode_length/2) == 0).nonzero(as_tuple=False).squeeze(-1)
-        if len(env_ids) > 0:
-            print("episode_length ", self.episode_length_buf)
-            # set commands: random target position 
-            self._goal_pos_w[env_ids, :2] = self.object.data.default_root_state[env_ids, :2] + self.scene.env_origins[env_ids, :2] + sample_uniform(
-                self.cfg.obj_pos_randomization_range[self.curriculum_phase_id][0], 
-                self.cfg.obj_pos_randomization_range[self.curriculum_phase_id][1],
-                (len(env_ids), 2), 
-                self.device
-            )
+        # env_ids = ((self.episode_length_buf +1) % int(self.max_episode_length/2) == 0).nonzero(as_tuple=False).squeeze(-1)
+        # if len(env_ids) > 0:
+        #     # set commands: random target position 
+        #     self._goal_pos_w[env_ids, :2] = self.object.data.default_root_state[env_ids, :2] + self.scene.env_origins[env_ids, :2] + sample_uniform(
+        #         self.cfg.obj_pos_randomization_range[self.curriculum_phase_id][0], 
+        #         self.cfg.obj_pos_randomization_range[self.curriculum_phase_id][1],
+        #         (len(env_ids), 2), 
+        #         self.device
+        #     )
+
+        # self.live_vis.terms["actions"][:] = self.actions[:]
+        self.live_vis_obs.terms["proprio"] = proprio_obs
+        self.live_vis_obs.terms["sensor_output"] = vision_obs
         return {"policy": obs}
+     
 
     ####
     ## Helper Functions
@@ -746,9 +762,14 @@ class BallRollingEnv(DirectRLEnv):
         # create markers if necessary for the first tome
         if debug_vis:
             if not hasattr(self, "goal_pos_visualizer"):
-                marker_cfg = CUBOID_MARKER_CFG.copy()
-                # marker_cfg.markers["cuboid"].size = (0.01, 0.01, 0.01)
-                marker_cfg.markers["cuboid"].size = (2*self.cfg.success_reward["threshold"], 2*self.cfg.success_reward["threshold"], 0.01)
+                marker_cfg = VisualizationMarkersCfg(
+                    markers={
+                        "sphere": sim_utils.SphereCfg(
+                            radius=self.cfg.success_reward["threshold"],
+                            visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(1.0, 0.0, 0.0), opacity= 0.5),
+                        ),
+                    }
+                )
                 # -- goal pose
                 marker_cfg.prim_path = "/Visuals/Command/goal_position"
                 self.goal_pos_visualizer = VisualizationMarkers(marker_cfg)
@@ -771,7 +792,7 @@ class BallRollingEnv(DirectRLEnv):
 
     def _debug_vis_callback(self, event):
         # update the markers
-        self.goal_pos_visualizer.visualize(self._goal_pos_w)
+        self.goal_pos_visualizer.visualize(translations=self._goal_pos_w, marker_indices=self._marker_indices)
 
         # ee_pos_curr, ee_quat_curr = self._compute_frame_pose()
         # self.ik_des_pose_visualizer.visualize(

@@ -233,7 +233,7 @@ class BallRollingEnvNoPrivilegedCfg(BallRollingEnvCfg):
     tracking_reward = {"weight":1.0, "w": 1, "v": 1, "alpha":1e-5, "minimal_distance": 0.004}
     off_the_ground_penalty = {"weight": -15, "max_height": 0.025}
     success_reward = {"weight": 10.0, "threshold": 0.005} # 0.0025 we count it as a sucess when dist obj <-> goal is less than the threshold
-    height_penalty = {"min_weight": -0.5, "max_weight": -0.5, "min_height": 0.006, "max_height": 0.015}  # ball has diameter of 1cm, plate 0.5 cm -> 0.005m + 0.0025m = 0.0075m is above the ball
+    height_penalty = {"min_weight": -0.5, "max_weight": -0.5, "min_height": 0.006, "max_height": 0.012}  # ball has diameter of 1cm, plate 0.5 cm -> 0.005m + 0.0025m = 0.0075m is above the ball
     orient_penalty = {"weight": -0.5}
 
     # curriculum settings
