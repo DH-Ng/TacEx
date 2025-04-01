@@ -46,7 +46,7 @@ python -m pip install -e source/TacEx
 - Verify that the extension is correctly installed by running the following command:
 
 ```bash
-python scripts/rsl_rl/train.py --task=Template-Isaac-Velocity-Rough-Anymal-D-v0
+isaaclab -p ./scripts/reinforcement_learning/skrl/train.py --task TacEx-Ball-Rolling-Tactile-Base-v1 --num_envs 1024 --enable_cameras
 ```
 
 ## Docker setup (recommended)
