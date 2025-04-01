@@ -311,9 +311,12 @@ class BallRollingEnv(DirectRLEnv):
         }
         self.visualizers["Actions"].terms["actions"] = self.actions
 
-        self.visualizers["Observations"].terms["proprio"] = self._get_observations()["policy"]["proprio_obs"]
-        self.visualizers["Observations"].terms["sensor_output"] = self._get_observations()["policy"]["vision_obs"]
-        self.visualizers["Observations"].terms["sensor_output"] = self._get_observations()["policy"]["vision_obs"]
+        self.visualizers["Observations"].terms["ee_pos_x"] = torch.zeros((self.num_envs,1))
+        self.visualizers["Observations"].terms["ee_pos_y"] = torch.zeros((self.num_envs,1))
+        self.visualizers["Observations"].terms["ee_pos_z"] = torch.zeros((self.num_envs,1))
+        self.visualizers["Observations"].terms["ee_rot_x"] = torch.zeros((self.num_envs,1))
+        self.visualizers["Observations"].terms["ee_rot_y"] = torch.zeros((self.num_envs,1))
+        self.visualizers["Observations"].terms["ee_rot_z"] = torch.zeros((self.num_envs,1))
         self.visualizers["Observations"].terms["sensor_output"] = self._get_observations()["policy"]["vision_obs"]
 
         self.visualizers["Rewards"].terms["ee_height"] = torch.zeros((self.num_envs,1))
@@ -596,9 +599,9 @@ class BallRollingEnv(DirectRLEnv):
             "Metric/ee_obj_error": object_ee_distance.mean(),
             "Metric/obj_goal_error": obj_goal_distance.mean()
         }
-        ee_height = ee_frame_pos[:, 2]
-        self.metric_vis.terms["ee_height"] = ee_height.reshape(-1,1)
-        self.metric_vis.terms["ee_distance"] = object_ee_distance.reshape(-1,1)
+
+        self.visualizers["Rewards"].terms["ee_height"]  = ee_frame_pos[:, 2].reshape(-1,1)
+        self.visualizers["Rewards"].terms["ee_distance"] = object_ee_distance.reshape(-1,1)
         return rewards
 
     #MARK: reset
@@ -688,9 +691,14 @@ class BallRollingEnv(DirectRLEnv):
         #         self.device
         #     )
 
-        # self.live_vis.terms["actions"][:] = self.actions[:]
-        self.live_vis_obs.terms["proprio"] = proprio_obs
-        self.live_vis_obs.terms["sensor_output"] = vision_obs
+        # self.visualizers["Actions"].terms["actions"][:] = self.actions[:]
+        self.visualizers["Observations"].terms["ee_pos_x"] = ee_pos_curr_b[:, 0]
+        self.visualizers["Observations"].terms["ee_pos_y"] = ee_pos_curr_b[:, 1]
+        self.visualizers["Observations"].terms["ee_pos_z"] = ee_pos_curr_b[:, 2]
+        self.visualizers["Observations"].terms["ee_rot_x"] = x
+        self.visualizers["Observations"].terms["ee_rot_y"] = y
+        self.visualizers["Observations"].terms["ee_rot_z"] = z
+        self.visualizers["Observations"].terms["sensor_output"] = vision_obs
         return {"policy": obs}
      
 

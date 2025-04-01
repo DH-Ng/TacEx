@@ -136,12 +136,14 @@ class DirectLiveVisualizer(ManagerLiveVisualizer):
                         style={"border_color": 0xFF8A8777, "padding": 4},
                     )
                     with frame:
-                        data = values[self._env_idx]
+                        value = values[self._env_idx]
                         # create line plot for single or multivariable signals
-                        len_term_shape = len(data.shape)
+                        len_term_shape = len(value.shape)
+                        if len_term_shape == 0:
+                            value = value.reshape(1)
                         if len_term_shape <= 2:
                             plot = LiveLinePlot(
-                                y_data=[[elem] for elem in data.T.tolist()],
+                                y_data=[[elem] for elem in value.T.tolist()],
                                 plot_height=150,
                                 show_legend=True,
                             )
@@ -149,7 +151,7 @@ class DirectLiveVisualizer(ManagerLiveVisualizer):
                         # create an image plot for 2d and greater data (i.e. mono and rgb images)
                         elif len_term_shape == 3:
                             image = ImagePlot(
-                                image=data.cpu().numpy(),
+                                image=value.cpu().numpy(),
                                 label=name,
                             )
                             self._term_visualizers[name] = image
@@ -175,6 +177,9 @@ class DirectLiveVisualizer(ManagerLiveVisualizer):
             # To plot this, we need to pass over a list of lists. 
             # Specifically, `num_actions` amount of lists, where each inner list contains the datapoint for the corresponding timeserie
             value = values[self._env_idx]
+            if len(value.shape) == 0:
+                value = value.reshape(1)
+            
             vis = self._term_visualizers[name]
             if isinstance(vis, LiveLinePlot):
                 vis.add_datapoint(value.T.tolist())
