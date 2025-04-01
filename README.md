@@ -152,6 +152,9 @@ docker compose --env-file .env.base --file docker-compose.yaml down
 
 This stops and removes the containers, but keeps the images.
 
+### Livestreaming
+To see the IsaacSim GUI use the [streaming client](https://docs.isaacsim.omniverse.nvidia.com/latest/installation/manual_livestream_clients.html).
+
 ### Set up IDE (Optional)
 
 To setup the IDE, please follow these instructions:
