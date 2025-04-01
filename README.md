@@ -34,7 +34,7 @@ git clone https://github.com/Duuuc/TacEx---Tactile-Extension.git
 ```
 - TacEx consists of multiple extensions. To install them all use the `tacex_install.sh` script:
 ```bash
-./tacex_install.sh -i
+./tacex.sh -i
 ```
 <!-- 
 - Using a python interpreter that has Isaac Lab installed, install the library
