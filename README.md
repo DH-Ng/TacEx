@@ -1,4 +1,4 @@
-# TacEx - Tactile Extension for Isaac Sim and Isaac Lab
+# TacEx - Tactile Extension for Isaac Sim/Isaac Lab
 
 [![IsaacSim](https://img.shields.io/badge/IsaacSim-4.5.0-silver.svg)](https://docs.omniverse.nvidia.com/isaacsim/latest/overview.html)
 [![Isaac Lab](https://img.shields.io/badge/IsaacLab-2.0.0-silver)](https://isaac-sim.github.io/IsaacLab)
@@ -28,6 +28,9 @@ The structure is similar to the one from the IsaacLab repo.
 - Install Isaac Lab by following the [installation guide](https://isaac-sim.github.io/IsaacLab/main/source/setup/installation/index.html)
 
 - Clone this repository separately from the Isaac Lab installation (i.e. outside the `IsaacLab` directory):
+>[!CAUTION]
+>Make sure that you have https://git-lfs.com/ installed ([guide](https://docs.github.com/en/repositories/working-with-files/managing-large-files/installing-git-large-file-storage))!
+>Otherwise the USD assets won't work.
 
 ```bash
 git clone https://github.com/Duuuc/TacEx---Tactile-Extension.git
