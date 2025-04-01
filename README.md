@@ -90,9 +90,7 @@ After building the Isaac Lab container, you can build the docker container for t
 
 ```bash
 # assuming you are in the root directory of this Repo
-cd docker
-# this command also starts the container in the background
-container.py build
+./docker/container.py build # this command also starts the container in the background
 ```
 >[!NOTE]
 >For simplicity we use the container script from Isaac Lab (slightly modified) for building, starting, entering and stopping the container. 
@@ -106,6 +104,7 @@ docker images
 # Output should look something like:
 #
 # REPOSITORY                       TAG       IMAGE ID       CREATED             SIZE
+# isaac-lab-tacex
 # isaac-lab-template               latest    00b00b647e1b   2 minutes ago       18.9GB
 # isaac-lab-base                   latest    892938acb55c   About an hour ago   18.9GB
 ```
@@ -114,22 +113,22 @@ docker images
 
 ### Running the container
 
-After building, the usual next step is to start the containers associated with your services. You can do this with:
+If you just want to start the container, you can do this with:
 
 ```bash
-container.py start
+./docker/container.py start
 ```
 This will start the services defined in our `docker-compose.yaml` file in detached mode.
 
-To enter the container use 
+To enter the container use
 
 ```bash
-container.py enter
+./docker/container.py enter
 ```
 
 and to stop it
 ```bash
-container.py stop
+./docker/container.py stop
 ```
 
 > [!TIP]
