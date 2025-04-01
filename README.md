@@ -29,8 +29,9 @@ The structure is similar to the one from the IsaacLab repo.
 
 - Clone this repository separately from the Isaac Lab installation (i.e. outside the `IsaacLab` directory):
 >[!CAUTION]
->Make sure that you have https://git-lfs.com/ installed ([guide](https://docs.github.com/en/repositories/working-with-files/managing-large-files/installing-git-large-file-storage))!
->Otherwise the USD assets won't work.
+>Make sure that you have [git-lfs](https://git-lfs.com/) installed, otherwise the USD assets won't work!
+>>Guide: https://docs.github.com/en/repositories/working-with-files/managing-large-files/installing-git-large-file-storage
+
 
 ```bash
 git clone https://github.com/Duuuc/TacEx---Tactile-Extension.git
@@ -177,14 +178,16 @@ If everything executes correctly, it should create a file .python.env in the `.v
 If IsaacLab and IsaacSim python modules are not indexed correctly (i.e., the IDE cannot find them when being in the code editor), then
 you need to adjust the `"python.analysis.extraPaths"` in the `.vscode/settings.json` file.
 
-For the docker setup you can use the `/docker/settings.json` file and replace the one in the `.vscode` folder for indexing
-IsaacLab and TacEx modules. (Idk why the ones from IsaacSim dont work.)
-<!-- - You first need to create a symbolic link to the IsaacLab files:
+
+>[!NOTE]
+>In the docker setup you can use the `/docker/settings.json` file of this repo to replace the one in the `.vscode` folder for indexing
+>IsaacLab and TacEx modules. (Idk why the ones from IsaacSim don't work right now.)
+><!-- - You first need to create a symbolic link to the IsaacLab files:
 ```bash
 # in a terminal inside the tacex docker container
 ln -sf ${ISAACLAB_PATH} ${ISAACLAB_EXTENSION_TEMPLATE_PATH}/_isaac_lab
 ``` -->
-
+>
 
 ## Code formatting
 
