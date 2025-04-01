@@ -104,9 +104,8 @@ docker images
 # Output should look something like:
 #
 # REPOSITORY                       TAG       IMAGE ID       CREATED             SIZE
-# isaac-lab-tacex
-# isaac-lab-template               latest    00b00b647e1b   2 minutes ago       18.9GB
-# isaac-lab-base                   latest    892938acb55c   About an hour ago   18.9GB
+# isaac-lab-tacex                  latest    1eaf4cd9dce3   20 seconds ago      17.1GB
+# isaac-lab-base                   latest    892938acb55c   About an hour ago   16.9GB
 ```
 >[!NOTE]
 > If you don't want to use the base image `isaac-lab-base` for the TacEx container, then you need to adjust the name `ISAACLAB_BASE_IMAGE` in the `docker/.env.base` file of this repository.
