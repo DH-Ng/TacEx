@@ -25,7 +25,7 @@ The structure is similar to the one from the IsaacLab repo.
 
 ## Installation
 
-- Install Isaac Lab by following the [installation guide](https://isaac-sim.github.io/IsaacLab/main/source/setup/installation/index.html). We recommend using the conda installation as it simplifies calling Python scripts from the terminal.
+- Install Isaac Lab by following the [installation guide](https://isaac-sim.github.io/IsaacLab/main/source/setup/installation/index.html)
 
 - Clone this repository separately from the Isaac Lab installation (i.e. outside the `IsaacLab` directory):
 
@@ -49,7 +49,7 @@ python -m pip install -e source/TacEx
 python scripts/rsl_rl/train.py --task=Template-Isaac-Velocity-Rough-Anymal-D-v0
 ```
 
-## Docker setup
+## Docker setup (recommended)
 
 ### Building Isaac Lab Base Image
 
