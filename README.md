@@ -29,8 +29,9 @@ The structure is similar to the one from the IsaacLab repo.
 
 - Clone this repository separately from the Isaac Lab installation (i.e. outside the `IsaacLab` directory):
 >[!CAUTION]
->Make sure that you have https://git-lfs.com/ installed ([guide](https://docs.github.com/en/repositories/working-with-files/managing-large-files/installing-git-large-file-storage))!
->Otherwise the USD assets won't work.
+>Make sure that you have [git-lfs](https://git-lfs.com/) installed, otherwise the USD assets won't work!
+>>Guide: https://docs.github.com/en/repositories/working-with-files/managing-large-files/installing-git-large-file-storage
+
 
 ```bash
 git clone https://github.com/Duuuc/TacEx---Tactile-Extension.git
