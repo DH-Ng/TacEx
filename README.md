@@ -54,14 +54,15 @@ python scripts/rsl_rl/train.py --task=Template-Isaac-Velocity-Rough-Anymal-D-v0
 ### Building Isaac Lab Base Image
 
 Currently, there is no Docker image for Isaac Lab publicly available. Hence, you'd need to build the docker image
-for Isaac Lab locally by following the steps for the  and building the container [here](https://isaac-sim.github.io/IsaacLab/main/source/deployment/docker.html#docker-guide).
+for Isaac Lab locally by following the steps for building the container [here](https://isaac-sim.github.io/IsaacLab/main/source/deployment/docker.html#docker-guide).
 
 >[!NOTE]
 >**Prerequisites**
-> - Have Nvidia drivers, Docker and the Nvidia Container Toolkit, see [container setup](https://docs.isaacsim.omniverse.nvidia.com/latest/installation/install_container.html#container-setup) (i.e. 
-> - Setup Nvidia api key:
->   - install the ngc client https://org.ngc.nvidia.com/setup/installers/cli (for the config just press enter twice. i.e. use the default config)
->   - setup the your [api key](https://org.ngc.nvidia.com/setup/api-key)
+> - Have Nvidia Drivers, Docker and the Nvidia Container Toolkit, see [container setup](https://docs.isaacsim.omniverse.nvidia.com/latest/installation/install_container.html#container-setup)
+>   - Helpful for Driver Installation on Linux [Driver Installation Linux](https://docs.omniverse.nvidia.com/dev-guide/latest/linux-troubleshooting.html#q1-how-to-install-a-driver)
+> - Setup Nvidia API key:
+>   - Install the ngc client https://org.ngc.nvidia.com/setup/installers/cli (for the config just press enter twice. i.e. use the default config)
+>   - For setting up the API key: [api key setup](https://org.ngc.nvidia.com/setup/api-key)
 ![image](https://github.com/user-attachments/assets/f773bcc2-fed0-4266-9fb2-10e23b9f874f)
 
 **In a nutshell**:  
@@ -85,14 +86,6 @@ docker images
 ```
 
 ### Building TacEx Image for Isaac Lab
->[!NOTE]
->For simplicity we use the container script from Isaac Lab (slightly modified) for building, starting, entering and stopping the container. 
->Additional features, such as different container profiles, are currently not supported here.
-
-> [!TIP]
-> The container script can be found in `./docker/container.py`. Just setup an alias in your `~/.bashrc` file for conveniently calling it. 
-> For example via `alias tacex="/path_to_repo/TacEx---Tactile-Extension/docker/container.py"`.
-
 After building the Isaac Lab container, you can build the docker container for this project. It is called `isaac-lab-tacex`. 
 
 ```bash
@@ -102,7 +95,8 @@ cd docker
 container.py build
 ```
 >[!NOTE]
-> If you are not using the base image `isaac-lab-base`, then you need to change `ISAACLAB_BASE_IMAGE` in the file `docker/.env.base`.
+>For simplicity we use the container script from Isaac Lab (slightly modified) for building, starting, entering and stopping the container. 
+>Additional features, such as different container profiles, are currently not supported here.
 
 You can verify the image is built successfully using the same command as earlier:
 
@@ -115,6 +109,8 @@ docker images
 # isaac-lab-template               latest    00b00b647e1b   2 minutes ago       18.9GB
 # isaac-lab-base                   latest    892938acb55c   About an hour ago   18.9GB
 ```
+>[!NOTE]
+> If you don't want to use the base image `isaac-lab-base` for the TacEx container, then you need to adjust the name `ISAACLAB_BASE_IMAGE` in the `docker/.env.base` file of this repository.
 
 ### Running the container
 
@@ -135,6 +131,10 @@ and to stop it
 ```bash
 container.py stop
 ```
+
+> [!TIP]
+> The container script can be found in `./docker/container.py`. Just setup an alias in your `~/.bashrc` file for conveniently calling it. 
+> For example via `alias tacex="/path_to_repo/docker/container.py"`.
 
 ### Interacting with a running container
 
