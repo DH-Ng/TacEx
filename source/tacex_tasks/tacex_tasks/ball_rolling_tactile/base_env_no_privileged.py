@@ -618,3 +618,4 @@ class BallRollingEnvNoPrivileged(BallRollingEnv):
         self.live_vis_obs.terms["proprio"] = proprio_obs
         self.live_vis_obs.terms["vision"] = vision_obs
         return {"policy": obs}
+    

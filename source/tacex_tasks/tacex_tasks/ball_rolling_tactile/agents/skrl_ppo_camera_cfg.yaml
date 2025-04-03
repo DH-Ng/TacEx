@@ -16,7 +16,6 @@ models:
       - name: features_extractor
         input: permute(STATES["vision_obs"], (0, 3, 1, 2))  # PyTorch NHWC -> NCHW. Warning: don't permute for JAX since it expects NHWC
         layers:
-          - conv2d: {out_channels: 32, kernel_size: 8, stride: 4, padding: 0}
           - conv2d: {out_channels: 16, kernel_size: 4, stride: 2, padding: 0}
           - conv2d: {out_channels: 4, kernel_size: 3, stride: 1, padding: 0}
           - flatten
@@ -33,7 +32,6 @@ models:
       - name: features_extractor
         input: permute(STATES["vision_obs"], (0, 3, 1, 2))   # PyTorch NHWC -> NCHW. Warning: don't permute for JAX since it expects NHWC
         layers:
-          - conv2d: {out_channels: 32, kernel_size: 8, stride: 4, padding: 0}
           - conv2d: {out_channels: 16, kernel_size: 4, stride: 2, padding: 0}
           - conv2d: {out_channels: 4, kernel_size: 3, stride: 1, padding: 0}
           - flatten

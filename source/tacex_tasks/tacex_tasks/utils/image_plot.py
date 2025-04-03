@@ -138,6 +138,8 @@ class ImagePlot(UIWidgetWrapper):
 
         self._byte_provider.set_bytes_data(image.flatten().data, [width, height])
 
+        self.update_min_max(image)
+
     def update_min_max(self, image: np.ndarray):
         if self._show_min_max and hasattr(self, "_min_max_label"):
             non_inf = image[np.isfinite(image)].flatten()
