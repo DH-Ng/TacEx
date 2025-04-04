@@ -231,11 +231,11 @@ class BallRollingEnvCfg(DirectRLEnvCfg):
     #MARK: reward configuration
     at_obj_reward = {"weight": 1.0, "minimal_distance": 0.005}
     off_the_ground_penalty = {"weight": -15, "max_height": 0.025}
-    height_penalty = {"min_weight": -2.0, "max_weight": -2.0, "min_height": 0.0125-0.005, "max_height": 0.0125}  # ball has diameter of 1cm, plate height = 0.5 cm -> 0.01m + 0.0025m = 0.0125m is above the ball
+    height_penalty = {"min_weight": -2.5, "max_weight": -2.0, "min_height": 0.0125-0.005, "max_height": 0.0125}  # ball has diameter of 1cm, plate height = 0.5 cm -> 0.01m + 0.0025m = 0.0125m is above the ball
     orient_penalty = {"weight": -1.50}
     # for solving the task
-    ee_goal_tracking = {"std": 0.0798, "weight": 20.0}
-    obj_goal_tracking = {"std": 0.0798, "weight": 2.0}
+    ee_goal_tracking = {"std": 0.0798, "weight": 1.0}
+    obj_goal_tracking = {"std": 0.0010, "weight": 2.0}
     # tracking_reward = {"weight":1.0, "w": 1, "v": 1, "alpha":1e-5, "minimal_distance": 0.004}
     success_reward = {"weight": 10.0, "threshold": 0.005} # 0.0025 we count it as a sucess when dist obj <-> goal is less than the threshold
 
@@ -246,7 +246,7 @@ class BallRollingEnvCfg(DirectRLEnvCfg):
     # curriculum settings
     curriculum_steps = [8.5e6] # after this amount of common_steps (= total steps), we make the task more difficult
     
-    obj_pos_randomization_range = [[-0.125, 0.125], [-0.2, 0.2]]
+    obj_pos_randomization_range = [-0.1, 0.1]
 
     # env
     episode_length_s = 8.3333/2 # 1000/2 timesteps (dt = 1/120 -> 8.3333/(1/120) = 1000)
@@ -427,7 +427,7 @@ class BallRollingEnv(DirectRLEnv):
         # # fixed z rotation
         # self.processed_actions[:, 5] = 0 # dont change the z rotation
 
-        self.processed_actions[:, :6] = self.actions * 0.1
+        self.processed_actions[:, :6] = self.actions
 
         # obtain ee positions and orientation w.r.t root (=base) frame
         self.ee_pos_curr_b, self.ee_quat_curr_b = self._compute_frame_pose()
@@ -518,12 +518,18 @@ class BallRollingEnv(DirectRLEnv):
             1.0*self.cfg.height_penalty["min_weight"], 
             0.0
         )
+        height_penalty = torch.where(
+            ee_frame_pos[:, 2] < self.cfg.min_height_threshold,
+            10.0*self.cfg.height_penalty["min_weight"],
+            0.0
+        )
         # penalize ee being too high
         height_penalty = torch.where(
             (ee_frame_pos[:, 2] > self.cfg.height_penalty["max_height"]), 
             1.0*self.cfg.height_penalty["max_weight"], 
             height_penalty
         )
+
         # penalize when ee orient is too big
         ee_frame_orient = euler_xyz_from_quat(self._ee_frame.data.target_quat_source[..., 0, :])
         x = wrap_to_pi(ee_frame_orient[0]) # our panda hand asset has rotation from (180,0,-45) -> we substract 180 for defining the rotation limits
@@ -584,7 +590,7 @@ class BallRollingEnv(DirectRLEnv):
             + height_penalty
             + orient_penalty
             + ee_goal_tracking_reward
-            # + obj_goal_tracking_reward
+            + obj_goal_tracking_reward
             + success_reward
             + self.cfg.action_rate_penalty_scale[self.curriculum_phase_id] * action_rate_penalty
             + self.cfg.joint_vel_penalty_scale[self.curriculum_phase_id] * joint_vel_penalty
@@ -640,8 +646,8 @@ class BallRollingEnv(DirectRLEnv):
 
         # set commands: random target position 
         self._goal_pos_w[env_ids, :2] = self.object.data.default_root_state[env_ids, :2] + self.scene.env_origins[env_ids, :2] + sample_uniform(
-            self.cfg.obj_pos_randomization_range[self.curriculum_phase_id][0], 
-            self.cfg.obj_pos_randomization_range[self.curriculum_phase_id][1],
+            self.cfg.obj_pos_randomization_range[0], 
+            self.cfg.obj_pos_randomization_range[1],
             (len(env_ids), 2), 
             self.device
         )
