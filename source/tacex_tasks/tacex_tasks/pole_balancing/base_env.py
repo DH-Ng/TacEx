@@ -76,7 +76,7 @@ class CustomEnvWindow(BaseEnvWindow):
 
 
 @configclass
-class BallRollingEnvCfg(DirectRLEnvCfg):
+class PoleBalancingEnvCfg(DirectRLEnvCfg):
 
     # viewer settings
     viewer: ViewerCfg = ViewerCfg()
@@ -104,9 +104,9 @@ class BallRollingEnvCfg(DirectRLEnvCfg):
         physics_material=sim_utils.RigidBodyMaterialCfg(
             friction_combine_mode="multiply",
             restitution_combine_mode="multiply",
-            static_friction=1.0,
-            dynamic_friction=1.0,
-            restitution=0.2,
+            static_friction=5.0,
+            dynamic_friction=5.0,
+            restitution=0.0,
         ),
     )
 
@@ -117,32 +117,32 @@ class BallRollingEnvCfg(DirectRLEnvCfg):
     robot: ArticulationCfg = FRANKA_PANDA_ARM_GSMINI_SINGLE_ADAPTER_HIGH_PD_CFG.replace(
         prim_path="/World/envs/env_.*/Robot",
         init_state=ArticulationCfg.InitialStateCfg(
+            # joint_pos={
+            #     "panda_joint1": -1.6945,
+            #     "panda_joint2": -1.56,
+            #     "panda_joint3": 1.778,
+            #     "panda_joint4": -2.29,
+            #     "panda_joint5": 1.71,
+            #     "panda_joint6": 1.79,
+            #     "panda_joint7": 1.59,
+            # },
             joint_pos={
-                "panda_joint1": -1.6945,
-                "panda_joint2": -1.56,
-                "panda_joint3": 1.778,
-                "panda_joint4": -2.29,
-                "panda_joint5": 1.71,
-                "panda_joint6": 1.79,
-                "panda_joint7": 1.59,
+                "panda_joint1": -1.5,
+                "panda_joint2": -1.5,
+                "panda_joint3": 2.11,
+                "panda_joint4": -2.46,
+                "panda_joint5": -1.18,
+                "panda_joint6": 1.17,
+                "panda_joint7": -1.5,
             },
             # joint_pos={
-            #     "panda_joint1": 0.0,
-            #     "panda_joint2": 0.44,
-            #     "panda_joint3": 0.0,
-            #     "panda_joint4": -2.38,
-            #     "panda_joint5": 0.0,
-            #     "panda_joint6": 2.82,
-            #     "panda_joint7": 0.741,
-            # },
-            # joint_pos={
-            #     "panda_joint1": 1.7708,
-            #     "panda_joint2": -1.4164,
-            #     "panda_joint3": -1.8159,
-            #     "panda_joint4": -2.2501,
-            #     "panda_joint5": -1.6057,
-            #     "panda_joint6": 1.8573,
-            #     "panda_joint7": 1.6513,
+            #     "panda_joint1": -1.5,
+            #     "panda_joint2": -1.5,
+            #     "panda_joint3": 1.5,
+            #     "panda_joint4": -2.5,
+            #     "panda_joint5": -1.68,
+            #     "panda_joint6": 1.54,
+            #     "panda_joint7": -1.5,
             # },
         ),
     )
@@ -162,18 +162,18 @@ class BallRollingEnvCfg(DirectRLEnvCfg):
                 name="end_effector",
                 offset=OffsetCfg(
                     pos=(0.0, 0.0, 0.131), # 0ffset from panda hand frame origin to gelpad top
-                    rot=(0.0, 0.0, 1.0, 0.0)
+                    rot=(1.0, 0.0, 0.0, 0.0)
                     #rot=(0, 0.92388, -0.38268, 0) # our panda hand asset has rotation from (180,0,-45) -> we substract 180 for defining the rotation limits
                 ),
             ),
         ],
     )
     
-    # rigid body ball
-    ball: RigidObjectCfg = RigidObjectCfg(
-        prim_path= "/World/envs/env_.*/rigid_ball",
+    # rigid body pole
+    pole: RigidObjectCfg = RigidObjectCfg(
+        prim_path= "/World/envs/env_.*/pole",
         spawn=sim_utils.UsdFileCfg(
-            usd_path=f"{TACEX_ASSETS_DATA_DIR}/Props/ball_wood.usd", 
+            usd_path=f"{TACEX_ASSETS_DATA_DIR}/Props/pole.usd", 
             #scale=(2, 1, 0.6),
             rigid_props=RigidBodyPropertiesCfg(
                     solver_position_iteration_count=120,
@@ -184,7 +184,7 @@ class BallRollingEnvCfg(DirectRLEnvCfg):
                     disable_gravity=False,
             ),
         ),
-        init_state=RigidObjectCfg.InitialStateCfg(pos=(0.5, 0, 0.0051+0.0025)),
+        init_state=RigidObjectCfg.InitialStateCfg(pos=(0.3821, 0.04255, 0.37877)),
     )
 
     # sensors
@@ -238,25 +238,19 @@ class BallRollingEnvCfg(DirectRLEnvCfg):
     # observation_noise_model = 
 
     #MARK: reward configuration
-    at_obj_reward = {"weight": 1.0, "minimal_distance": 0.005}
-    off_the_ground_penalty = {"weight": -15, "max_height": 0.025}
-    # ball has diameter of 1cm, plate height = 0.5 cm -> 0.01m + 0.0025m = 0.0125m is above the ball
-    height_reward = {"weight": 0.25, "w": 10.0, "v": 0.3, "alpha": 0.00067, "target_height_cm": 1.25} # 0.5cm = gelpad height 
-    orient_reward = {"weight": 0.25}
-    # for solving the task
-    ee_goal_tracking = {"std": 0.0798, "weight": -0.001}
-    obj_goal_tracking = {"std": 0.0798, "weight": 0.5}
-    obj_goal_penalty = {"weight": 1.0}
-    # tracking_reward = {"weight":1.0, "w": 1, "v": 1, "alpha":1e-5, "minimal_distance": 0.004}
-    success_reward = {"weight": 10.0, "threshold": 0.005} # 0.0025 we count it as a sucess when dist obj <-> goal is less than the threshold
-
-    # extra reward scales
-    action_rate_penalty_scale = [1e-3, -1e-2] # give list for curriculum learning (-1e2 after common_step_count > currciculum_steps)
-    joint_vel_penalty_scale = [-1e-4, -1e-2] 
+    reward_cfg = {
+        "at_obj_reward": {"weight": 5.0, "minimal_distance": 0.005},
+        "height_reward": {"weight": 2.0, "w": 10.0, "v": 0.3, "alpha": 0.00067, "target_height_m": 0.5}, # 0.5cm = gelpad height 
+        "orient_reward": {"weight": 1.0},
+        "staying_alive_rew": {"weight": 1.0},
+        "action_rate_penalty": {"weight": 1e-4},
+        "joint_vel_penalty": {"weight": 1e-4},
+    }
 
     # curriculum settings
-    curriculum_steps = [8.5e6] # after this amount of common_steps (= total steps), we make the task more difficult
-    
+    num_levels = 10
+    curriculum_weights = torch.linspace(0, 1, num_levels)
+
     obj_pos_randomization_range = [-0.1, 0.1]
 
     # env
@@ -269,14 +263,12 @@ class BallRollingEnvCfg(DirectRLEnvCfg):
     # observation_space = 14
     state_space = 0
 
-    ball_radius = 0.005 # don't change, because rewards are tuned for this size 
+    x_bounds = (0.1, 0.5)
+    y_bounds = (-0.5, 0.5)
+    too_far_away_threshold = 1 #0.01 #0.2 #0.125 #0.2 #0.15
+    min_height_threshold = 0.3 #0.37877
 
-    x_bounds = (0.2, 0.75)
-    y_bounds = (-0.375, 0.375)
-    too_far_away_threshold = 0.01 #0.2 #0.125 #0.2 #0.15
-    min_height_threshold = 0.002
-
-class BallRollingEnv(DirectRLEnv):
+class PoleBalancingEnv(DirectRLEnv):
     """RL env in which the robot has to push/roll a ball to a goal position.
 
     This base env uses (absolute) joint positions.
@@ -291,15 +283,15 @@ class BallRollingEnv(DirectRLEnv):
     #   |-- _reset_idx(env_ids)
     #   |-- _get_observations()
 
-    cfg: BallRollingEnvCfg
+    cfg: PoleBalancingEnvCfg
 
-    def __init__(self, cfg: BallRollingEnvCfg, render_mode: str | None = None, **kwargs):
+    def __init__(self, cfg: PoleBalancingEnvCfg, render_mode: str | None = None, **kwargs):
         super().__init__(cfg, render_mode, **kwargs)
 
         self.dt = self.cfg.sim.dt * self.cfg.decimation
 
         # for training curriculum 
-        self.curriculum_phase_id = 0
+        self.current_curriculum_level = 0
 
         self.robot_dof_lower_limits = self._robot.data.soft_joint_pos_limits[0, :, 0].to(device=self.device)
         self.robot_dof_upper_limits = self._robot.data.soft_joint_pos_limits[0, :, 1].to(device=self.device)
@@ -323,7 +315,7 @@ class BallRollingEnv(DirectRLEnv):
         
         # ee offset w.r.t panda hand -> based on the asset
         self._offset_pos = torch.tensor([0.0, 0.0, 0.131], device=self.device).repeat(self.num_envs, 1)
-        self._offset_rot = torch.tensor([0.0, 0.0, 1.0, 0.0], device=self.device).repeat(self.num_envs, 1) 
+        self._offset_rot = torch.tensor([1.0, 0.0, 0.0, 0.0], device=self.device).repeat(self.num_envs, 1) 
         # self._offset_rot = torch.tensor([0, 0.92388, -0.38268, 0], device=self.device).repeat(self.num_envs, 1) 
 
         ####################################################################
@@ -403,29 +395,6 @@ class BallRollingEnv(DirectRLEnv):
             orientation=ground.init_state.rot
         )
 
-        # plate
-        plate = RigidObjectCfg(
-            prim_path="/World/envs/env_.*/plate",
-            init_state=RigidObjectCfg.InitialStateCfg(pos=[0.5, 0, 0]),
-            spawn=sim_utils.UsdFileCfg(
-                usd_path=f"{TACEX_ASSETS_DATA_DIR}/Props/plate.usd",
-                rigid_props=RigidBodyPropertiesCfg(
-                    solver_position_iteration_count=16,
-                    solver_velocity_iteration_count=1,
-                    max_angular_velocity=1000.0,
-                    max_linear_velocity=1000.0,
-                    max_depenetration_velocity=5.0,
-                    kinematic_enabled=True
-                )
-            )
-        )
-        plate.spawn.func(
-            plate.prim_path,
-            plate.spawn,
-            translation=plate.init_state.pos,
-            orientation=ground.init_state.rot
-        )
-
         # add lights
         light_cfg = sim_utils.DomeLightCfg(intensity=2000.0, color=(0.75, 0.75, 0.75))
         light_cfg.func("/World/Light", light_cfg)
@@ -485,9 +454,6 @@ class BallRollingEnv(DirectRLEnv):
         )
 
         min_height = ee_frame_pos[:, 2] < self.cfg.min_height_threshold
-
-        # reset env if success
-        success = (obj_goal_distance < self.cfg.at_obj_reward["minimal_distance"])
         
         reset_cond = (
             out_of_bounds_x
@@ -496,7 +462,6 @@ class BallRollingEnv(DirectRLEnv):
             | ee_too_far_away
             | orient_cond
             | min_height
-            | success
         )
 
         time_out = self.episode_length_buf >= self.max_episode_length - 1 # episode length limit
@@ -519,23 +484,11 @@ class BallRollingEnv(DirectRLEnv):
             self.cfg.at_obj_reward["weight"], 
             0.0
         )
-        # penalty for preventing the ball from jumping
-        off_the_ground_penalty = torch.where(
-            obj_pos[:, 2] > self.cfg.off_the_ground_penalty["max_height"], 
-            self.cfg.off_the_ground_penalty["weight"], 
-            0.0
-        )
-        # penalize ee being too close to the ground
-        # height_reward = torch.where(
-        #     (ee_frame_pos[:, 2] > self.cfg.height_reward["min_height"]) 
-        #     & (ee_frame_pos[:, 2] < self.cfg.height_reward["max_height"]), 
-        #     1.0*self.cfg.height_reward["min_weight"], 
-        #     0.0
-        # )
-        height_diff = self.cfg.height_reward["target_height_cm"] - ee_frame_pos[:, 2]*100
+    
+        height_diff = self.cfg.reward_cfg["height_reward"]["target_height_cm"] - ee_frame_pos[:, 2]
         height_reward = -(
-            self.cfg.height_reward["w"]*height_diff**2
-            + self.cfg.height_reward["v"]*torch.log(height_diff**2 + self.cfg.height_reward["alpha"])
+            self.cfg.reward_cfg["height_reward"]["w"]*height_diff**2
+            + self.cfg.reward_cfg["height_reward"]["v"]*torch.log(height_diff**2 + self.cfg.reward_cfg["height_reward"]["alpha"])
         ).clamp(-1,1)
         # penalize ee being too close to ground
         height_reward = torch.where(
@@ -543,7 +496,8 @@ class BallRollingEnv(DirectRLEnv):
             height_reward-10, 
             height_reward
         )
-        height_reward *= self.cfg.height_reward["weight"]
+        height_reward *= self.cfg.reward_cfg["height_reward"]["weight"]
+
         # penalize when ee orient is too big
         ee_frame_orient = euler_xyz_from_quat(self._ee_frame.data.target_quat_source[..., 0, :])
         x = wrap_to_pi(ee_frame_orient[0])
@@ -554,48 +508,7 @@ class BallRollingEnv(DirectRLEnv):
             1.0*self.cfg.orient_reward["weight"],
             0.0
         )
-
-        ee_goal_distance = torch.norm(ee_frame_pos - self._goal_pos_w, dim=1)
-        ee_goal_tracking_reward = torch.square(ee_goal_distance*100)
-        # ee_goal_tracking_reward = torch.where(
-        #     object_ee_distance < self.cfg.at_obj_reward["minimal_distance"], 
-        #     1 - torch.tanh(ee_goal_distance / self.cfg.ee_goal_tracking["std"])**2,
-        #     0.0
-        # )
-        
-        # Add big penalty, if way too far away
-        ee_goal_tracking_reward = torch.where(
-            ee_goal_distance > self.cfg.too_far_away_threshold*0.5, 
-            ee_goal_tracking_reward*2, 
-            ee_goal_tracking_reward
-        )
-        ee_goal_tracking_reward *= self.cfg.ee_goal_tracking["weight"]
-        
-        # distance between obj and goal: (num_envs,)
-        obj_goal_distance = torch.norm(obj_pos[:, :2] - self._goal_pos_w[:, :2], dim=1)
-        obj_goal_tracking_reward = torch.where(
-            object_ee_distance < self.cfg.at_obj_reward["minimal_distance"], 
-            1 - torch.tanh(obj_goal_distance / self.cfg.obj_goal_tracking["std"])**2,
-            0.0
-        )
-        obj_goal_tracking_reward *= self.cfg.obj_goal_tracking["weight"]
-        
-        # obj_goal_distance_penalty = obj_goal_distance**2*self.cfg.obj_goal_penalty["weight"]
-        # tracking_goal = -(
-        #     self.cfg.tracking_reward["w"]*obj_goal_distance
-        #     + self.cfg.tracking_reward["v"]*torch.log(obj_goal_distance + self.cfg.tracking_reward["alpha"])
-        # ) 
-        # # only apply when ee is at object (with this our tracking goal always needs to be positive, otherwise reaching part wont work anymore)
-        # tracking_goal = (object_ee_distance < self.cfg.tracking_reward["minimal_distance"]) * tracking_goal
-        # tracking_goal *= self.cfg.tracking_reward["weight"]
-        
-        success_reward = torch.where(
-            (obj_goal_distance < self.cfg.success_reward["threshold"]) 
-            & (object_ee_distance < self.cfg.at_obj_reward["minimal_distance"]), 
-            1.0*self.cfg.success_reward["weight"], 
-            0.0
-        )
-        
+                
         # Penalize the rate of change of the actions using L2 squared kernel.
         # action_rate_penalty = torch.sum(torch.square(self.actions), dim=1)
         action_rate_penalty = torch.sum(torch.square(self.actions - self.prev_actions), dim=1)
