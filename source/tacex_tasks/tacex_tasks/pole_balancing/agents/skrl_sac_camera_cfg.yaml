@@ -54,7 +54,7 @@ agent:
     
   # logging and checkpoint
   experiment:
-    directory: "ball_rolling_rigid_tactile_rgb"
+    directory: "pole_balancing"
     experiment_name: "sac_mixed_obs"
     write_interval: 120
     checkpoint_interval: 10000

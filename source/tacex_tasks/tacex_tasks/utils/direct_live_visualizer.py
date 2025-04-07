@@ -38,6 +38,7 @@ class DirectLiveVisualizer(ManagerLiveVisualizer):
         # evaluate chosen terms if no terms provided use all available.
         self._term_visualizers = {}
         self.terms: dict[str, torch.tensor] = {}
+        self.terms_names: dict[str, list[str]] = {}
 
     @property
     def get_vis_frame(self) -> omni.ui.Frame:
@@ -137,6 +138,7 @@ class DirectLiveVisualizer(ManagerLiveVisualizer):
                     )
                     with frame:
                         value = values[self._env_idx]
+                        terms_names = self.terms_names[name] if name in self.terms_names else None
                         # create line plot for single or multivariable signals
                         len_term_shape = len(value.shape)
                         if len_term_shape == 0:
@@ -146,6 +148,7 @@ class DirectLiveVisualizer(ManagerLiveVisualizer):
                                 y_data=[[elem] for elem in value.T.tolist()],
                                 plot_height=150,
                                 show_legend=True,
+                                legends=terms_names,
                             )
                             self._term_visualizers[name] = plot
                         # create an image plot for 2d and greater data (i.e. mono and rgb images)

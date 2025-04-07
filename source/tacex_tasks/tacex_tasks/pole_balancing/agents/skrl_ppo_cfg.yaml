@@ -66,8 +66,8 @@ agent:
   time_limit_bootstrap: False
   # logging and checkpoint
   experiment:
-    directory: "ball_rolling"
-    experiment_name: "height_map_reset_ik"
+    directory: "pole_balancing"
+    experiment_name: "pole_balancing"
     write_interval: 120
     checkpoint_interval: 12000
     wandb: False

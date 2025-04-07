@@ -54,8 +54,8 @@ agent:
     
   # logging and checkpoint
   experiment:
-    directory: "ball_rolling_rigid"
-    experiment_name: "sac"
+    directory: "pole_balancing"
+    experiment_name: "pole_balancing"
     write_interval: 120
     checkpoint_interval: auto
     wandb: True             # whether to use Weights & Biases

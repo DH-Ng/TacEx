@@ -80,14 +80,14 @@ agent:
   time_limit_bootstrap: False
   # logging and checkpoint
   experiment:
-    directory: "ball_rolling"
+    directory: "pole_balancing"
     experiment_name: "base_env"
     write_interval: 100
     checkpoint_interval: 10000
     wandb: False             # whether to use Weights & Biases
     wandb_kwargs: {
       "sync_tensorboard": True,
-      "project": "ball_rolling_tactile"
+      "project": "pole_balancing_tactile"
     }    
 
 
