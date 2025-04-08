@@ -238,13 +238,13 @@ class BallRollingEnvCfg(DirectRLEnvCfg):
     # observation_noise_model = 
 
     #MARK: reward configuration
-    at_obj_reward = {"weight": 1.0, "minimal_distance": 0.005}
+    at_obj_reward = {"weight": 0.5, "minimal_distance": 0.005}
     off_the_ground_penalty = {"weight": -15, "max_height": 0.025}
     # ball has diameter of 1cm, plate height = 0.5 cm -> 0.01m + 0.0025m = 0.0125m is above the ball
     height_reward = {"weight": 0.25, "w": 10.0, "v": 0.3, "alpha": 0.00067, "target_height_cm": 1.25} # 0.5cm = gelpad height 
     orient_reward = {"weight": 0.25}
     # for solving the task
-    ee_goal_tracking = {"std": 0.0798, "weight": -0.001}
+    ee_goal_tracking = {"std": 0.0798, "weight": -0.005}
     obj_goal_tracking = {"std": 0.0798, "weight": 0.5}
     obj_goal_penalty = {"weight": 1.0}
     # tracking_reward = {"weight":1.0, "w": 1, "v": 1, "alpha":1e-5, "minimal_distance": 0.004}
@@ -273,7 +273,7 @@ class BallRollingEnvCfg(DirectRLEnvCfg):
 
     x_bounds = (0.2, 0.75)
     y_bounds = (-0.375, 0.375)
-    too_far_away_threshold = 0.01 #0.2 #0.125 #0.2 #0.15
+    too_far_away_threshold = 0.02 #0.2 #0.125 #0.2 #0.15
     min_height_threshold = 0.002
 
 class BallRollingEnv(DirectRLEnv):
