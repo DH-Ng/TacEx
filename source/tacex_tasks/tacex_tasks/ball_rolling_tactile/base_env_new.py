@@ -245,7 +245,7 @@ class BallRollingEnvCfg(DirectRLEnvCfg):
     orient_reward = {"weight": 0.25}
     # for solving the task
     ee_goal_tracking = {"std": 0.0798, "weight": -0.005}
-    obj_goal_tracking = {"std": 0.0798, "weight": 0.5}
+    obj_goal_tracking = {"std": 0.0798, "weight": 1.5}
     obj_goal_penalty = {"weight": 1.0}
     # tracking_reward = {"weight":1.0, "w": 1, "v": 1, "alpha":1e-5, "minimal_distance": 0.004}
     success_reward = {"weight": 10.0, "threshold": 0.005} # 0.0025 we count it as a sucess when dist obj <-> goal is less than the threshold
@@ -440,7 +440,7 @@ class BallRollingEnv(DirectRLEnv):
         # # fixed z rotation
         # self.processed_actions[:, 5] = 0 # dont change the z rotation
 
-        self.processed_actions[:, :] = self.actions*0.1
+        self.processed_actions[:, :] = self.actions*0.25
 
         # obtain ee positions and orientation w.r.t root (=base) frame
         ee_pos_curr_b, ee_quat_curr_b = self._compute_frame_pose()
