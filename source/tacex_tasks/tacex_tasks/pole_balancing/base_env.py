@@ -265,7 +265,7 @@ class PoleBalancingEnvCfg(DirectRLEnvCfg):
 
     x_bounds = (0.1, 0.5)
     y_bounds = (-0.5, 0.5)
-    too_far_away_threshold = 1 #0.01 #0.2 #0.125 #0.2 #0.15
+    too_far_away_threshold = 0.05 #0.01 #0.2 #0.125 #0.2 #0.15
     min_height_threshold = 0.3 #0.37877
 
 class PoleBalancingEnv(DirectRLEnv):
@@ -458,14 +458,16 @@ class PoleBalancingEnv(DirectRLEnv):
             | (torch.abs(y) > math.pi/4)
         )
 
-        min_height = ee_frame_pos[:, 2] < self.cfg.min_height_threshold
+        ee_min_height = ee_frame_pos[:, 2] < self.cfg.min_height_threshold
+        obj_min_height = obj_pos[:, 2] < self.cfg.min_height_threshold
         
         reset_cond = (
             out_of_bounds_x
             | out_of_bounds_y
             | ee_too_far_away
             | orient_cond
-            | min_height
+            | ee_min_height
+            | obj_min_height
         )
 
         time_out = self.episode_length_buf >= self.max_episode_length - 1 # episode length limit
