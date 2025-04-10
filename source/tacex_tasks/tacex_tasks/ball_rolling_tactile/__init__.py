@@ -12,8 +12,6 @@ from . import agents
 # Register Gym environments.
 ##
 
-# ball_rolling_task_entry = "tacex_tasks.ball_rolling"
-
 #isaaclab -p ./scripts/reinforcement_learning/skrl/train.py --task TacEx-Ball-Rolling-Tactile-Base-v0 --num_envs 1000 --enable_cameras
 # from .base_env import BallRollingEnv, BallRollingEnvCfg # need to import BallRollingEnv here, otherwise class will not be detected for entry point
 # gym.register(

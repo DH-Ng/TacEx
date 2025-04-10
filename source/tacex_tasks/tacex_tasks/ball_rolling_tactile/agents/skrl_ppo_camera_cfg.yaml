@@ -7,7 +7,7 @@ models:
   separate: False
   policy:  # see gaussian_model parameters
     class: GaussianMixin
-    clip_actions: False
+    clip_actions: True #False
     clip_log_std: True
     min_log_std: -20.0
     max_log_std: 2.0
@@ -27,7 +27,7 @@ models:
     output: ACTIONS
   value:  # see deterministic_model parameters
     class: DeterministicMixin
-    clip_actions: False
+    clip_actions: True #False
     network:
       - name: features_extractor
         input: permute(STATES["vision_obs"], (0, 3, 1, 2))   # PyTorch NHWC -> NCHW. Warning: don't permute for JAX since it expects NHWC
