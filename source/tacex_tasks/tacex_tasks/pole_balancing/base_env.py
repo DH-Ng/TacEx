@@ -118,32 +118,23 @@ class PoleBalancingEnvCfg(DirectRLEnvCfg):
         prim_path="/World/envs/env_.*/Robot",
         init_state=ArticulationCfg.InitialStateCfg(
             # joint_pos={
-            #     "panda_joint1": -1.6945,
-            #     "panda_joint2": -1.56,
-            #     "panda_joint3": 1.778,
-            #     "panda_joint4": -2.29,
-            #     "panda_joint5": 1.71,
-            #     "panda_joint6": 1.79,
-            #     "panda_joint7": 1.59,
-            # },
-            joint_pos={
-                "panda_joint1": -1.5,
-                "panda_joint2": -1.5,
-                "panda_joint3": 2.11,
-                "panda_joint4": -2.46,
-                "panda_joint5": -1.18,
-                "panda_joint6": 1.17,
-                "panda_joint7": -1.5,
-            },
-            # joint_pos={
             #     "panda_joint1": -1.5,
             #     "panda_joint2": -1.5,
-            #     "panda_joint3": 1.5,
-            #     "panda_joint4": -2.5,
-            #     "panda_joint5": -1.68,
-            #     "panda_joint6": 1.54,
+            #     "panda_joint3": 2.11,
+            #     "panda_joint4": -2.46,
+            #     "panda_joint5": -1.18,
+            #     "panda_joint6": 1.17,
             #     "panda_joint7": -1.5,
             # },
+            joint_pos={
+                "panda_joint1": 1.5,
+                "panda_joint2": -1.76,
+                "panda_joint3": -1.84,
+                "panda_joint4": -2.52,
+                "panda_joint5": 1.25,
+                "panda_joint6": 1.58,
+                "panda_joint7": -1.72,
+            },
         ),
     )
 
@@ -184,7 +175,7 @@ class PoleBalancingEnvCfg(DirectRLEnvCfg):
                     disable_gravity=False,
             ),
         ),
-        init_state=RigidObjectCfg.InitialStateCfg(pos=(0.3821, 0.04255, 0.37877)),
+        init_state=RigidObjectCfg.InitialStateCfg(pos=(0.41336, 0.01123, 0.4637)), #(0.3821, 0.04255, 0.37877)
     )
 
     # sensors
@@ -239,20 +230,20 @@ class PoleBalancingEnvCfg(DirectRLEnvCfg):
 
     #MARK: reward configuration
     reward_terms = {
-        "at_obj_reward": {"weight": 5.0, "minimal_distance": 0.005},
-        "height_reward": {"weight": 2.0, "w": 10.0, "v": 0.3, "alpha": 0.00067, "target_height_m": 0.5}, # 0.5cm = gelpad height 
-        "orient_reward": {"weight": 1.0},
-        "staying_alive_rew": {"weight": 1.0},
-        "termination_penalty": {"weight": 10.0},
-        "ee_goal_tracking_penalty": {"weight": 0.005},
-        "action_rate_penalty": {"weight": 1e-4},
-        "joint_vel_penalty": {"weight": 1e-4},
+        "at_obj_reward": {"weight": 0.5, "minimal_distance": 0.005},
+        "height_reward": {"weight": 0.25, "w": 10.0, "v": 0.3, "alpha": 0.00067, "target_height_m": 0.5}, # 0.5cm = gelpad height 
+        "orient_reward": {"weight": 0.25},
+        "staying_alive_rew": {"weight": 0.1},
+        "termination_penalty": {"weight": -1.0},
+        "ee_goal_tracking_penalty": {"weight": -0.005},
+        "action_rate_penalty": {"weight": -1e-4},
+        "joint_vel_penalty": {"weight": -1e-4},
     }
 
     # curriculum settings
     num_levels = 10
 
-    obj_pos_randomization_range = [-0.1, 0.1]
+    obj_pos_randomization_range = [-0.05, 0.05]
 
     # env
     episode_length_s = 8.3333/2 # 1000/2 timesteps (dt = 1/120 -> 8.3333/(1/120) = 1000)
@@ -326,7 +317,7 @@ class PoleBalancingEnv(DirectRLEnv):
         self.prev_actions = torch.zeros_like(self.actions)
         
         self._goal_pos_w = torch.zeros((self.num_envs, 3), device=self.device) 
-        self._goal_pos_w[:, 2] = self.cfg.reward_terms["target_height_m"]
+        self._goal_pos_w[:, 2] = self.cfg.reward_terms["height_reward"]["target_height_m"]
 
         self.reward_terms = {}
         for rew_terms in self.cfg.reward_terms:
@@ -535,6 +526,7 @@ class PoleBalancingEnv(DirectRLEnv):
         self.reward_terms["termination_penalty"][:] = ( 
             self.cfg.reward_terms["termination_penalty"]["weight"] * self.reset_terminated.float()
         )
+
         # Penalize the rate of change of the actions using L2 squared kernel.
         # action_rate_penalty = torch.sum(torch.square(self.actions), dim=1)
         self.reward_terms["action_rate_penalty"][:] = (
@@ -551,17 +543,21 @@ class PoleBalancingEnv(DirectRLEnv):
             + self.reward_terms["at_obj_reward"]
             + self.reward_terms["height_reward"]
             + self.reward_terms["orient_reward"]
-            - self.reward_terms["ee_goal_tracking_penalty"]
+            + self.reward_terms["ee_goal_tracking_penalty"]
             + self.reward_terms["staying_alive_rew"]
-            - self.reward_terms["termination_penalty"]
-            - self.reward_terms["action_rate_penalty"]
-            - self.reward_terms["joint_vel_penalty"]
+            + self.reward_terms["termination_penalty"]
+            + self.reward_terms["action_rate_penalty"]
+            + self.reward_terms["joint_vel_penalty"]
         )
         
         for rew_name, rew in self.reward_terms.items():
             self.extras[f"logs_rew_{rew_name}"] = rew.mean()
 
         if self.cfg.debug_vis:
+            for i, name in enumerate(self.reward_terms.keys()):
+                self.visualizers["Rewards"].terms["rewards"][:, i] = self.reward_terms[name]
+            self.visualizers["Rewards"].terms["rewards"][:, -1] = rewards
+    
             self.visualizers["Metrics"].terms["ee_height"]  = ee_frame_pos[:, 2].reshape(-1,1)
             self.visualizers["Metrics"].terms["obj_ee_distance"] = object_ee_distance.reshape(-1,1)
         
@@ -718,7 +714,7 @@ class PoleBalancingEnv(DirectRLEnv):
                 marker_cfg = VisualizationMarkersCfg(
                     markers={
                         "sphere": sim_utils.SphereCfg(
-                            radius=self.cfg.success_reward["threshold"],
+                            radius=0.005,
                             visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(1.0, 0.0, 0.0), opacity= 0.5),
                         ),
                     }
