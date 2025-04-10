@@ -490,7 +490,7 @@ class PoleBalancingEnv(DirectRLEnv):
             0.0
         )
     
-        height_diff = self.cfg.reward_terms["height_reward"]["target_height_m"] - ee_frame_pos[:, 2]
+        height_diff = (self.cfg.reward_terms["height_reward"]["target_height_m"] - ee_frame_pos[:, 2])*100
         height_reward = -(
             self.cfg.reward_terms["height_reward"]["w"]*height_diff**2
             + self.cfg.reward_terms["height_reward"]["v"]*torch.log(height_diff**2 + self.cfg.reward_terms["height_reward"]["alpha"])
