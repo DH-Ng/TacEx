@@ -26,6 +26,11 @@ isaaclab -p ./scripts/reinforcement_learning/rsl_rl/train.py --task TacEx-Ball-R
 isaaclab -p ./scripts/reinforcement_learning/rsl_rl/play.py --task TacEx-Ball-Rolling-Tactile-Base-v1 --num_envs 23 --enable_cameras --load_run logs/skrl/ball_rolling/2025-04-08_22-55-53_improved_ppo_torch_base_env_cluster --checkpoint best_agent.pt
 ```
 
+```bash
+isaaclab -p ./scripts/reinforcement_learning/skrl/play.py --task TacEx-Ball-Rolling-Tactile-Base-v1 --num_envs 23 --enable_cameras --checkpoint logs/skrl/ball_rolling/2025-04-08_22-55-53_improved_ppo_torch_base_env_cluster/checkpoints/best_agent.pt
+```
+
+
 ## Other
 You can activate tensorboard with
 ```bash
