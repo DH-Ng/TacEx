@@ -267,6 +267,7 @@ class BallRollingEnvCfg(DirectRLEnvCfg):
     }
     # observation_space = 14
     state_space = 0
+    action_scale = 0.05 # [cm]
 
     ball_radius = 0.005 # don't change, because rewards are tuned for this ball size 
 
@@ -433,13 +434,13 @@ class BallRollingEnv(DirectRLEnv):
         
     def _pre_physics_step(self, actions: torch.Tensor):
         self.prev_actions[:] = self.actions
-        self.actions[:] = actions #.clamp(-1.0, 1.0) 
+        self.actions[:] = actions.clamp(-1.0, 1.0) 
         #! preprocess the action and turn it into IK action
         # self.processed_actions[:, :5] = self.actions
         # # fixed z rotation
         # self.processed_actions[:, 5] = 0 # dont change the z rotation
 
-        self.processed_actions[:, :] = self.actions*0.1 #0.15 doesnt work
+        self.processed_actions[:, :] = self.actions*self.cfg.action_scale
 
         # obtain ee positions and orientation w.r.t root (=base) frame
         ee_pos_curr_b, ee_quat_curr_b = self._compute_frame_pose()
@@ -588,7 +589,7 @@ class BallRollingEnv(DirectRLEnv):
             0.0
         )
         obj_goal_fine_tracking_reward *= self.cfg.obj_goal_fine_tracking["weight"]
-        
+
         success_reward = torch.where(
             (obj_goal_distance <= self.cfg.success_reward["threshold"]) 
             & (object_ee_distance < self.cfg.at_obj_reward["minimal_distance"]), 

@@ -234,8 +234,8 @@ class PoleBalancingEnvCfg(DirectRLEnvCfg):
         "height_reward": {"weight": 0.25, "w": 10.0, "v": 0.3, "alpha": 0.00067, "target_height_m": 0.5}, # 0.5cm = gelpad height 
         "orient_reward": {"weight": 0.25},
         "staying_alive_rew": {"weight": 0.1},
-        "termination_penalty": {"weight": -1.0},
-        "ee_goal_tracking_penalty": {"weight": -0.005},
+        "termination_penalty": {"weight": -0.5},
+        "ee_goal_tracking_penalty": {"weight": -0.001},
         "action_rate_penalty": {"weight": -1e-4},
         "joint_vel_penalty": {"weight": -1e-4},
     }
@@ -253,9 +253,10 @@ class PoleBalancingEnvCfg(DirectRLEnvCfg):
         "vision_obs": [32,32,1], # from tactile sensor
     }
     state_space = 0
+    action_scale = 0.1 # [cm]
 
-    x_bounds = (0.1, 0.5)
-    y_bounds = (-0.5, 0.5)
+    x_bounds = (0.15, 0.75)
+    y_bounds = (-0.75, 0.75)
     too_far_away_threshold = 0.02 #0.01 #0.2 #0.125 #0.2 #0.15
     min_height_threshold = 0.3 #0.37877
 
@@ -412,7 +413,7 @@ class PoleBalancingEnv(DirectRLEnv):
         # # fixed z rotation
         # self.processed_actions[:, 5] = 0 # dont change the z rotation
 
-        self.processed_actions[:, :] = self.actions*0.1
+        self.processed_actions[:, :] = self.actions*self.cfg.action_scale
 
         # obtain ee positions and orientation w.r.t root (=base) frame
         ee_pos_curr_b, ee_quat_curr_b = self._compute_frame_pose()
@@ -442,7 +443,7 @@ class PoleBalancingEnv(DirectRLEnv):
         out_of_bounds_y = (obj_pos[:, 1] < self.cfg.y_bounds[0]) | (obj_pos[:, 1] > self.cfg.y_bounds[1])
 
         obj_goal_distance = torch.norm(self._goal_pos_w[:, :2] - self.scene.env_origins[:, :2] - obj_pos[:,:2], dim=1)
-        obj_too_far_away = obj_goal_distance > 0.55
+        obj_too_far_away = obj_goal_distance > 0.75
 
         ee_frame_pos = self._ee_frame.data.target_pos_w[..., 0, :] - self.scene.env_origins # end-effector positions in world frame: (num_envs, 3)
         ee_too_far_away = torch.norm(obj_pos - ee_frame_pos, dim=1) > self.cfg.too_far_away_threshold
@@ -490,7 +491,7 @@ class PoleBalancingEnv(DirectRLEnv):
             0.0
         )
     
-        height_diff = (self.cfg.reward_terms["height_reward"]["target_height_m"] - ee_frame_pos[:, 2])*100
+        height_diff = (self.cfg.reward_terms["height_reward"]["target_height_m"] - ee_frame_pos[:, 2])
         height_reward = -(
             self.cfg.reward_terms["height_reward"]["w"]*height_diff**2
             + self.cfg.reward_terms["height_reward"]["v"]*torch.log(height_diff**2 + self.cfg.reward_terms["height_reward"]["alpha"])
