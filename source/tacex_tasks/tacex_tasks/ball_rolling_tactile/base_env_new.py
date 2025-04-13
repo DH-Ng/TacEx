@@ -246,7 +246,7 @@ class BallRollingEnvCfg(DirectRLEnvCfg):
     # for solving the task
     ee_goal_tracking = {"std": 0.0798, "weight": -0.005}
     obj_goal_tracking = {"std": 0.0798, "weight": 0.75}
-    obj_goal_fine_tracking = {"std": 0.0480, "weight": 0.5}
+    obj_goal_fine_tracking = {"std": 0.0062, "weight": 0.5}
     success_reward = {"weight": 15.0, "threshold": 0.005} # 0.0025 we count it as a sucess when dist obj <-> goal is less than the threshold
 
     # extra reward scales
