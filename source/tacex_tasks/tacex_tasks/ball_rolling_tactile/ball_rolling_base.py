@@ -244,13 +244,15 @@ class BallRollingEnvCfg(DirectRLEnvCfg):
     height_reward = {"weight": 0.25, "w": 10.0, "v": 0.3, "alpha": 0.00067, "target_height_cm": 1.25} # 0.5cm = gelpad height 
     orient_reward = {"weight": 0.25}
     # for solving the task
-    ee_goal_tracking = {"std": 0.0798, "weight": -0.00075}
+    ee_goal_tracking = {"weight": -0.015, "std": 0.0798}
     # ee_goal_tracking = {"weight": 0.75, "w": 0.3276, "v": 0.1672, "alpha": 0.00117}
-    obj_goal_tracking = {"weight": 1.35, "w": 0.3276, "v": 0.1672, "alpha": 0.00117}
+    obj_goal_tracking = {"weight": 1.35, "w": 0.0482, "v": 0.7870, "alpha": 0.0083}
+    # obj_goal_tracking = {"weight": 0.85, "w": 0.1717, "v": 0.3133, "alpha": 0.01825}
     # obj_goal_tracking = {"std": 0.0798, "weight": -0.001}
-    obj_goal_fine_tracking = {"std": 0.0798, "weight": 1.35} #0.0322
+    obj_goal_fine_tracking = {"weight": 5.75, "std": 0.0516} #0.0322
+    obj_goal_super_fine_tracking = {"weight": 0.75, "std": 0.1063}
     success_reward = {"weight": 15.0, "threshold": 0.005} # 0.0025 we count it as a sucess when dist obj <-> goal is less than the threshold
-    termination_penalty = {"weight": -5.0}
+    too_far_penalty = {"weight": -10.0}
 
     # extra reward scales
     action_rate_penalty_scale = [-1e-4, -1e-2] # give list for curriculum learning (-1e2 after common_step_count > currciculum_steps)
@@ -262,7 +264,7 @@ class BallRollingEnvCfg(DirectRLEnvCfg):
     obj_pos_randomization_range = [-0.1, 0.1]
 
     # env
-    episode_length_s = 8.3333/2 # 1000/2 timesteps (dt = 1/120 -> 8.3333/(1/120) = 1000)
+    episode_length_s = 8.3333 # 1000 timesteps (dt = 1/120 -> 8.3333/(1/120) = 1000)
     action_space = 6 # we use relative task_space actions: (dx, dy, dz, droll, dpitch) -> dyaw is ommitted
     observation_space = {
         "proprio_obs": 14, #16, # 3 for ee pos, 2 for orient (roll, pitch), 2 for init goal-pos (x,y), 5 for actions
@@ -523,6 +525,11 @@ class BallRollingEnv(DirectRLEnv):
             self.cfg.at_obj_reward["weight"], 
             0.0
         )
+        too_far_penalty = torch.where(
+            object_ee_distance > self.cfg.too_far_away_threshold, 
+            self.cfg.too_far_penalty["weight"], 
+            0.0
+        )
         # penalty for preventing the ball from jumping
         off_the_ground_penalty = torch.where(
             obj_pos[:, 2] > self.cfg.off_the_ground_penalty["max_height"], 
@@ -547,15 +554,15 @@ class BallRollingEnv(DirectRLEnv):
         x = wrap_to_pi(ee_frame_orient[0])
         y = wrap_to_pi(ee_frame_orient[1])
         orient_reward = torch.where(
-            (torch.abs(x) < math.pi/9) 
-            | (torch.abs(y) < math.pi/9),
+            (torch.abs(x) < math.pi/10) 
+            | (torch.abs(y) < math.pi/10),
             1.0*self.cfg.orient_reward["weight"],
             0.0
         )
 
-        ee_goal_distance = torch.norm(ee_frame_pos - self._goal_pos_w, dim=1)*100 # [cm]
+        ee_goal_distance = torch.norm(ee_frame_pos - self._goal_pos_w, dim=1)
         # ee_goal_tracking_reward = torch.square(ee_goal_distance*100)
-        ee_goal_tracking_reward = (ee_goal_distance)**3
+        ee_goal_tracking_reward = (ee_goal_distance*100)**2 # [cm]
         # ee_goal_tracking_reward = -(
         #     self.cfg.ee_goal_tracking["w"]*ee_goal_distance**2
         #     + self.cfg.ee_goal_tracking["v"]*torch.log(ee_goal_distance**2 + self.cfg.ee_goal_tracking["alpha"])
@@ -566,17 +573,24 @@ class BallRollingEnv(DirectRLEnv):
         obj_goal_distance = torch.norm(obj_pos[:, :2] - self._goal_pos_w[:, :2], dim=1)
         # obj_goal_tracking_reward = (obj_goal_distance*100)**3
         obj_goal_tracking_reward = -(
-            self.cfg.obj_goal_tracking["w"]*(obj_goal_distance*10)**2
+            self.cfg.obj_goal_tracking["w"]*(obj_goal_distance*10)**2 #[dm]
             + self.cfg.obj_goal_tracking["v"]*torch.log((obj_goal_distance*10)**2 + self.cfg.obj_goal_tracking["alpha"])
         )
         obj_goal_tracking_reward *= self.cfg.obj_goal_tracking["weight"]
         
         obj_goal_fine_tracking_reward = torch.where(
             object_ee_distance < self.cfg.at_obj_reward["minimal_distance"], 
-            1 - torch.tanh(obj_goal_distance / self.cfg.obj_goal_fine_tracking["std"])**2,
+            1 - torch.tanh((obj_goal_distance*10)**2 / self.cfg.obj_goal_fine_tracking["std"])**2, #[dm]
             0.0
         )
         obj_goal_fine_tracking_reward *= self.cfg.obj_goal_fine_tracking["weight"]
+
+        # obj_goal_super_fine_tracking_reward = torch.where(
+        #     object_ee_distance < self.cfg.at_obj_reward["minimal_distance"], 
+        #     1 - torch.tanh((obj_goal_distance*10)**2 / self.cfg.obj_goal_super_fine_tracking["std"]), # [dm]
+        #     0.0
+        # )
+        # obj_goal_super_fine_tracking_reward *= self.cfg.obj_goal_super_fine_tracking["weight"]
 
         success_reward = torch.where(
             (obj_goal_distance <= self.cfg.success_reward["threshold"]) 
@@ -585,7 +599,6 @@ class BallRollingEnv(DirectRLEnv):
             0.0
         )
 
-        termination_penalty = self.cfg.termination_penalty["weight"] * self.reset_terminated.float()
         # Penalize the rate of change of the actions using L2 squared kernel.
         # action_rate_penalty = torch.sum(torch.square(self.actions), dim=1)
         action_rate_penalty = torch.sum(torch.square(self.actions - self.prev_actions), dim=1)
@@ -600,8 +613,9 @@ class BallRollingEnv(DirectRLEnv):
             + ee_goal_tracking_reward
             + obj_goal_tracking_reward
             + obj_goal_fine_tracking_reward
+            # + obj_goal_super_fine_tracking_reward
             + success_reward
-            + termination_penalty
+            + too_far_penalty
             + self.cfg.action_rate_penalty_scale[self.curriculum_phase_id] * action_rate_penalty
             + self.cfg.joint_vel_penalty_scale[self.curriculum_phase_id] * joint_vel_penalty
         )
@@ -614,6 +628,7 @@ class BallRollingEnv(DirectRLEnv):
             "ee_goal_tracking_reward": ee_goal_tracking_reward.float().mean(),
             "obj_goal_tracking_reward": obj_goal_tracking_reward.float().mean(),
             "obj_goal_fine_tracking_reward": obj_goal_fine_tracking_reward.float().mean(),
+            # "obj_goal_super_fine_tracking_reward": obj_goal_super_fine_tracking_reward.float().mean(),
             "success_reward": success_reward.float().mean(),
             # penalties for nice looking behavior
             "action_rate_penalty": (self.cfg.action_rate_penalty_scale[self.curriculum_phase_id] * action_rate_penalty).mean(), 
