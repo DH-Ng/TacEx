@@ -660,7 +660,8 @@ class BallRollingEnv(DirectRLEnv):
         super()._reset_idx(env_ids)
 
         # reset to intial positions, if not successful
-        full_reset_env_ids = (self.reset_buf & torch.logical_not(self.success_env)).nonzero(as_tuple=False).squeeze(-1)
+        #full_reset_env_ids = (self.reset_buf & torch.logical_not(self.success_env)).nonzero(as_tuple=False).squeeze(-1)
+        full_reset_env_ids = env_ids
         
         # spawn obj at initial position
         obj_pos = self.object.data.default_root_state[full_reset_env_ids] 
