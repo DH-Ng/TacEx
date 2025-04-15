@@ -238,20 +238,20 @@ class BallRollingEnvCfg(DirectRLEnvCfg):
     # observation_noise_model = 
 
     #MARK: reward configuration
-    at_obj_reward = {"weight": 0.5, "minimal_distance": 0.005}
+    at_obj_reward = {"weight": 1.25, "minimal_distance": 0.005}
     off_the_ground_penalty = {"weight": -15, "max_height": 0.025}
     # ball has diameter of 1cm, plate height = 0.5 cm -> 0.01m + 0.0025m = 0.0125m is above the ball
-    height_reward = {"weight": 0.25, "w": 10.0, "v": 0.3, "alpha": 0.00067, "target_height_cm": 1.25} # 0.5cm = gelpad height 
-    orient_reward = {"weight": 0.25}
+    height_reward = {"weight": 0.5, "w": 10.0, "v": 0.3, "alpha": 0.00067, "target_height_cm": 1.25} # 0.5cm = gelpad height 
+    orient_reward = {"weight": 0.5}
     # for solving the task
     ee_goal_tracking = {"weight": -0.015, "std": 0.0798}
     # ee_goal_tracking = {"weight": 0.75, "w": 0.3276, "v": 0.1672, "alpha": 0.00117}
     obj_goal_tracking = {"weight": 1.35, "w": 0.0482, "v": 0.7870, "alpha": 0.0083}
     # obj_goal_tracking = {"weight": 0.85, "w": 0.1717, "v": 0.3133, "alpha": 0.01825}
     # obj_goal_tracking = {"std": 0.0798, "weight": -0.001}
-    obj_goal_fine_tracking = {"weight": 5.75, "std": 0.0516} #0.0322
-    obj_goal_super_fine_tracking = {"weight": 0.75, "std": 0.1063}
-    success_reward = {"weight": 15.0, "threshold": 0.005} # 0.0025 we count it as a sucess when dist obj <-> goal is less than the threshold
+    obj_goal_fine_tracking = {"weight": 3.25, "std": 0.2672} #0.0322
+    obj_goal_super_fine_tracking = {"weight": 6.75, "std": 0.9363}
+    success_reward = {"weight": 10.0, "threshold": 0.005} # 0.0025 we count it as a sucess when dist obj <-> goal is less than the threshold
     too_far_penalty = {"weight": -10.0}
 
     # extra reward scales
@@ -491,10 +491,7 @@ class BallRollingEnv(DirectRLEnv):
         )
 
         min_height = ee_frame_pos[:, 2] < self.cfg.min_height_threshold
-        
-        # if success: new goal position but without physical reset
-        self.success_env = (obj_goal_distance < self.cfg.success_reward["threshold"])
-        
+                
         reset_cond = (
             out_of_bounds_x
             | out_of_bounds_y
@@ -502,9 +499,20 @@ class BallRollingEnv(DirectRLEnv):
             | ee_too_far_away
             | orient_cond
             | min_height
-            | self.success_env
         )
-        
+
+        # #! new goal position, if sucess
+        # success_env = (obj_goal_distance < self.cfg.success_reward["threshold"]).nonzero(as_tuple=False).squeeze(-1)
+        # if len(success_env) > 0:
+        #     self._goal_pos_w[success_env, :2] = self.object.data.default_root_state[success_env, :2] + self.scene.env_origins[success_env, :2] + sample_uniform(
+        #         self.cfg.obj_pos_randomization_range[0], 
+        #         self.cfg.obj_pos_randomization_range[1],
+        #         (len(success_env), 2), 
+        #         self.device
+        #     )
+        #     # reset episode length
+        #     self.episode_length_buf[success_env] = 0
+
         time_out = self.episode_length_buf >= self.max_episode_length - 1 # episode length limit
 
         return reset_cond, time_out
@@ -578,22 +586,19 @@ class BallRollingEnv(DirectRLEnv):
         )
         obj_goal_tracking_reward *= self.cfg.obj_goal_tracking["weight"]
         
-        obj_goal_fine_tracking_reward = torch.where(
-            object_ee_distance < self.cfg.at_obj_reward["minimal_distance"], 
-            1 - torch.tanh((obj_goal_distance*10)**2 / self.cfg.obj_goal_fine_tracking["std"])**2, #[dm]
-            0.0
-        )
-        obj_goal_fine_tracking_reward *= self.cfg.obj_goal_fine_tracking["weight"]
-
-        # obj_goal_super_fine_tracking_reward = torch.where(
+        # obj_goal_fine_tracking_reward = torch.where(
         #     object_ee_distance < self.cfg.at_obj_reward["minimal_distance"], 
-        #     1 - torch.tanh((obj_goal_distance*10)**2 / self.cfg.obj_goal_super_fine_tracking["std"]), # [dm]
+        #     1 - torch.tanh((obj_goal_distance*10) / self.cfg.obj_goal_fine_tracking["std"]), #[dm]
         #     0.0
         # )
-        # obj_goal_super_fine_tracking_reward *= self.cfg.obj_goal_super_fine_tracking["weight"]
+        obj_goal_fine_tracking_reward = 1 - torch.tanh((obj_goal_distance*10) / self.cfg.obj_goal_fine_tracking["std"]) #[dm]
+        obj_goal_fine_tracking_reward *= self.cfg.obj_goal_fine_tracking["weight"]
+
+        obj_goal_super_fine_tracking_reward = 1 - torch.tanh((obj_goal_distance*100) / self.cfg.obj_goal_super_fine_tracking["std"])**2 #[cm]
+        obj_goal_super_fine_tracking_reward *= self.cfg.obj_goal_super_fine_tracking["weight"]
 
         success_reward = torch.where(
-            (obj_goal_distance <= self.cfg.success_reward["threshold"]) 
+            (obj_goal_distance < self.cfg.success_reward["threshold"]) 
             & (object_ee_distance < self.cfg.at_obj_reward["minimal_distance"]), 
             1.0*self.cfg.success_reward["weight"], 
             0.0
@@ -613,7 +618,7 @@ class BallRollingEnv(DirectRLEnv):
             + ee_goal_tracking_reward
             + obj_goal_tracking_reward
             + obj_goal_fine_tracking_reward
-            # + obj_goal_super_fine_tracking_reward
+            + obj_goal_super_fine_tracking_reward
             + success_reward
             + too_far_penalty
             + self.cfg.action_rate_penalty_scale[self.curriculum_phase_id] * action_rate_penalty
@@ -628,7 +633,7 @@ class BallRollingEnv(DirectRLEnv):
             "ee_goal_tracking_reward": ee_goal_tracking_reward.float().mean(),
             "obj_goal_tracking_reward": obj_goal_tracking_reward.float().mean(),
             "obj_goal_fine_tracking_reward": obj_goal_fine_tracking_reward.float().mean(),
-            # "obj_goal_super_fine_tracking_reward": obj_goal_super_fine_tracking_reward.float().mean(),
+            "obj_goal_super_fine_tracking_reward": obj_goal_super_fine_tracking_reward.float().mean(),
             "success_reward": success_reward.float().mean(),
             # penalties for nice looking behavior
             "action_rate_penalty": (self.cfg.action_rate_penalty_scale[self.curriculum_phase_id] * action_rate_penalty).mean(), 
@@ -660,21 +665,21 @@ class BallRollingEnv(DirectRLEnv):
         super()._reset_idx(env_ids)
 
         # reset to intial positions, if not successful
-        #full_reset_env_ids = (self.reset_buf & torch.logical_not(self.success_env)).nonzero(as_tuple=False).squeeze(-1)
-        full_reset_env_ids = env_ids
+        #env_ids = (self.reset_buf & torch.logical_not(self.success_env)).nonzero(as_tuple=False).squeeze(-1)
+        env_ids = env_ids
         
         # spawn obj at initial position
-        obj_pos = self.object.data.default_root_state[full_reset_env_ids] 
-        obj_pos[:, :3] += self.scene.env_origins[full_reset_env_ids]
-        self.object.write_root_state_to_sim(obj_pos, env_ids=full_reset_env_ids)
+        obj_pos = self.object.data.default_root_state[env_ids] 
+        obj_pos[:, :3] += self.scene.env_origins[env_ids]
+        self.object.write_root_state_to_sim(obj_pos, env_ids=env_ids)
 
         # reset robot state
-        joint_pos = self._robot.data.default_joint_pos[full_reset_env_ids]
+        joint_pos = self._robot.data.default_joint_pos[env_ids]
         # randomize joints 3 and 4 a little bit
         # joint_pos[:, 2:4] += sample_uniform(-0.0015, 0.0015, (len(env_ids), 2), self.device) 
         joint_vel = torch.zeros_like(joint_pos)
-        self._robot.set_joint_position_target(joint_pos, env_ids=full_reset_env_ids)
-        self._robot.write_joint_state_to_sim(joint_pos, joint_vel, env_ids=full_reset_env_ids)
+        self._robot.set_joint_position_target(joint_pos, env_ids=env_ids)
+        self._robot.write_joint_state_to_sim(joint_pos, joint_vel, env_ids=env_ids)
 
         # set commands: random target position 
         self._goal_pos_w[env_ids, :2] = self.object.data.default_root_state[env_ids, :2] + self.scene.env_origins[env_ids, :2] + sample_uniform(
@@ -684,8 +689,6 @@ class BallRollingEnv(DirectRLEnv):
             self.device
         )
 
-        # reset actions
-        self.actions[env_ids] = 0.0
         self.prev_actions[env_ids] = 0.0
 
         # reset sensors

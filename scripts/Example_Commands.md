@@ -27,7 +27,7 @@ isaaclab -p ./scripts/reinforcement_learning/rsl_rl/play.py --task TacEx-Ball-Ro
 ```
 
 ```bash
-isaaclab -p ./scripts/reinforcement_learning/skrl/play.py --task TacEx-Ball-Rolling-Tactile-Base-v1 --num_envs 23 --enable_cameras --checkpoint logs/skrl/ball_rolling/2025-04-08_22-55-53_improved_ppo_torch_base_env_cluster/checkpoints/best_agent.pt
+isaaclab -p ./scripts/reinforcement_learning/skrl/play.py --task TacEx-Ball-Rolling-Tactile-Base-v1 --num_envs 23 --enable_cameras --checkpoint logs/skrl/ball_rolling/2025-04-15_00-04-33_full_resets_ppo_torch_base_env/checkpoints/best_agent.pt
 ```
 
 
