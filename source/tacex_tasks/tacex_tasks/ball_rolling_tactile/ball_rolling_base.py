@@ -100,6 +100,7 @@ class BallRollingEnvCfg(DirectRLEnvCfg):
         physx=PhysxCfg(
             enable_ccd=True, # needed for more stable ball_rolling
             # bounce_threshold_velocity=10000,
+            gpu_max_rigid_contact_count=2 ** 23 + 2**10,
         ),
         physics_material=sim_utils.RigidBodyMaterialCfg(
             friction_combine_mode="multiply",
@@ -238,19 +239,19 @@ class BallRollingEnvCfg(DirectRLEnvCfg):
     # observation_noise_model = 
 
     #MARK: reward configuration
-    at_obj_reward = {"weight": 1.25, "minimal_distance": 0.005}
+    at_obj_reward = {"weight": 1.15, "minimal_distance": 0.005}
     off_the_ground_penalty = {"weight": -15, "max_height": 0.025}
     # ball has diameter of 1cm, plate height = 0.5 cm -> 0.01m + 0.0025m = 0.0125m is above the ball
-    height_reward = {"weight": 0.5, "w": 10.0, "v": 0.3, "alpha": 0.00067, "target_height_cm": 1.25} # 0.5cm = gelpad height 
-    orient_reward = {"weight": 0.75}
+    height_reward = {"weight": 0.45, "w": 10.0, "v": 0.3, "alpha": 0.00067, "target_height_cm": 1.225} # target height = above ball 
+    orient_reward = {"weight": 1.05}
     # for solving the task
-    ee_goal_tracking = {"weight": -0.005, "std": 0.0798}
+    ee_goal_tracking = {"weight": -0.0105, "std": 0.0798}
     # ee_goal_tracking = {"weight": 0.75, "w": 0.3276, "v": 0.1672, "alpha": 0.00117}
-    obj_goal_tracking = {"weight": 0.85, "w": 0.0482, "v": 0.7870, "alpha": 0.0083}
+    obj_goal_tracking = {"weight": 1.5, "w": 0.0482, "v": 0.7870, "alpha": 0.0083}
     # obj_goal_tracking = {"weight": 0.85, "w": 0.1717, "v": 0.3133, "alpha": 0.01825}
     # obj_goal_tracking = {"std": 0.0798, "weight": -0.001}
-    obj_goal_fine_tracking = {"weight": 3.25, "std": 0.6661} #0.0322 0.2672
-    obj_goal_super_fine_tracking = {"weight": 6.75, "std": 0.9363}
+    obj_goal_fine_tracking = {"weight": 1.25, "std": 0.6661} #0.0322 0.2672
+    obj_goal_super_fine_tracking = {"weight": 2.75, "std": 2.0373}
     success_reward = {"weight": 10.0, "threshold": 0.005} # 0.0025 we count it as a sucess when dist obj <-> goal is less than the threshold
     too_far_penalty = {"weight": -10.0}
 
@@ -264,8 +265,7 @@ class BallRollingEnvCfg(DirectRLEnvCfg):
     obj_pos_randomization_range = [-0.1, 0.1]
 
     # env
-    num_goals = 2 # how many goal positions per episode
-    episode_length_s = 8.3333 * num_goals # 1000 timesteps per goal (dt = 1/120 -> 8.3333/(1/120) = 1000)
+    episode_length_s = 8.3333*2 # 1000 timesteps per goal (dt = 1/120 -> 8.3333/(1/120) = 1000)
     action_space = 6 # we use relative task_space actions: (dx, dy, dz, droll, dpitch) -> dyaw is ommitted
     observation_space = {
         "proprio_obs": 14, #16, # 3 for ee pos, 2 for orient (roll, pitch), 2 for init goal-pos (x,y), 5 for actions
@@ -279,7 +279,7 @@ class BallRollingEnvCfg(DirectRLEnvCfg):
 
     x_bounds = (0.2, 0.75)
     y_bounds = (-0.375, 0.375)
-    too_far_away_threshold = 0.015 
+    too_far_away_threshold = 0.02 
     min_height_threshold = 0.002
 
 
@@ -587,7 +587,7 @@ class BallRollingEnv(DirectRLEnv):
         height_reward = -(
             self.cfg.height_reward["w"]*height_diff**2
             + self.cfg.height_reward["v"]*torch.log(height_diff**2 + self.cfg.height_reward["alpha"])
-        ).clamp(-1,1)
+        )#.clamp(-1,1)
         # penalize ee being too close to ground
         height_reward = torch.where(
             (ee_frame_pos[:, 2] <= self.cfg.min_height_threshold), 
@@ -747,17 +747,17 @@ class BallRollingEnv(DirectRLEnv):
             "vision_obs": vision_obs
         }
         
-        # obs = proprio_obs
-        # change goal_pos for env with long enough episodes
-        env_ids = ((self.episode_length_buf + 1) % int(self.max_episode_length/self.cfg.num_goals) == 0).nonzero(as_tuple=False).squeeze(-1)
-        if len(env_ids) > 0:
-            # set commands: random target position 
-            self._goal_pos_w[env_ids, :2] = self.object.data.default_root_state[env_ids, :2] + self.scene.env_origins[env_ids, :2] + sample_uniform(
-                self.cfg.obj_pos_randomization_range[0], 
-                self.cfg.obj_pos_randomization_range[1],
-                (len(env_ids), 2), 
-                self.device
-            )
+        # # obs = proprio_obs
+        # # change goal_pos for env with long enough episodes
+        # env_ids = ((self.episode_length_buf + 1) % int(self.max_episode_length/self.cfg.num_goals) == 0).nonzero(as_tuple=False).squeeze(-1)
+        # if len(env_ids) > 0:
+        #     # set commands: random target position 
+        #     self._goal_pos_w[env_ids, :2] = self.object.data.default_root_state[env_ids, :2] + self.scene.env_origins[env_ids, :2] + sample_uniform(
+        #         self.cfg.obj_pos_randomization_range[0], 
+        #         self.cfg.obj_pos_randomization_range[1],
+        #         (len(env_ids), 2), 
+        #         self.device
+        #     )
 
         # self.visualizers["Actions"].terms["actions"][:] = self.actions[:]
         if self.cfg.debug_vis:
