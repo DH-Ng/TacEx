@@ -94,7 +94,7 @@ class BallRollingEnvCfg(DirectRLEnvCfg):
     decimation = 1
     # simulation
     sim: SimulationCfg = SimulationCfg(
-        dt=1 / 120, #0.001
+        dt=1 / 60, #0.001
         render_interval=decimation,
         #device="cpu",
         physx=PhysxCfg(
@@ -176,7 +176,7 @@ class BallRollingEnvCfg(DirectRLEnvCfg):
             usd_path=f"{TACEX_ASSETS_DATA_DIR}/Props/ball_wood.usd", 
             #scale=(2, 1, 0.6),
             rigid_props=RigidBodyPropertiesCfg(
-                    solver_position_iteration_count=120,
+                    solver_position_iteration_count=60,
                     solver_velocity_iteration_count=1,
                     max_angular_velocity=1000.0,
                     max_linear_velocity=1000.0,
@@ -244,12 +244,12 @@ class BallRollingEnvCfg(DirectRLEnvCfg):
     height_reward = {"weight": 0.5, "w": 10.0, "v": 0.3, "alpha": 0.00067, "target_height_cm": 1.25} # 0.5cm = gelpad height 
     orient_reward = {"weight": 0.5}
     # for solving the task
-    ee_goal_tracking = {"weight": -0.015, "std": 0.0798}
+    ee_goal_tracking = {"weight": -0.005, "std": 0.0798}
     # ee_goal_tracking = {"weight": 0.75, "w": 0.3276, "v": 0.1672, "alpha": 0.00117}
-    obj_goal_tracking = {"weight": 1.35, "w": 0.0482, "v": 0.7870, "alpha": 0.0083}
+    obj_goal_tracking = {"weight": 0.85, "w": 0.0482, "v": 0.7870, "alpha": 0.0083}
     # obj_goal_tracking = {"weight": 0.85, "w": 0.1717, "v": 0.3133, "alpha": 0.01825}
     # obj_goal_tracking = {"std": 0.0798, "weight": -0.001}
-    obj_goal_fine_tracking = {"weight": 3.25, "std": 0.2672} #0.0322
+    obj_goal_fine_tracking = {"weight": 3.25, "std": 0.6661} #0.0322 0.2672
     obj_goal_super_fine_tracking = {"weight": 6.75, "std": 0.9363}
     success_reward = {"weight": 10.0, "threshold": 0.005} # 0.0025 we count it as a sucess when dist obj <-> goal is less than the threshold
     too_far_penalty = {"weight": -10.0}
@@ -278,7 +278,7 @@ class BallRollingEnvCfg(DirectRLEnvCfg):
 
     x_bounds = (0.2, 0.75)
     y_bounds = (-0.375, 0.375)
-    too_far_away_threshold = 0.02 
+    too_far_away_threshold = 0.015 
     min_height_threshold = 0.002
 
 class BallRollingEnv(DirectRLEnv):
@@ -445,7 +445,6 @@ class BallRollingEnv(DirectRLEnv):
         # self.processed_actions[:, :5] = self.actions
         # # fixed z rotation
         # self.processed_actions[:, 5] = 0 # dont change the z rotation
-
         self.processed_actions[:, :] = self.actions*self.cfg.action_scale
 
         # obtain ee positions and orientation w.r.t root (=base) frame
@@ -516,7 +515,44 @@ class BallRollingEnv(DirectRLEnv):
         time_out = self.episode_length_buf >= self.max_episode_length - 1 # episode length limit
 
         return reset_cond, time_out
-    
+    #MARK: reset
+    def _reset_idx(self, env_ids: torch.Tensor | None):
+        super()._reset_idx(env_ids)
+
+        # reset to intial positions, if not successful
+        #env_ids = (self.reset_buf & torch.logical_not(self.success_env)).nonzero(as_tuple=False).squeeze(-1)
+        #env_ids = env_ids
+        
+        # spawn obj at initial position
+        obj_pos = self.object.data.default_root_state[env_ids] 
+        obj_pos[:, :2] += sample_uniform(
+            -0.0005, 
+            0.0005,
+            (len(env_ids), 2), 
+            self.device
+        )
+        obj_pos[:, :3] += self.scene.env_origins[env_ids]
+        self.object.write_root_state_to_sim(obj_pos, env_ids=env_ids)
+
+        # reset robot state
+        joint_pos = self._robot.data.default_joint_pos[env_ids]
+        # randomize joints 3 and 4 a little bit
+        # joint_pos[:, 2:4] += sample_uniform(-0.0015, 0.0015, (len(env_ids), 2), self.device) 
+        joint_vel = torch.zeros_like(joint_pos)
+        self._robot.set_joint_position_target(joint_pos, env_ids=env_ids)
+        self._robot.write_joint_state_to_sim(joint_pos, joint_vel, env_ids=env_ids)
+
+        # set commands: random target position 
+        self._goal_pos_w[env_ids, :2] = self.object.data.default_root_state[env_ids, :2] + self.scene.env_origins[env_ids, :2] + sample_uniform(
+            self.cfg.obj_pos_randomization_range[0], 
+            self.cfg.obj_pos_randomization_range[1],
+            (len(env_ids), 2), 
+            self.device
+        )
+
+        self.prev_actions[env_ids] = 0.0
+        # reset sensors
+        self.gsmini.reset(env_ids=env_ids)    
     #MARK: rewards
     def _get_rewards(self) -> torch.Tensor:        
         #- Reward the agent for reaching the object using tanh-kernel.
@@ -534,7 +570,7 @@ class BallRollingEnv(DirectRLEnv):
             0.0
         )
         too_far_penalty = torch.where(
-            object_ee_distance > self.cfg.too_far_away_threshold, 
+            object_ee_distance > self.cfg.too_far_away_threshold*0.85, 
             self.cfg.too_far_penalty["weight"], 
             0.0
         )
@@ -562,10 +598,16 @@ class BallRollingEnv(DirectRLEnv):
         x = wrap_to_pi(ee_frame_orient[0])
         y = wrap_to_pi(ee_frame_orient[1])
         orient_reward = torch.where(
+            (torch.abs(x) < math.pi/8) 
+            | (torch.abs(y) < math.pi/8),
+            0.25*self.cfg.orient_reward["weight"],
+            0.0
+        )
+        orient_reward = torch.where(
             (torch.abs(x) < math.pi/10) 
             | (torch.abs(y) < math.pi/10),
             1.0*self.cfg.orient_reward["weight"],
-            0.0
+            orient_reward
         )
 
         ee_goal_distance = torch.norm(ee_frame_pos - self._goal_pos_w, dim=1)
@@ -659,40 +701,6 @@ class BallRollingEnv(DirectRLEnv):
             self.visualizers["Metrics"].terms["obj_ee_distance"] = object_ee_distance.reshape(-1,1)
             self.visualizers["Metrics"].terms["obj_goal_distance"] = obj_goal_distance
         return rewards
-
-    #MARK: reset
-    def _reset_idx(self, env_ids: torch.Tensor | None):
-        super()._reset_idx(env_ids)
-
-        # reset to intial positions, if not successful
-        #env_ids = (self.reset_buf & torch.logical_not(self.success_env)).nonzero(as_tuple=False).squeeze(-1)
-        env_ids = env_ids
-        
-        # spawn obj at initial position
-        obj_pos = self.object.data.default_root_state[env_ids] 
-        obj_pos[:, :3] += self.scene.env_origins[env_ids]
-        self.object.write_root_state_to_sim(obj_pos, env_ids=env_ids)
-
-        # reset robot state
-        joint_pos = self._robot.data.default_joint_pos[env_ids]
-        # randomize joints 3 and 4 a little bit
-        # joint_pos[:, 2:4] += sample_uniform(-0.0015, 0.0015, (len(env_ids), 2), self.device) 
-        joint_vel = torch.zeros_like(joint_pos)
-        self._robot.set_joint_position_target(joint_pos, env_ids=env_ids)
-        self._robot.write_joint_state_to_sim(joint_pos, joint_vel, env_ids=env_ids)
-
-        # set commands: random target position 
-        self._goal_pos_w[env_ids, :2] = self.object.data.default_root_state[env_ids, :2] + self.scene.env_origins[env_ids, :2] + sample_uniform(
-            self.cfg.obj_pos_randomization_range[0], 
-            self.cfg.obj_pos_randomization_range[1],
-            (len(env_ids), 2), 
-            self.device
-        )
-
-        self.prev_actions[env_ids] = 0.0
-
-        # reset sensors
-        self.gsmini.reset(env_ids=env_ids)
 
     #MARK: observations
     def _get_observations(self) -> dict:
