@@ -633,22 +633,22 @@ class BallRollingEnv(DirectRLEnv):
         }
 
         if self.cfg.debug_vis:
-            self.visualizers["Rewards"].terms["rewards"][:, 0] = at_obj_reward[self.visualizers._env_idx]
-            self.visualizers["Rewards"].terms["rewards"][:, 1] = off_the_ground_penalty[self.visualizers._env_idx]
-            self.visualizers["Rewards"].terms["rewards"][:, 2] = height_reward[self.visualizers._env_idx]
-            self.visualizers["Rewards"].terms["rewards"][:, 3] = orient_reward[self.visualizers._env_idx]
-            self.visualizers["Rewards"].terms["rewards"][:, 4] = ee_goal_tracking_reward[self.visualizers._env_idx]
-            self.visualizers["Rewards"].terms["rewards"][:, 5] = obj_goal_tracking_reward[self.visualizers._env_idx]
-            self.visualizers["Rewards"].terms["rewards"][:, 6] = obj_goal_fine_tracking_reward[self.visualizers._env_idx]
-            self.visualizers["Rewards"].terms["rewards"][:, 7] = obj_goal_super_fine_tracking_reward[self.visualizers._env_idx]
-            self.visualizers["Rewards"].terms["rewards"][:, 8] = success_reward[self.visualizers._env_idx]
-            self.visualizers["Rewards"].terms["rewards"][:, 9] = too_far_penalty[self.visualizers._env_idx]
-            self.visualizers["Rewards"].terms["rewards"][:, 10] = total_reward[self.visualizers._env_idx]
+            self.visualizers["Rewards"].terms["rewards"][:, 0] = at_obj_reward[self.visualizers["Rewards"]._env_idx]
+            self.visualizers["Rewards"].terms["rewards"][:, 1] = off_the_ground_penalty[self.visualizers["Rewards"]._env_idx]
+            self.visualizers["Rewards"].terms["rewards"][:, 2] = height_reward[self.visualizers["Rewards"]._env_idx]
+            self.visualizers["Rewards"].terms["rewards"][:, 3] = orient_reward[self.visualizers["Rewards"]._env_idx]
+            self.visualizers["Rewards"].terms["rewards"][:, 4] = ee_goal_tracking_reward[self.visualizers["Rewards"]._env_idx]
+            self.visualizers["Rewards"].terms["rewards"][:, 5] = obj_goal_tracking_reward[self.visualizers["Rewards"]._env_idx]
+            self.visualizers["Rewards"].terms["rewards"][:, 6] = obj_goal_fine_tracking_reward[self.visualizers["Rewards"]._env_idx]
+            self.visualizers["Rewards"].terms["rewards"][:, 7] = obj_goal_super_fine_tracking_reward[self.visualizers["Rewards"]._env_idx]
+            self.visualizers["Rewards"].terms["rewards"][:, 8] = success_reward[self.visualizers["Rewards"]._env_idx]
+            self.visualizers["Rewards"].terms["rewards"][:, 9] = too_far_penalty[self.visualizers["Rewards"]._env_idx]
+            self.visualizers["Rewards"].terms["rewards"][:, 10] = total_reward[self.visualizers["Rewards"]._env_idx]
 
-            self.visualizers["Metrics"].terms["ee_height"]  = ee_frame_pos_b[self.visualizers._env_idx, 2].reshape(-1,1)
-            self.visualizers["Metrics"].terms["ee_goal_distance"] = ee_goal_distance[self.visualizers._env_idx]
-            self.visualizers["Metrics"].terms["obj_ee_distance"] = object_ee_distance[self.visualizers._env_idx]
-            self.visualizers["Metrics"].terms["obj_goal_distance"] = obj_goal_distance[self.visualizers._env_idx]
+            self.visualizers["Metrics"].terms["ee_height"][:]  = ee_frame_pos_b[self.visualizers["Metrics"]._env_idx, 2].reshape(-1,1)
+            self.visualizers["Metrics"].terms["ee_goal_distance"][:] = ee_goal_distance[self.visualizers["Metrics"]._env_idx]
+            self.visualizers["Metrics"].terms["obj_ee_distance"][:] = object_ee_distance[self.visualizers["Metrics"]._env_idx]
+            self.visualizers["Metrics"].terms["obj_goal_distance"][:] = obj_goal_distance[self.visualizers["Metrics"]._env_idx]
         return total_reward
 
     #MARK: observations
@@ -705,12 +705,12 @@ class BallRollingEnv(DirectRLEnv):
 
         # self.visualizers["Actions"].terms["actions"][:] = self.actions[:]
         if self.cfg.debug_vis:
-            self.visualizers["Observations"].terms["ee_pos"] = ee_pos_curr_b[self.visualizers._env_idx, :3]
-            self.visualizers["Observations"].terms["ee_rot"][:, :1] = x[self.visualizers._env_idx]
-            self.visualizers["Observations"].terms["ee_rot"][:, 1:2] = y[self.visualizers._env_idx]
-            self.visualizers["Observations"].terms["ee_rot"][:, 2:3] = z[self.visualizers._env_idx]
-            self.visualizers["Observations"].terms["goal"] = self._goal_pos_b[self.visualizers._env_idx, :2]
-            self.visualizers["Observations"].terms["sensor_output"] = vision_obs[[self.visualizers._env_idx]].clone()
+            self.visualizers["Observations"].terms["ee_pos"] = ee_pos_curr_b[self.visualizers["Observations"]._env_idx, :3]
+            self.visualizers["Observations"].terms["ee_rot"][:, :1] = x[self.visualizers["Observations"]._env_idx]
+            self.visualizers["Observations"].terms["ee_rot"][:, 1:2] = y[self.visualizers["Observations"]._env_idx]
+            self.visualizers["Observations"].terms["ee_rot"][:, 2:3] = z[self.visualizers["Observations"]._env_idx]
+            self.visualizers["Observations"].terms["goal"] = self._goal_pos_b[self.visualizers["Observations"]._env_idx, :2]
+            self.visualizers["Observations"].terms["sensor_output"] = vision_obs[[self.visualizers["Observations"]._env_idx]].clone()
         return {"policy": obs}
 
     ####
