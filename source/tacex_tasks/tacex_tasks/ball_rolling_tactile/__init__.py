@@ -38,7 +38,7 @@ gym.register(
         "skrl_sac_cfg_entry_point": f"{agents.__name__}:skrl_sac_cfg.yaml",
     },
 )
-# isaaclab -p ./scripts/reinforcement_learning/skrl/train.py --task TacEx-Ball-Rolling-Tactile-Base-v1 --num_envs 1000 --enable_cameras
+# isaaclab -p ./scripts/reinforcement_learning/skrl/train.py --task TacEx-Ball-Rolling-Tactile-Base-v1 --num_envs 1024 --enable_cameras
 from .ball_rolling_base import BallRollingEnv, BallRollingEnvCfg # need to import BallRollingEnv here, otherwise class will not be detected for entry point
 gym.register(
     id="TacEx-Ball-Rolling-Tactile-Base-v1",
