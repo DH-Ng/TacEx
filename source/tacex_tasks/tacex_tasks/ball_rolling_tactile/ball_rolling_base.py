@@ -120,33 +120,24 @@ class BallRollingEnvCfg(DirectRLEnvCfg):
     robot: ArticulationCfg = FRANKA_PANDA_ARM_GSMINI_SINGLE_ADAPTER_HIGH_PD_CFG.replace(
         prim_path="/World/envs/env_.*/Robot",
         init_state=ArticulationCfg.InitialStateCfg(
+            # joint_pos={
+            #     "panda_joint1": -1.6945,
+            #     "panda_joint2": -1.56,
+            #     "panda_joint3": 1.778,
+            #     "panda_joint4": -2.29,
+            #     "panda_joint5": 1.71,
+            #     "panda_joint6": 1.79,
+            #     "panda_joint7": 1.59,
+            # },
             joint_pos={
-                "panda_joint1": -1.6945,
-                "panda_joint2": -1.56,
-                "panda_joint3": 1.778,
-                "panda_joint4": -2.29,
-                "panda_joint5": 1.71,
-                "panda_joint6": 1.79,
+                "panda_joint1": 1.40,
+                "panda_joint2": 1.56,
+                "panda_joint3": -1.3775,
+                "panda_joint4": -2.275,
+                "panda_joint5": 1.74,
+                "panda_joint6": 1.71,
                 "panda_joint7": 1.59,
             },
-            # joint_pos={
-            #     "panda_joint1": 0.0,
-            #     "panda_joint2": 0.44,
-            #     "panda_joint3": 0.0,
-            #     "panda_joint4": -2.38,
-            #     "panda_joint5": 0.0,
-            #     "panda_joint6": 2.82,
-            #     "panda_joint7": 0.741,
-            # },
-            # joint_pos={
-            #     "panda_joint1": 1.7708,
-            #     "panda_joint2": -1.4164,
-            #     "panda_joint3": -1.8159,
-            #     "panda_joint4": -2.2501,
-            #     "panda_joint5": -1.6057,
-            #     "panda_joint6": 1.8573,
-            #     "panda_joint7": 1.6513,
-            # },
         ),
     )
 
@@ -245,7 +236,7 @@ class BallRollingEnvCfg(DirectRLEnvCfg):
         "at_obj_reward": {"weight": 0.05, "minimal_distance": 0.0085},
         "off_the_ground_penalty": {"weight": -15, "max_height": 0.025},
         "height_reward": {"weight": 0.0, "w": 10.0, "v": 0.3, "alpha": 0.00067, "target_height_cm": 1.225, "min_height": 0.002},
-        "orient_reward": {"weight": -0.75},
+        "orient_reward": {"weight": -0.5},
         # for solving the task
         "ee_goal_tracking": {"weight": 0.75, "std": 0.2, "std_fine": 0.36},
         "obj_goal_tracking": {"weight": -0.0108, "w": 0.0482, "v": 0.7870, "alpha": 0.0083},
@@ -258,7 +249,8 @@ class BallRollingEnvCfg(DirectRLEnvCfg):
         "joint_vel_penalty": {"weight": -1e-4},
     }
 
-    goal_randomization_range = [-0.2, 0.2]
+    goal_randomization_range_x = [-0.25, 0.25]
+    goal_randomization_range_y = [-0.35, 0.35]
 
     # env
     episode_length_s = 8.3333*2 # 1000 timesteps per goal (dt = 1/60 -> 8.3333/(1/60) = 500)
@@ -272,8 +264,8 @@ class BallRollingEnvCfg(DirectRLEnvCfg):
 
     ball_radius = 0.005 # don't change, because rewards (e.g. height reward) are tuned for this ball size 
 
-    x_bounds = (0.2, 0.75)
-    y_bounds = (-0.375, 0.375)
+    x_bounds = (0.1, 0.7)
+    y_bounds = (-0.4, 0.4)
     too_far_away_threshold = 0.02 
     min_height_threshold = 0.002
 
@@ -281,20 +273,20 @@ class BallRollingEnvCfg(DirectRLEnvCfg):
         "goal_randomization_range": {
             "min": 0, 
             "max": 0.05, 
-            "num_levels": 15, 
-            "threshold": 5000.0, # if reward is this high, then change level
+            "num_levels": 10, 
+            "threshold": 550.0, # if episode reward is this high, then go to next level
         },
         "action_rate_penalty": {
             "min": 0, 
             "max": 1e-2, 
             "num_levels": 30, 
-            "threshold": 5000.0, # 
+            "threshold": 550.0, # 
         },
         "joint_vel_penalty": {
             "min": 0, 
             "max": 1e-2, 
             "num_levels": 30, 
-            "threshold": 5000.0, # 
+            "threshold": 550.0, # 
         }
     }
 
@@ -478,6 +470,7 @@ class BallRollingEnv(DirectRLEnv):
             init_state=RigidObjectCfg.InitialStateCfg(pos=[0.5, 0, 0]),
             spawn=sim_utils.UsdFileCfg(
                 usd_path=f"{TACEX_ASSETS_DATA_DIR}/Props/plate.usd",
+                scale=(0.6, 0.8, 1),
                 rigid_props=RigidBodyPropertiesCfg(
                     solver_position_iteration_count=16,
                     solver_velocity_iteration_count=1,
@@ -610,10 +603,17 @@ class BallRollingEnv(DirectRLEnv):
         self._robot.write_joint_state_to_sim(joint_pos, joint_vel, env_ids=env_ids)
 
         # set commands: random target position 
-        self._goal_pos_b[env_ids, :2] = self.object.data.default_root_state[env_ids, :2] + sample_uniform(
-            self.cfg.goal_randomization_range[0] - self._goal_random_curr[self.curriculum_levels["goal_randomization_range"]], 
-            self.cfg.goal_randomization_range[1] + self._goal_random_curr[self.curriculum_levels["goal_randomization_range"]],
-            (len(env_ids), 2), 
+        self._goal_pos_b[env_ids, :2] = self.object.data.default_root_state[env_ids, :2] 
+        self._goal_pos_b[env_ids, 0] += sample_uniform(
+            self.cfg.goal_randomization_range_x[0] - self._goal_random_curr[self.curriculum_levels["goal_randomization_range"]], 
+            self.cfg.goal_randomization_range_x[1] + self._goal_random_curr[self.curriculum_levels["goal_randomization_range"]],
+            (len(env_ids)), 
+            self.device
+        )
+        self._goal_pos_b[env_ids, 1] += sample_uniform(
+            self.cfg.goal_randomization_range_y[0] - self._goal_random_curr[self.curriculum_levels["goal_randomization_range"]], 
+            self.cfg.goal_randomization_range_y[1] + self._goal_random_curr[self.curriculum_levels["goal_randomization_range"]],
+            (len(env_ids)), 
             self.device
         )
 
@@ -629,7 +629,7 @@ class BallRollingEnv(DirectRLEnv):
         #- Reward the agent for reaching the object using tanh-kernel.
         obj_pos_b = self.object.data.root_link_pos_w - self.scene.env_origins
         ee_frame_pos_b, ee_frame_orient_b = self._compute_frame_pose()
-        
+
         (
             self.object_ee_distance,
             self.ee_goal_distance,
@@ -711,17 +711,17 @@ class BallRollingEnv(DirectRLEnv):
         # training curriculum
         if (self._total_episode_rew.mean() > self.cfg.curriculum_cfg["goal_randomization_range"]["threshold"]) and (self.curriculum_levels["goal_randomization_range"] < self.cfg.curriculum_cfg["goal_randomization_range"]["num_levels"]-1):
             self.curriculum_levels["goal_randomization_range"] += 1
-        elif (self._total_episode_rew.mean() < self.cfg.curriculum_cfg["goal_randomization_range"]["threshold"]*0.75) and (self.curriculum_levels["goal_randomization_range"] > 0):
+        elif (self._total_episode_rew.mean() < self.cfg.curriculum_cfg["goal_randomization_range"]["threshold"]*0.90) and (self.curriculum_levels["goal_randomization_range"] > 0):
             self.curriculum_levels["goal_randomization_range"] -= 1
 
         if (self._total_episode_rew.mean() > self.cfg.curriculum_cfg["action_rate_penalty"]["threshold"]) and (self.curriculum_levels["action_rate_penalty"] < self.cfg.curriculum_cfg["action_rate_penalty"]["num_levels"]-1):
             self.curriculum_levels["action_rate_penalty"] += 1
-        elif (self._total_episode_rew.mean() < self.cfg.curriculum_cfg["action_rate_penalty"]["threshold"]*0.75) and (self.curriculum_levels["action_rate_penalty"] > 0):
+        elif (self._total_episode_rew.mean() < self.cfg.curriculum_cfg["action_rate_penalty"]["threshold"]*0.90) and (self.curriculum_levels["action_rate_penalty"] > 0):
             self.curriculum_levels["action_rate_penalty"] -= 1
 
         if (self._total_episode_rew.mean() > self.cfg.curriculum_cfg["joint_vel_penalty"]["threshold"]) and (self.curriculum_levels["joint_vel_penalty"] < self.cfg.curriculum_cfg["joint_vel_penalty"]["num_levels"]-1):
             self.curriculum_levels["joint_vel_penalty"] += 1
-        elif (self._total_episode_rew.mean() < self.cfg.curriculum_cfg["joint_vel_penalty"]["threshold"]*0.75) and (self.curriculum_levels["joint_vel_penalty"] > 0):
+        elif (self._total_episode_rew.mean() < self.cfg.curriculum_cfg["joint_vel_penalty"]["threshold"]*0.90) and (self.curriculum_levels["joint_vel_penalty"] > 0):
             self.curriculum_levels["joint_vel_penalty"] -= 1
 
         self.cfg.reward_cfg["action_rate_penalty"]["weight"] -= self._action_rate_penalty_curr[self.curriculum_levels["action_rate_penalty"]]
