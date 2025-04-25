@@ -242,15 +242,15 @@ class BallRollingEnvCfg(DirectRLEnvCfg):
 
     #MARK: reward cfg
     reward_cfg = {
-        "at_obj_reward": {"weight": 1.0, "minimal_distance": 0.0085},
+        "at_obj_reward": {"weight": 0.05, "minimal_distance": 0.0085},
         "off_the_ground_penalty": {"weight": -15, "max_height": 0.025},
         "height_reward": {"weight": 0.0, "w": 10.0, "v": 0.3, "alpha": 0.00067, "target_height_cm": 1.225, "min_height": 0.002},
-        "orient_reward": {"weight": -0.5},
+        "orient_reward": {"weight": -0.75},
         # for solving the task
-        "ee_goal_tracking": {"weight": 1.75, "std": 2.5, "std_fine": 0.36},
+        "ee_goal_tracking": {"weight": 0.75, "std": 0.2, "std_fine": 0.36},
         "obj_goal_tracking": {"weight": -0.0108, "w": 0.0482, "v": 0.7870, "alpha": 0.0083},
-        "obj_goal_fine_tracking": {"weight": 5.25, "std": 0.6661},
-        "obj_goal_super_fine_tracking": {"weight": 10.5, "std": 2.0373},
+        "obj_goal_fine_tracking": {"weight": 0.5, "std": 0.6661},
+        "obj_goal_super_fine_tracking": {"weight": 1.25, "std": 2.0373},
         "success_reward": {"weight": 5.0, "threshold": 0.005}, # 0.0025 we count it as a sucess when dist obj <-> goal is less than the threshold
         "too_far_penalty": {"weight": -0.0, "threshold": 0.0175}, 
         # penalties for nice behavior
@@ -593,8 +593,8 @@ class BallRollingEnv(DirectRLEnv):
         # spawn obj at initial position
         obj_pos = self.object.data.default_root_state[env_ids] 
         obj_pos[:, :2] += sample_uniform(
-            -0.0005, 
-            0.0005,
+            -0.00025, 
+            0.00025,
             (len(env_ids), 2), 
             self.device
         )
@@ -930,7 +930,7 @@ def _compute_intermediate_values(
     obj_pos_b[:, 2] += 0.005  # ball has diameter of 1cm -> r=0.005m, plate height (above ground)=0.0025
     object_ee_distance = torch.norm(obj_pos_b - ee_frame_pos_b, dim=1)
     
-    ee_goal_distance = torch.norm(ee_frame_pos_b - goal_pos_b, dim=1)
+    ee_goal_distance = torch.norm(ee_frame_pos_b[:, :2] - goal_pos_b[:, :2], dim=1)
     ee_orient_error = quat_error_magnitude(ee_frame_orient_b, goal_orient_b)
 
         
@@ -1013,10 +1013,11 @@ def _compute_rewards(
     # ee_goal_tracking_reward = ee_goal_tracking_reward.clamp(-10, 0)
     
     ee_goal_tracking_reward = (
-        2 - torch.tanh((ee_goal_distance*10.0) / ee_goal_tracking_cfg["std"])
-        - torch.tanh((ee_goal_distance*10.0) / ee_goal_tracking_cfg["std_fine"])
+        1 - torch.tanh((ee_goal_distance) / ee_goal_tracking_cfg["std"])
+        #- torch.tanh(ee_goal_distance / ee_goal_tracking_cfg["std_fine"])
     )
     ee_goal_tracking_reward *= ee_goal_tracking_cfg["weight"]
+    #ee_goal_tracking_reward -= ee_goal_tracking_cfg["weight"]
 
     obj_goal_tracking_reward = (obj_goal_distance*100)**2 
     # obj_goal_tracking_reward = -(
