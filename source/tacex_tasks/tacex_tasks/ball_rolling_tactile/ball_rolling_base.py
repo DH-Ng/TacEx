@@ -236,11 +236,11 @@ class BallRollingEnvCfg(DirectRLEnvCfg):
         "at_obj_reward": {"weight": 0.05, "minimal_distance": 0.0085},
         "off_the_ground_penalty": {"weight": -15, "max_height": 0.025},
         "height_reward": {"weight": 0.0, "w": 10.0, "v": 0.3, "alpha": 0.00067, "target_height_cm": 1.225, "min_height": 0.002},
-        "orient_reward": {"weight": -0.5},
+        "orient_reward": {"weight": -0.35},
         # for solving the task
         "ee_goal_tracking": {"weight": 0.75, "std": 0.2, "std_fine": 0.36},
         "obj_goal_tracking": {"weight": -0.0108, "w": 0.0482, "v": 0.7870, "alpha": 0.0083},
-        "obj_goal_fine_tracking": {"weight": 0.5, "std": 0.6661},
+        "obj_goal_fine_tracking": {"weight": 1.5, "std": 0.9258},
         "obj_goal_super_fine_tracking": {"weight": 1.25, "std": 2.0373},
         "success_reward": {"weight": 5.0, "threshold": 0.005}, # 0.0025 we count it as a sucess when dist obj <-> goal is less than the threshold
         "too_far_penalty": {"weight": -0.0, "threshold": 0.0175}, 
@@ -249,11 +249,11 @@ class BallRollingEnvCfg(DirectRLEnvCfg):
         "joint_vel_penalty": {"weight": -1e-4},
     }
 
-    goal_randomization_range_x = [-0.25, 0.25]
-    goal_randomization_range_y = [-0.35, 0.35]
+    goal_randomization_range_x = [-0.2, 0.2] #[-0.25, 0.25]
+    goal_randomization_range_y = [-0.3, 0.3] #[-0.35, 0.35]
 
     # env
-    episode_length_s = 8.3333*2 # 1000 timesteps per goal (dt = 1/60 -> 8.3333/(1/60) = 500)
+    episode_length_s = 8.3333*3 # 1500 timesteps per episode (dt = 1/60 -> 1500*(1/60)=8.3333*3)
     action_space = 6 # we use relative task_space actions: (dx, dy, dz, droll, dpitch) -> dyaw is ommitted
     observation_space = {
         "proprio_obs": 14, #16, # 3 for ee pos, 2 for orient (roll, pitch), 2 for init goal-pos (x,y), 5 for actions
@@ -278,15 +278,15 @@ class BallRollingEnvCfg(DirectRLEnvCfg):
         },
         "action_rate_penalty": {
             "min": 0, 
-            "max": 1e-2, 
+            "max": 1e-4, 
             "num_levels": 30, 
-            "threshold": 550.0, # 
+            "threshold": 5500.0, # 
         },
         "joint_vel_penalty": {
             "min": 0, 
-            "max": 1e-2, 
+            "max": 1e-4, 
             "num_levels": 30, 
-            "threshold": 550.0, # 
+            "threshold": 5500.0, # 
         }
     }
 
@@ -1003,7 +1003,7 @@ def _compute_rewards(
     orient_reward = torch.where(
         (obj_goal_distance < success_reward_cfg["threshold"]) 
         & (object_ee_distance < at_obj_reward_cfg["minimal_distance"]),
-        ee_orient_error * orient_reward_cfg["weight"]*10, # especially when goal position is reached
+        ee_orient_error * orient_reward_cfg["weight"]*1.5, # especially when goal position is reached
         ee_orient_error * orient_reward_cfg["weight"]
     )
 
@@ -1019,7 +1019,7 @@ def _compute_rewards(
     ee_goal_tracking_reward *= ee_goal_tracking_cfg["weight"]
     #ee_goal_tracking_reward -= ee_goal_tracking_cfg["weight"]
 
-    obj_goal_tracking_reward = (obj_goal_distance*100)**2 
+    obj_goal_tracking_reward = (obj_goal_distance)**2 
     # obj_goal_tracking_reward = -(
     #     obj_goal_tracking_cfg["w"]*(obj_goal_distance*10.0)**2 #[dm]
     #     + obj_goal_tracking_cfg["v"]*torch.log((obj_goal_distance*10.0)**2 + obj_goal_tracking_cfg["alpha"])
