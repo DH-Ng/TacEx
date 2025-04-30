@@ -239,7 +239,8 @@ class BallRollingEnvCfg(DirectRLEnvCfg):
         "orient_reward": {"weight": -0.35},
         # for solving the task
         "ee_goal_tracking": {"weight": 0.75, "std": 0.2, "std_fine": 0.36},
-        "obj_goal_tracking": {"weight": -0.0108, "w": 0.0482, "v": 0.7870, "alpha": 0.0083},
+        "obj_goal_tracking": {"weight": 0.75, "std": 0.2},
+        # "obj_goal_tracking": {"weight": -0.0108, "w": 0.0482, "v": 0.7870, "alpha": 0.0083},
         "obj_goal_fine_tracking": {"weight": 1.5, "std": 0.9258},
         "obj_goal_super_fine_tracking": {"weight": 1.25, "std": 2.0373},
         "success_reward": {"weight": 5.0, "threshold": 0.005}, # 0.0025 we count it as a sucess when dist obj <-> goal is less than the threshold
@@ -1019,11 +1020,10 @@ def _compute_rewards(
     ee_goal_tracking_reward *= ee_goal_tracking_cfg["weight"]
     #ee_goal_tracking_reward -= ee_goal_tracking_cfg["weight"]
 
-    obj_goal_tracking_reward = (obj_goal_distance)**2 
-    # obj_goal_tracking_reward = -(
-    #     obj_goal_tracking_cfg["w"]*(obj_goal_distance*10.0)**2 #[dm]
-    #     + obj_goal_tracking_cfg["v"]*torch.log((obj_goal_distance*10.0)**2 + obj_goal_tracking_cfg["alpha"])
-    # ).clamp(-5.0, 10.0)
+    # obj_goal_tracking_reward = (obj_goal_distance)**2 
+    obj_goal_tracking_reward = (
+        1 - torch.tanh((obj_goal_distance) / obj_goal_tracking_cfg["std"])
+    )
     obj_goal_tracking_reward *= obj_goal_tracking_cfg["weight"]
     
     obj_goal_fine_tracking_reward = 1 - torch.tanh((obj_goal_distance*10.0) / obj_goal_fine_tracking_cfg["std"]) #[dm]
@@ -1050,8 +1050,8 @@ def _compute_rewards(
         + off_the_ground_penalty
         # + height_reward
         + orient_reward
-        + ee_goal_tracking_reward
-        # + obj_goal_tracking_reward
+        # + ee_goal_tracking_reward
+        + obj_goal_tracking_reward
         + obj_goal_fine_tracking_reward
         + obj_goal_super_fine_tracking_reward
         + success_reward
