@@ -286,7 +286,7 @@ class GelSightSensor(SensorBase):
         # create buffers for output
         if "camera_depth" in self._data.output.keys():
             self._data.output["camera_depth"] = torch.zeros(
-                (self._num_envs, 1, self.camera_resolution[0], self.camera_resolution[1]), 
+                (self._num_envs, 1, self.camera_resolution[1], self.camera_resolution[0]), 
                 device=self.cfg.device
             )
 
@@ -517,7 +517,7 @@ class GelSightSensor(SensorBase):
             # clip camera values that are = inf
             depth_output[torch.isinf(depth_output)] = self.cfg.sensor_camera_cfg.clipping_range[1]
 
-            self._data.output["camera_depth"] = depth_output.reshape((self._num_envs, 1, self.camera_resolution[0], self.camera_resolution[1])) # add a channel to the depth image for debug_vis
+            self._data.output["camera_depth"] = depth_output.reshape((self._num_envs, 1, self.camera_resolution[1], self.camera_resolution[0])) # add a channel to the depth image for debug_vis
             self._data.output["camera_depth"]*=1000.0
 
             # normalize the depth image
@@ -525,7 +525,7 @@ class GelSightSensor(SensorBase):
             normalized -= self.cfg.sensor_camera_cfg.clipping_range[0]*1000
             normalized /= self.cfg.sensor_camera_cfg.clipping_range[1]*1000
             normalized = (normalized*255).type(dtype=torch.uint8)
-            self._data.output["camera_depth"] = normalized.reshape((self._num_envs, 1, self.camera_resolution[0], self.camera_resolution[1])) # add a channel to the depth image for debug_vis
+            self._data.output["camera_depth"] = normalized.reshape((self._num_envs, 1, self.camera_resolution[1], self.camera_resolution[0])) # add a channel to the depth image for debug_vis
 
             return self._data.output["camera_depth"]
 
