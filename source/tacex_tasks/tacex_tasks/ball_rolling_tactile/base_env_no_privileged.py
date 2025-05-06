@@ -134,6 +134,7 @@ class BallRollingEnvNoPrivilegedCfg(BallRollingEnvCfg):
                 "panda_joint6": 2.82,
                 "panda_joint7": 0.741,
             },
+            
             # joint_pos={
             #     "panda_joint1": 1.7708,
             #     "panda_joint2": -1.4164,

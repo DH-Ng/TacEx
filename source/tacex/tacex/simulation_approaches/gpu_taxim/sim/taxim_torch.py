@@ -70,8 +70,9 @@ class TaximTorch(torch.nn.Module, TaximImpl[torch.Tensor, torch.device]):
             self._gel_map_shift = gel_map.max().item()
             self._gel_map = gel_map - self._gel_map_shift
 
-            data_file = np.load(str(calib_folder / "dataPack.npz"), allow_pickle=True)
-            f0 = self._bgr_to_rgb(self._np_img_to_torch(data_file["f0"] / 255))
+            #data_file = np.load(str(calib_folder / "dataPack.npz"), allow_pickle=True)
+            #f0 = self._bgr_to_rgb(self._np_img_to_torch(data_file["f0"] / 255))
+            f0 = self._bgr_to_rgb(self._np_img_to_torch(cv2.imread(str(calib_folder / "0.png")) / 255))
             self._bg_proc = self._process_initial_frame(f0)
 
             # Shadow calibration
@@ -117,7 +118,7 @@ class TaximTorch(torch.nn.Module, TaximImpl[torch.Tensor, torch.device]):
                      orig_hm_fmt: bool = False) -> ArrayType:
         with torch.no_grad():
             batch_shape = height_map.shape[:-2]
-            height_map = height_map.reshape((-1,) + height_map.shape[-2:])
+            # height_map = height_map.reshape((-1,) + height_map.shape[-2:])
 
             if orig_hm_fmt:
                 height_map = self._gel_map_shift - height_map

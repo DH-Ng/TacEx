@@ -47,7 +47,7 @@ class TaximSimulator(GelSightSimulator):
         """
     
         self.tactile_rgb_img = self._taxim.render(
-            torch.zeros((self._num_envs, self.cfg.tactile_img_res[0], self.cfg.tactile_img_res[1]),device=self._device),
+            torch.zeros((self._num_envs, self.cfg.tactile_img_res[1], self.cfg.tactile_img_res[0]),device=self._device),
             with_shadow=self.cfg.with_shadow,
             press_depth=self._indentation_depth,
             orig_hm_fmt=False,
@@ -58,20 +58,21 @@ class TaximSimulator(GelSightSimulator):
     def optical_simulation(self):
         height_map = self.sensor._data.output["height_map"]
         # up/downscale height map if camera res different than tactile img res
-        if height_map.shape != self.cfg.tactile_img_res:
-            height_map = F.resize(height_map, self.cfg.tactile_img_res)
+        if height_map.shape != (self.cfg.tactile_img_res[1], self.cfg.tactile_img_res[0]):
+            height_map = F.resize(height_map, (self.cfg.tactile_img_res[1], self.cfg.tactile_img_res[0]))
 
         if self._device == "cpu":
             height_map = height_map.cpu()
         
         # only render img where indentation_depth > 0
         if height_map[self._indentation_depth > 0].shape[0] > 0:
-            self.tactile_rgb_img[self._indentation_depth > 0] = self._taxim.render(
+            self.tactile_rgb_img[self._indentation_depth > 0] = self._taxim.render_direct(
                 height_map[self._indentation_depth > 0],
                 with_shadow=self.cfg.with_shadow,
                 press_depth=self._indentation_depth[self._indentation_depth > 0],
                 orig_hm_fmt=False,
             )
+
         # use background img 
         self.tactile_rgb_img[self._indentation_depth <= 0] = self._taxim._bg_proc
         return self.tactile_rgb_img

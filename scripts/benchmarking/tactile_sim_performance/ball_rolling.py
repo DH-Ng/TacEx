@@ -11,7 +11,7 @@ from isaaclab.app import AppLauncher
 parser = argparse.ArgumentParser(description="Ball rolling experiment with a Franka, which is equipped with one GelSight Mini Sensor.")
 parser.add_argument("--num_envs", type=int, default=10, help="Number of environments to spawn.")
 parser.add_argument("--sys", type=bool, default=True, help="Whether to track system utilization.")
-parser.add_argument("--debug_vis", default=False, action="store_true", help="Whether to render tactile images in the# append AppLauncher cli args")
+parser.add_argument("--debug_vis", default=True, action="store_true", help="Whether to render tactile images in the# append AppLauncher cli args")
 AppLauncher.add_app_launcher_args(parser)
 # parse the arguments
 
@@ -196,12 +196,12 @@ class BallRollingEnvCfg(DirectRLEnvCfg):
         sensor_camera_cfg = GelSightMiniCfg.SensorCameraCfg(
             prim_path_appendix = "/Camera",
             update_period= 0,
-            resolution = (60,80), #(120, 160),
+            resolution = (48,64), #(120, 160),
             data_types = ["depth"],
             clipping_range = (0.024, 0.034),
         ),
         device = "cuda",
-        tactile_img_res = (480, 640),
+        tactile_img_res = (48, 64),
         debug_vis=True, # for being able to see sensor output in the gui
         # optical_sim_cfg=None,
         # update Taxim cfg
@@ -456,10 +456,6 @@ class BallRollingEnv(DirectRLEnv):
         self._robot.set_joint_position_target(joint_pos, env_ids=env_ids)
         self._robot.write_joint_state_to_sim(joint_pos, joint_vel, env_ids=env_ids)
         
-        # reset actions
-        self.actions[env_ids] = 0.0
-        self._ik_controller.reset(env_ids)
-
 
         # reset goal
         self.current_goal_idx = 0

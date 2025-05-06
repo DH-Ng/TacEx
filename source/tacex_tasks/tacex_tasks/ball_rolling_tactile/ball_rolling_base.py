@@ -44,7 +44,12 @@ from isaaclab.markers.visualization_markers import VisualizationMarkersCfg
 from isaaclab.controllers.differential_ik_cfg import DifferentialIKControllerCfg
 from isaaclab.controllers.differential_ik import DifferentialIKController
 import isaaclab.utils.math as math_utils
-from isaaclab.utils.noise import GaussianNoiseCfg, UniformNoiseCfg, NoiseModelCfg
+from isaaclab.utils.noise import GaussianNoiseCfg, UniformNoiseCfg, NoiseModelCfg, NoiseModelWithAdditiveBiasCfg, gaussian_noise
+
+# for Domain Randomization
+import isaaclab.envs.mdp as mdp
+from isaaclab.managers import EventTermCfg as EventTerm
+from isaaclab.managers import SceneEntityCfg
 
 # from tactile_sim import GsMiniSensorCfg, GsMiniSensor
 from tacex_assets import TACEX_ASSETS_DATA_DIR
@@ -53,6 +58,7 @@ from tacex_assets.sensors.gelsight_mini.gelsight_mini_cfg import GelSightMiniCfg
 
 from tacex import GelSightSensor
 from tacex.simulation_approaches.fots import FOTSMarkerSimulator, FOTSMarkerSimulatorCfg
+from tacex.simulation_approaches.gpu_taxim import TaximSimulatorCfg
 
 from tacex_tasks.utils import DirectLiveVisualizer
 
@@ -76,7 +82,76 @@ class CustomEnvWindow(BaseEnvWindow):
                     # add command manager visualization
                     self._create_debug_vis_ui_element("targets", self.env)
 
+@configclass
+class EventCfg:
+    robot_physics_material = EventTerm(
+        func=mdp.randomize_rigid_body_material,
+        mode="reset",
+        params={
+            "asset_cfg": SceneEntityCfg("robot", body_names=".*"),
+            "static_friction_range": (0.1, 1.3),
+            "dynamic_friction_range": (0.5, 1.0),
+            "restitution_range": (1.0, 1.0),
+            "num_buckets": 250,
+        },
+    )
+    # robot_joint_stiffness_and_damping = EventTerm(
+    #     func=mdp.randomize_actuator_gains,
+    #     mode="reset",
+    #     params={
+    #         "asset_cfg": SceneEntityCfg("robot", joint_names=".*"),
+    #         "stiffness_distribution_params": (0.75, 1.5),
+    #         "damping_distribution_params": (0.3, 3.0),
+    #         "operation": "scale",
+    #         "distribution": "log_uniform",
+    #     },
+    # )
+    reset_gravity = EventTerm(
+        func=mdp.randomize_physics_scene_gravity,
+        mode="interval",
+        is_global_time=True,
+        interval_range_s=(36.0, 36.0),  # time_s = num_steps * (decimation * dt)
+        params={
+            "gravity_distribution_params": ([0.0, 0.0, 0.0], [0.0, 0.0, 0.4]),
+            "operation": "add",
+            "distribution": "gaussian",
+        },
+    )
 
+    # ball properties
+    ball_physics_material = EventTerm(
+        func=mdp.randomize_rigid_body_material,
+        mode="reset",
+        params={
+            "asset_cfg": SceneEntityCfg("object"),
+            "static_friction_range": (0.4, 2.3),
+            "dynamic_friction_range": (0.25, 1.0),
+            "restitution_range": (1.0, 1.0),
+            "num_buckets": 250,
+        },
+    )
+    ball_add_base_mass = EventTerm(
+        func=mdp.randomize_rigid_body_mass,
+        mode="reset",
+        params={
+            "asset_cfg": SceneEntityCfg("object"),
+            "mass_distribution_params": (-0.01, 0.01),
+            "operation": "add",
+        },
+    )
+
+    # friction of plate where ball rolls
+    plate_physics_material = EventTerm(
+        func=mdp.randomize_rigid_body_material,
+        mode="reset",
+        params={
+            "asset_cfg": SceneEntityCfg("plate"),
+            "static_friction_range": (0.50, 2.0),
+            "dynamic_friction_range": (0.25, 1.0),
+            "restitution_range": (1.0, 1.0),
+            "num_buckets": 250,
+        },
+    )
 @configclass
 class BallRollingEnvCfg(DirectRLEnvCfg):
 
@@ -92,6 +167,8 @@ class BallRollingEnvCfg(DirectRLEnvCfg):
     debug_vis = True
 
     ui_window_class_type = CustomEnvWindow
+
+    events: EventCfg = EventCfg()
 
     decimation = 1
     # simulation
@@ -130,19 +207,46 @@ class BallRollingEnvCfg(DirectRLEnvCfg):
             #     "panda_joint7": 1.59,
             # },
             joint_pos={
-                "panda_joint1": 1.40,
-                "panda_joint2": 1.56,
-                "panda_joint3": -1.3775,
-                "panda_joint4": -2.275,
-                "panda_joint5": 1.74,
-                "panda_joint6": 1.71,
-                "panda_joint7": 1.59,
+                "panda_joint1": 0.0,
+                "panda_joint2": 0.43,
+                "panda_joint3": 0.0,
+                "panda_joint4": -2.37,
+                "panda_joint5": 0.0,
+                "panda_joint6": 2.79,
+                "panda_joint7": 0.741,
             },
+            # joint_pos={
+            #     "panda_joint1": 1.40,
+            #     "panda_joint2": 1.56,
+            #     "panda_joint3": -1.3775,
+            #     "panda_joint4": -2.275,
+            #     "panda_joint5": 1.74,
+            #     "panda_joint6": 1.71,
+            #     "panda_joint7": 1.59,
+            # },
         ),
     )
 
     ik_controller_cfg = DifferentialIKControllerCfg(command_type="pose", use_relative_mode=True, ik_method="dls")
 
+    # plate
+    plate: RigidObjectCfg = RigidObjectCfg(
+        prim_path="/World/envs/env_.*/ground_plate",
+        init_state=RigidObjectCfg.InitialStateCfg(pos=(0.5, 0, 0)),
+        spawn=sim_utils.UsdFileCfg(
+            usd_path=f"{TACEX_ASSETS_DATA_DIR}/Props/plate.usd",
+            scale=(0.6, 0.8, 1),
+            rigid_props=RigidBodyPropertiesCfg(
+                solver_position_iteration_count=16,
+                solver_velocity_iteration_count=1,
+                max_angular_velocity=1000.0,
+                max_linear_velocity=1000.0,
+                max_depenetration_velocity=5.0,
+                kinematic_enabled=True
+            )
+        )
+    )
+    
     marker_cfg = FRAME_MARKER_CFG.copy()
     marker_cfg.markers["frame"].scale = (0.01, 0.01, 0.01)
     marker_cfg.prim_path = "/Visuals/FrameTransformer"
@@ -164,8 +268,9 @@ class BallRollingEnvCfg(DirectRLEnvCfg):
     )
     
     # rigid body ball
-    ball: RigidObjectCfg = RigidObjectCfg(
+    object: RigidObjectCfg = RigidObjectCfg(
         prim_path= "/World/envs/env_.*/rigid_ball",
+        init_state=RigidObjectCfg.InitialStateCfg(pos=(0.5, 0, 0.0051+0.0025)),
         spawn=sim_utils.UsdFileCfg(
             usd_path=f"{TACEX_ASSETS_DATA_DIR}/Props/ball_wood.usd", 
             #scale=(2, 1, 0.6),
@@ -178,7 +283,6 @@ class BallRollingEnvCfg(DirectRLEnvCfg):
                     disable_gravity=False,
             ),
         ),
-        init_state=RigidObjectCfg.InitialStateCfg(pos=(0.5, 0, 0.0051+0.0025)),
     )
 
     # sensors
@@ -187,15 +291,22 @@ class BallRollingEnvCfg(DirectRLEnvCfg):
         sensor_camera_cfg = GelSightMiniCfg.SensorCameraCfg(
             prim_path_appendix = "/Camera",
             update_period= 0,
-            resolution = (32,32), #(120, 160),
+            resolution = (48, 64),
             data_types = ["depth"],
-            clipping_range = (0.024, 0.034),
+            clipping_range = (0.024, 0.029),
         ),
         device = "cuda",
-        tactile_img_res = (480, 640),
+        tactile_img_res = (48, 64),
         debug_vis=True, # for being able to see sensor output in the gui
         # update Taxim cfg
         optical_sim_cfg=None,
+        # optical_sim_cfg=TaximSimulatorCfg(
+        #     calib_folder_path= f"{TACEX_ASSETS_DATA_DIR}/Sensors/GelSight_Mini/calibs/480x640",
+        #     gelpad_height= GelSightMiniCfg.gelpad_dimensions.height,
+        #     gelpad_to_camera_min_distance= 0.024,
+        #     with_shadow=False,
+        #     device = "cuda",
+        # ),
 
         # update FOTS cfg
         marker_motion_sim_cfg=None,
@@ -222,14 +333,21 @@ class BallRollingEnvCfg(DirectRLEnvCfg):
         #         debug_vis=False,
         #     )
         # ),
-        data_types=["height_map"], #marker_motion
+        data_types=["camera_depth"], #marker_motion
     )
 
     # noise models
-    action_noise_model = NoiseModelCfg(
+    action_noise_model: NoiseModelCfg = NoiseModelCfg(
         noise_cfg = UniformNoiseCfg(n_min=-0.001, n_max=0.001, operation="add")
     )
     # observation_noise_model = 
+    # at every time-step add gaussian noise + bias. The bias is a gaussian sampled at reset
+    # observation_noise_model: NoiseModelWithAdditiveBiasCfg = NoiseModelWithAdditiveBiasCfg(
+    #   noise_cfg=GaussianNoiseCfg(mean=0.0, std=0.002, operation="add"),
+    #   bias_noise_cfg=GaussianNoiseCfg(mean=0.0, std=0.0001, operation="abs"),
+    # )
+    #-- curently doesnt work with dictionary observation
+    gaussian_noise_cfg: GaussianNoiseCfg = GaussianNoiseCfg(mean=0.0, std=0.002, operation="add")
 
     #MARK: reward cfg
     reward_cfg = {
@@ -258,7 +376,7 @@ class BallRollingEnvCfg(DirectRLEnvCfg):
     action_space = 6 # we use relative task_space actions: (dx, dy, dz, droll, dpitch) -> dyaw is ommitted
     observation_space = {
         "proprio_obs": 14, #16, # 3 for ee pos, 2 for orient (roll, pitch), 2 for init goal-pos (x,y), 5 for actions
-        "vision_obs": [32,32,1], # from tactile sensor
+        "vision_obs": [48,64,1], # from tactile sensor
     }
     state_space = 0
     action_scale = 0.05 # [cm]
@@ -279,13 +397,13 @@ class BallRollingEnvCfg(DirectRLEnvCfg):
         },
         "action_rate_penalty": {
             "min": 0, 
-            "max": 1e-4, 
+            "max": 1e-5, 
             "num_levels": 30, 
             "threshold": 5500.0, # 
         },
         "joint_vel_penalty": {
             "min": 0, 
-            "max": 1e-4, 
+            "max": 1e-5, 
             "num_levels": 30, 
             "threshold": 5500.0, # 
         }
@@ -427,16 +545,17 @@ class BallRollingEnv(DirectRLEnv):
         # add handle for debug visualization (this is set to a valid handle inside set_debug_vis)
         self.set_debug_vis(self.cfg.debug_vis)
 
+    #MARK: setup
     def _setup_scene(self):
         self._robot = Articulation(self.cfg.robot)
         self.scene.articulations["robot"] = self._robot
 
-        self.object = RigidObject(self.cfg.ball)
+        self.object = RigidObject(self.cfg.object)
         self.scene.rigid_objects["object"] = self.object
 
-        # clone, filter, and replicate
-        self.scene.clone_environments(copy_from_source=False)
-        
+        plate = RigidObject(self.cfg.plate)
+        self.scene.rigid_objects["plate"] = plate
+
         # sensors
         self._ee_frame = FrameTransformer(self.cfg.ee_frame_cfg)
         self.scene.sensors["ee_frame"] = self._ee_frame
@@ -444,6 +563,9 @@ class BallRollingEnv(DirectRLEnv):
         self.gsmini = GelSightSensor(self.cfg.gsmini)
         self.scene.sensors["gsmini"] = self.gsmini
 
+        # clone, filter, and replicate
+        self.scene.clone_environments(copy_from_source=False)
+        
         # Ground-plane
         ground = AssetBaseCfg(
             prim_path="/World/defaultGroundPlane",
@@ -462,30 +584,6 @@ class BallRollingEnv(DirectRLEnv):
             ground.prim_path,
             ground.spawn,
             translation=ground.init_state.pos,
-            orientation=ground.init_state.rot
-        )
-
-        # plate
-        plate = RigidObjectCfg(
-            prim_path="/World/envs/env_.*/plate",
-            init_state=RigidObjectCfg.InitialStateCfg(pos=[0.5, 0, 0]),
-            spawn=sim_utils.UsdFileCfg(
-                usd_path=f"{TACEX_ASSETS_DATA_DIR}/Props/plate.usd",
-                scale=(0.6, 0.8, 1),
-                rigid_props=RigidBodyPropertiesCfg(
-                    solver_position_iteration_count=16,
-                    solver_velocity_iteration_count=1,
-                    max_angular_velocity=1000.0,
-                    max_linear_velocity=1000.0,
-                    max_depenetration_velocity=5.0,
-                    kinematic_enabled=True
-                )
-            )
-        )
-        plate.spawn.func(
-            plate.prim_path,
-            plate.spawn,
-            translation=plate.init_state.pos,
             orientation=ground.init_state.rot
         )
 
@@ -774,15 +872,11 @@ class BallRollingEnv(DirectRLEnv):
             ),
             dim=-1,
         )
-        vision_obs = self.gsmini._data.output["height_map"]
-        
-        # normalize depth images
-        normalized = vision_obs.view(vision_obs.size(0), -1)
-        normalized -= 24.0
-        normalized /= 29.0
-        normalized = (normalized*255).type(dtype=torch.uint8)
-        vision_obs = normalized.reshape((self.num_envs, 32, 32, 1)) # add a channel to the depth image for debug_vis
+        # add noise to proprio_obs:
+        proprio_obs = gaussian_noise(proprio_obs, cfg=self.cfg.gaussian_noise_cfg)
 
+        vision_obs = self.gsmini._data.output["camera_depth"]
+        
         obs = {
             "proprio_obs": proprio_obs,
             "vision_obs": vision_obs
@@ -1001,17 +1095,26 @@ def _compute_rewards(
     height_reward *= height_reward_cfg["weight"]
     
     # ee should be upright
-    orient_reward = torch.where(
-        (obj_goal_distance < success_reward_cfg["threshold"]) 
-        & (object_ee_distance < at_obj_reward_cfg["minimal_distance"]),
-        ee_orient_error * orient_reward_cfg["weight"]*1.5, # especially when goal position is reached
-        ee_orient_error * orient_reward_cfg["weight"]
+    # orient_reward = torch.where(
+    #     (obj_goal_distance < success_reward_cfg["threshold"]) 
+    #     & (object_ee_distance < at_obj_reward_cfg["minimal_distance"]),
+    #     ee_orient_error * orient_reward_cfg["weight"]*1.5, # especially when goal position is reached
+    #     ee_orient_error * orient_reward_cfg["weight"]
+    # )
+    ee_frame_orient = euler_xyz_from_quat(ee_frame_orient_b)
+    x = wrap_to_pi(ee_frame_orient[0])
+    y = wrap_to_pi(ee_frame_orient[1])
+    # orient_reward = torch.where(
+    #     (torch.abs(x) < math.pi/8) 
+    #     & (torch.abs(y) < math.pi/8),
+    #     0.0,
+    #     1.0*orient_reward_cfg["weight"]
+    # )
+    orient_reward = (
+        (torch.abs(x))**2
+        + (torch.abs(y))**2
     )
-
-    # ee_goal distance in [dm]
-    # ee_goal_tracking_reward = (ee_goal_distance*obj_goal_distance*100)#**2 
-    # ee_goal_tracking_reward *= ee_goal_tracking_cfg["weight"]
-    # ee_goal_tracking_reward = ee_goal_tracking_reward.clamp(-10, 0)
+    orient_reward *= orient_reward_cfg["weight"]
     
     ee_goal_tracking_reward = (
         1 - torch.tanh((ee_goal_distance) / ee_goal_tracking_cfg["std"])

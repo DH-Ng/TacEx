@@ -20,5 +20,5 @@ class GelSightSensorData:
     """The retrieved sensor data with sensor types as key.
     
     This is definied inside the correspondig sensor cfg class.
-    For GelSight sensors the defaults are "height_map", "tactile_rgb" and "marker_motion".
+    For GelSight sensors the defaults are "camera_depth", "height_map", "tactile_rgb" and "marker_motion".
     """

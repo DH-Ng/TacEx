@@ -89,10 +89,11 @@ class GelSightSensor(SensorBase):
     #         f"\tdata types   : {list(self._data.output.keys())} \n"
     #         f"\tupdate period (s): {self.cfg.update_period}\n"
     #         f"\tframe        : {self.frame}\n"
-    #         f"\tresolution        : {self.image_resolution}\n"
+    #         f"\camera resolution        : {self.camera_resolution}\n"
+    #         f"\ttactile resolution        : {self.tactile_image_resolution}\n"
     #         f"\twith shadows        : {self._simulate_shadows}\n"
-    #         f"\tposition     : {self._data.position} \n"
-    #         f"\torientation  : {self._data.orientation} \n"
+    #         # f"\tposition     : {self._data.position} \n"
+    #         # f"\torientation  : {self._data.orientation} \n"
     #     )
     
     """
@@ -103,7 +104,6 @@ class GelSightSensor(SensorBase):
         """Data related to Camera sensor."""
         # update sensors if needed
         self._update_outdated_buffers()
-        # return the data
         return self._data
     
     @property
@@ -111,14 +111,14 @@ class GelSightSensor(SensorBase):
         """Frame number when the measurement took place."""
         return self._frame
     
-    # @property
-    # def image_resolution(self) -> Tuple[int, int]:
-    #     """A tuple containing (height, width) of the camera sensor."""
-    #     return self.cfg.resolution #TODO fix, image shape should be 3 dim, [width, height, channels (= 3)] -> change attribute name to "resolution" 
+    @property
+    def tactile_image_shape(self) -> Tuple[int, int]:
+        """Shape of the simulated tactile RGB image, i.e. (channels, height, width)."""
+        return 3, self.cfg.optical_sim_cfg.tactile_img_res[1], self.cfg.optical_sim_cfg.tactile_img_res[0]
 
     @property
     def camera_resolution(self) -> Tuple[int, int]:
-        """Shape of the simulated tactile RGB image, i.e. (height, width, channels)."""
+        """The resolution (width x height) of the camera used by this sensor."""
         return self.cfg.sensor_camera_cfg.resolution[0], self.cfg.sensor_camera_cfg.resolution[1]  # type: ignore
 
     @property
@@ -160,6 +160,9 @@ class GelSightSensor(SensorBase):
         #     resized = F.resize(self._data.output["height_map"], (self.taxim.sensor_params.height,self.taxim.sensor_params.width))
         #     #TODO should I compute press depth after interpolation or before?
         #     self._data.output["height_map"] = resized
+
+        if "camera_depth" in self._data.output.keys():
+            self._data.output["camera_depth"][env_ids] = 0
 
         # simulate optical/marker output, but without indentation
         if (self.optical_simulator is not None) and ("tactile_rgb" in self._data.output.keys()) :
@@ -219,8 +222,8 @@ class GelSightSensor(SensorBase):
             self.camera_cfg: TiledCameraCfg = TiledCameraCfg(
                     prim_path= prim_paths_expr + self.cfg.sensor_camera_cfg.prim_path_appendix, 
                     update_period= self.cfg.sensor_camera_cfg.update_period,
-                    height= self.cfg.sensor_camera_cfg.resolution[0],
-                    width= self.cfg.sensor_camera_cfg.resolution[1],
+                    height=self.cfg.sensor_camera_cfg.resolution[1],
+                    width=self.cfg.sensor_camera_cfg.resolution[0],
                     data_types= self.cfg.sensor_camera_cfg.data_types,
                     spawn= None, # use camera which is part of the GelSight Mini Asset
                     # spawn=sim_utils.PinholeCameraCfg(
@@ -234,8 +237,8 @@ class GelSightSensor(SensorBase):
             # self.camera_cfg: CameraCfg = CameraCfg(
             #         prim_path= prim_paths_expr + self.cfg.sensor_camera_cfg.prim_path_appendix, 
             #         update_period= self.cfg.sensor_camera_cfg.update_period,
-            #         height= self.cfg.sensor_camera_cfg.resolution[0],
-            #         width= self.cfg.sensor_camera_cfg.resolution[1],
+            #         height= self.cfg.sensor_camera_cfg.resolution[1],
+            #         width= self.cfg.sensor_camera_cfg.resolution[0],
             #         data_types= self.cfg.sensor_camera_cfg.data_types,
             #         spawn= None, # use camera which is part of the GelSight Mini Asset
             #         # spawn=sim_utils.PinholeCameraCfg(
@@ -279,11 +282,17 @@ class GelSightSensor(SensorBase):
                     sensor = self,
                     cfg = self.cfg.marker_motion_sim_cfg
                 )
-        
+
         # create buffers for output
+        if "camera_depth" in self._data.output.keys():
+            self._data.output["camera_depth"] = torch.zeros(
+                (self._num_envs, 1, self.camera_resolution[0], self.camera_resolution[1]), 
+                device=self.cfg.device
+            )
+
         if "tactile_rgb" in self._data.output.keys():
             self._data.output["tactile_rgb"] = torch.zeros(
-                (self._num_envs, 3, self.cfg.optical_sim_cfg.tactile_img_res[0], self.cfg.optical_sim_cfg.tactile_img_res[1]), 
+                (self._num_envs, 3, self.cfg.optical_sim_cfg.tactile_img_res[1], self.cfg.optical_sim_cfg.tactile_img_res[0]), 
                 device=self.cfg.device
             )
 
@@ -333,12 +342,16 @@ class GelSightSensor(SensorBase):
         if self.camera is not None:
             self.camera.update(dt=0.1)
 
-        # -- height_map
-        self._get_height_map()
-        
-        # -- pressing depth
-        # self._indentation_depth[:] = self.compute_indentation_depth_func() # type: ignore #todo uncomment
+        if self.compute_indentation_depth_func is not None:
+            # -- height_map
+            self._get_height_map()
 
+            # -- pressing depth
+            self._indentation_depth[:] = self.compute_indentation_depth_func() # type: ignore #todo uncomment
+
+        if "camera_depth" in self._data.output.keys():
+            self._get_camera_depth()
+            
         if (self.optical_simulator is not None) and ("tactile_rgb" in self._data.output.keys()) :
             # self.optical_simulator.height_map = self._data.output["height_map"]
             self._data.output["tactile_rgb"][:] = self.optical_simulator.optical_simulation()
@@ -381,12 +394,18 @@ class GelSightSensor(SensorBase):
             if show_img==True:
                 if not (str(i) in self._windows.keys()):
                     # create a window
-                    #window = omni.ui.Window(self._view.prim_paths[i], width=self.cfg.resolution[1], height=self.cfg.resolution[0]) # +5 to have a small border around the tactile images   
-                    window = omni.ui.Window(self._view.prim_paths[i], auto_resize=True)
+                    window = omni.ui.Window(self._view.prim_paths[i], height=480, width=320)
                     self._windows[str(i)] = window
                     # create image provider
                     self._img_providers[str(i)] = omni.ui.ByteImageProvider() # default format omni.ui.TextureFormat.RGBA8_UNORM
-
+                
+                if "camera_depth" in self._data.output.keys():
+                    frame = self._data.output["camera_depth"][i].cpu().numpy()
+                    # image is channel first, convert to channel last
+                    frame = np.moveaxis(frame, 0, -1)
+                    # convert to 3 channel image, to later turn it into 4 channel RGBA for Isaac Widget
+                    frame = np.dstack((frame, frame, frame)).astype(np.uint8)
+                    
                 if "tactile_rgb" in self._data.output.keys():
                     # get tactile image
                     frame = self.data.output["tactile_rgb"][i].permute(1, 2, 0).cpu().numpy()
@@ -447,7 +466,7 @@ class GelSightSensor(SensorBase):
                 # update image of the window
                 with self._windows[str(i)].frame:
                     self._img_providers[str(i)].set_data_array(frame, [width, height, channels]) #method signature: (numpy.ndarray[numpy.uint8], (width, height))
-                    image = omni.ui.ImageWithProvider(self._img_providers[str(i)], width=width, height=height) #, fill_policy=omni.ui.IwpFillPolicy.IWP_PRESERVE_ASPECT_FIT -> fill_policy by default: specifying the width and height of the item causes the image to be scaled to that size
+                    image = omni.ui.ImageWithProvider(self._img_providers[str(i)]) #, fill_policy=omni.ui.IwpFillPolicy.IWP_PRESERVE_ASPECT_FIT -> fill_policy by default: specifying the width and height of the item causes the image to be scaled to that size
 
             elif str(i) in self._windows.keys():
                 # remove window/img_provider from dictionary and destroy them
@@ -492,6 +511,23 @@ class GelSightSensor(SensorBase):
     #     self._data.pos_w[env_ids] = poses
     #     self._data.quat_w_world[env_ids] = convert_orientation_convention(quat, origin="opengl", target="world")
     
+    def _get_camera_depth(self):
+        if self.camera is not None:
+            depth_output = self.camera.data.output["depth"][:,:,:,0] # tiled camera gives us data with shape (num_cameras, height, width, num_channels),
+            # clip camera values that are = inf
+            depth_output[torch.isinf(depth_output)] = self.cfg.sensor_camera_cfg.clipping_range[1]
+
+            self._data.output["camera_depth"] = depth_output.reshape((self._num_envs, 1, self.camera_resolution[0], self.camera_resolution[1])) # add a channel to the depth image for debug_vis
+            self._data.output["camera_depth"]*=1000.0
+
+            # normalize the depth image
+            normalized = self._data.output["camera_depth"].view(self._data.output["camera_depth"].size(0), -1)
+            normalized -= self.cfg.sensor_camera_cfg.clipping_range[0]*1000
+            normalized /= self.cfg.sensor_camera_cfg.clipping_range[1]*1000
+            normalized = (normalized*255).type(dtype=torch.uint8)
+            self._data.output["camera_depth"] = normalized.reshape((self._num_envs, 1, self.camera_resolution[0], self.camera_resolution[1])) # add a channel to the depth image for debug_vis
+
+            return self._data.output["camera_depth"]
 
     def _get_height_map(self):
         if self.camera is not None:
