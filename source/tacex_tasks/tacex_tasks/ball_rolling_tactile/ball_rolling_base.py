@@ -179,7 +179,7 @@ class BallRollingEnvCfg(DirectRLEnvCfg):
         physx=PhysxCfg(
             enable_ccd=True, # needed for more stable ball_rolling
             # bounce_threshold_velocity=10000,
-            gpu_max_rigid_contact_count=2 ** 23 + 2**10,
+            gpu_max_rigid_contact_count=2 ** 23,
         ),
         physics_material=sim_utils.RigidBodyMaterialCfg(
             friction_combine_mode="multiply",
