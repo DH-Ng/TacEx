@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any, Generic, TypeVar, overload
 
 import numpy as np
+import torch
 
 from .calibration import CALIB_GELSIGHT
 
@@ -259,3 +260,4 @@ class TaximImpl(Generic[ArrayType, DeviceType], ABC):
     @property
     def backend_name(self) -> str:
         return self.__backend_name
+

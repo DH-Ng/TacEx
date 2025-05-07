@@ -147,6 +147,10 @@ class TaximTorch(torch.nn.Module, TaximImpl[torch.Tensor, torch.device]):
             )
             self.__get_background_img_cached = lru_cache(self.__get_background_img)
 
+    @property
+    def background_img(self):
+        return self.__get_background_img_cached((self.height, self.width))
+    
     def __get_background_img(self, shape: tuple[int, int]) -> torch.Tensor:
         return resize(
             self.__bg_proc, list(shape), interpolation=InterpolationMode.BILINEAR
@@ -502,7 +506,7 @@ class TaximTorch(torch.nn.Module, TaximImpl[torch.Tensor, torch.device]):
         return (
             height_map
             - height_map.amin(-1, keepdim=True).amin(-2, keepdim=True)
-            - pressing_depth_mm
+            - pressing_depth_mm.view(-1,1,1)
         )
 
     def __compute_gel_pad_deformation(

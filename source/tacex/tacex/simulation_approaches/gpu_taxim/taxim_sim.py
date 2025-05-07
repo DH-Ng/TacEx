@@ -74,7 +74,7 @@ class TaximSimulator(GelSightSimulator):
             )
 
         # use background img 
-        self.tactile_rgb_img[self._indentation_depth <= 0] = self._taxim._bg_proc
+        self.tactile_rgb_img[self._indentation_depth <= 0] = self._taxim.background_img
         return self.tactile_rgb_img
 
     def compute_indentation_depth(self):
