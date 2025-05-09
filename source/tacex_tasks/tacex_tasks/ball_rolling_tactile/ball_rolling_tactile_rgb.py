@@ -192,8 +192,8 @@ class BallRollingTactileRGBCfg(DirectRLEnvCfg):
             dynamic_friction=1.5,
             restitution=0.1,
             improve_patch_friction=True,
-            compliant_contact_damping=0.5,
-            compliant_contact_stiffness=0.25
+            compliant_contact_damping=4.25,
+            compliant_contact_stiffness=1.75
         ),
     )
 
@@ -896,7 +896,7 @@ class BallRollingTactileRGBEnv(DirectRLEnv):
         # add noise to proprio_obs:
         proprio_obs = gaussian_noise(proprio_obs, cfg=self.cfg.gaussian_noise_cfg)
 
-        vision_obs = self.gsmini.data.output["tactile_rgb"] / 255.0
+        vision_obs = self.gsmini.data.output["tactile_rgb"]
         # print("indent depth ", self.gsmini._indentation_depth[0])
         obs = {
             "proprio_obs": proprio_obs,

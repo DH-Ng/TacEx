@@ -52,12 +52,11 @@ class TaximSimulator(GelSightSimulator):
         # self._taxim.height = self.cfg.tactile_img_res[1]
         
         # tactile rgb image without indentation
-        self.background_img = (self._taxim.background_img.movedim(0, 2)*255).type(torch.uint8) 
-        
+        self.background_img = self._taxim.background_img.movedim(0, 2)
+    
         self.tactile_rgb_img = torch.zeros(
             (self._num_envs, self.cfg.tactile_img_res[1], self.cfg.tactile_img_res[0], 3),
             device=self._device, 
-            dtype=torch.uint8
         )
         self.tactile_rgb_img[:] = self.background_img
 
@@ -83,12 +82,12 @@ class TaximSimulator(GelSightSimulator):
         self.tactile_rgb_img[self._indentation_depth <= 0][:] = self.background_img
 
         if height_map[self._indentation_depth > 0].shape[0] > 0:
-            self.tactile_rgb_img[self._indentation_depth > 0] = (self._taxim.render_direct(
+            self.tactile_rgb_img[self._indentation_depth > 0] = self._taxim.render_direct(
                 height_map[self._indentation_depth > 0],
                 with_shadow=self.cfg.with_shadow,
                 press_depth=self._indentation_depth[self._indentation_depth > 0],
                 orig_hm_fmt=False,
-            ).movedim(1, 3)*255).type(torch.uint8) 
+            ).movedim(1, 3) #*255).type(torch.uint8) 
 
         return self.tactile_rgb_img
 

@@ -408,11 +408,10 @@ class GelSightSensor(SensorBase):
                     
                 if "tactile_rgb" in self._data.output.keys():
                     # get tactile image
-                    frame = self.data.output["tactile_rgb"][i].cpu().numpy()
+                    frame = self.data.output["tactile_rgb"][i].cpu().numpy()*255
                     #frame = cv2.normalize(frame, None, alpha = 0, beta = 255, norm_type = cv2.NORM_MINMAX, dtype = cv2.CV_32F)
                     # frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
                     # cv2.imwrite(f"tact_rgb{self._frame[i]}.jpg", frame)
-                    frame = frame.astype(np.uint8)
                 
                 if "marker_motion" in self._data.output.keys():
                     if not "tactile_rgb" in self._data.output.keys():
@@ -445,7 +444,8 @@ class GelSightSensor(SensorBase):
                             # pt2 = (column+int(arrow_scale*(column-init_column)), row+int(arrow_scale*(row-init_row)))
                             pt2 = (x_pos, y_pos)
                             cv2.arrowedLine(frame, pt1, pt2, color, 2,  tipLength=0.1)
-
+                    frame = cv2.normalize(frame, None, alpha = 0, beta = 255, norm_type = cv2.NORM_MINMAX, dtype = cv2.CV_32F)
+                    # cv2.imwrite(f"tact_rgb{self._frame[i]}.jpg", frame)
                     # visualize contact center with red cross
                     # if len(self._data.output["traj"][i]) > 1:     
                     #     traj = []
@@ -457,14 +457,14 @@ class GelSightSensor(SensorBase):
                         # cv2.circle(frame,(should[1], should[0]), 4, (0,255,0), -1)
                     #frame = cv2.normalize(frame, None, alpha = 0, beta = 255, norm_type = cv2.NORM_MINMAX, dtype = cv2.CV_32F).astype(np.uint8)                
 
-                #TODO remove this tmp workaround for different res
-                # frame = cv2.resize(frame, (120, 160)) #(self._sensor_params.height, self._sensor_params.width)
+                frame = frame.astype(np.uint8)
                 frame = cv2.cvtColor(frame, cv2.COLOR_RGB2RGBA) #cv.COLOR_BGR2RGBA) COLOR_RGB2RGBA
                 height, width, channels = frame.shape
 
                 # update image of the window
                 with self._windows[str(i)].frame:
-                    self._img_providers[str(i)].set_data_array(frame, [width, height, channels]) #method signature: (numpy.ndarray[numpy.uint8], (width, height))
+                    #self._img_providers[str(i)].set_data_array(frame, [width, height, channels]) #method signature: (numpy.ndarray[numpy.uint8], (width, height))
+                    self._img_providers[str(i)].set_bytes_data(frame.flatten().data, [width, height]) #method signature: (numpy.ndarray[numpy.uint8], (width, height))
                     image = omni.ui.ImageWithProvider(self._img_providers[str(i)]) #, fill_policy=omni.ui.IwpFillPolicy.IWP_PRESERVE_ASPECT_FIT -> fill_policy by default: specifying the width and height of the item causes the image to be scaled to that size
 
             elif str(i) in self._windows.keys():
