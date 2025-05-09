@@ -154,7 +154,6 @@ class BallRollingEnvCfg(DirectRLEnvCfg):
             clipping_range = (0.024, 0.034),
         ),
         device = "cuda",
-        tactile_img_res = (480, 640),
         debug_vis=True, # for being able to see sensor output in the gui
                 # update Taxim cfg
         optical_sim_cfg=None,

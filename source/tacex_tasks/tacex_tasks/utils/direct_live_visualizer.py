@@ -138,12 +138,13 @@ class DirectLiveVisualizer(ManagerLiveVisualizer):
                     )
                     with frame:
                         value = values[self._env_idx]
+
                         terms_names = self.terms_names[name] if name in self.terms_names else None
                         # create line plot for single or multivariable signals
                         len_term_shape = len(value.shape)
                         if len_term_shape == 0:
                             value = value.reshape(1)
-                        if len_term_shape <= 2:
+                        if len_term_shape <= 1:
                             plot = LiveLinePlot(
                                 y_data=[[elem] for elem in value.T.tolist()],
                                 plot_height=150,
@@ -152,7 +153,7 @@ class DirectLiveVisualizer(ManagerLiveVisualizer):
                             )
                             self._term_visualizers[name] = plot
                         # create an image plot for 2d and greater data (i.e. mono and rgb images)
-                        elif len_term_shape == 3:
+                        elif len_term_shape == 2 or len_term_shape == 3:
                             image = ImagePlot(
                                 image=value.cpu().numpy(),
                                 label=name,
@@ -188,4 +189,19 @@ class DirectLiveVisualizer(ManagerLiveVisualizer):
                 vis.add_datapoint(value.T.tolist())
             elif isinstance(vis, ImagePlot):
                 vis.update_image(value.cpu().numpy())
-    
+
+        # # get updated data and update visualization
+        # for name, values in self.terms.items():
+        #     # E.g. terms = actions: Actions values have the shape (num_envs, num_actions). 
+        #     # This means we have `num_actions` amount of plots in our 'actions' timeserie.
+        #     # To plot this, we need to pass over a list of lists. 
+        #     # Specifically, `num_actions` amount of lists, where each inner list contains the datapoint for the corresponding timeserie
+        #     value = values[self._env_idx]
+        #     if len(value.shape) == 0:
+        #         value = value.reshape(1)
+            
+        #     vis = self._term_visualizers[name]
+        #     if isinstance(vis, LiveLinePlot):
+        #         vis.add_datapoint(value.T.tolist())
+        #     elif isinstance(vis, ImagePlot):
+        #         vis.update_image(value.cpu().numpy())

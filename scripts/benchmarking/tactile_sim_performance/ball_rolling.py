@@ -66,7 +66,7 @@ from tacex_assets.robots.franka.franka_gsmini_single_adapter_rigid import FRANKA
 from tacex_assets import TACEX_ASSETS_DATA_DIR
 from tacex_assets.sensors.gelsight_mini.gelsight_mini_cfg import GelSightMiniCfg
 
-from tacex import GelSightSensor
+from tacex import GelSightSensor, GelSightSensorCfg
 from tacex.simulation_approaches.gpu_taxim import TaximSimulatorCfg
 
 import time
@@ -190,32 +190,27 @@ class BallRollingEnvCfg(DirectRLEnvCfg):
                         },
                 ),
     )
-
     gsmini = GelSightMiniCfg(
         prim_path="/World/envs/env_.*/Robot/gelsight_mini_case",
         sensor_camera_cfg = GelSightMiniCfg.SensorCameraCfg(
             prim_path_appendix = "/Camera",
             update_period= 0,
-            resolution = (48,64), #(120, 160),
+            resolution = (480,640), #(120, 160),
             data_types = ["depth"],
             clipping_range = (0.024, 0.034),
         ),
         device = "cuda",
-        tactile_img_res = (48, 64),
-        debug_vis=True, # for being able to see sensor output in the gui
-        # optical_sim_cfg=None,
+        debug_vis=True, # for rendering sensor output in the gui
         # update Taxim cfg
         marker_motion_sim_cfg=None,
         data_types=["tactile_rgb"], #marker_motion
     )
     # settings for optical sim
-    gsmini = gsmini.replace(
-        optical_sim_cfg = gsmini.optical_sim_cfg.replace(
-            with_shadow=False,
-            device="cuda",
-        )
+    gsmini.optical_sim_cfg = gsmini.optical_sim_cfg.replace(
+        with_shadow=False,
+        device="cuda",
+        tactile_img_res=(48, 64),
     )
-
     ik_controller_cfg = DifferentialIKControllerCfg(command_type="pose", use_relative_mode=False, ik_method="dls")
 
     ball_radius = 0.005
@@ -658,15 +653,16 @@ def run_simulator(env: BallRollingEnv):
         env._pre_physics_step(None)
         env._apply_action()
         env.scene.write_data_to_sim()
-        env.sim.step(render=False)
-        # render scene for cameras (used by sensor)
-        env.sim.render()
-        # update isaac buffers() -> also updates sensors, if lazy_sensor_update is false
-        env.scene.update(dt=env.physics_dt)
         physics_end = time.time()
         ###
 
-        ### update sensors
+        env.sim.step(render=False)
+        # update isaac buffers() -> also updates sensors
+        env.scene.update(dt=env.physics_dt)
+        # render scene for cameras (used by sensor)
+        env.sim.render()
+
+        ### update sensors again to measure tactile sim time separately
         tactile_sim_start = time.time()
         env.gsmini.update(dt=env.physics_dt, force_recompute=True)
         # tactile_rgb = env.gsmini.data.output["tactile_rgb"]

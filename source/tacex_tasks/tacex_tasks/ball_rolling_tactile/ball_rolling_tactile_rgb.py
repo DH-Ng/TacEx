@@ -157,7 +157,7 @@ class EventCfg:
         },
     )
 @configclass
-class BallRollingEnvCfg(DirectRLEnvCfg):
+class BallRollingTactileRGBCfg(DirectRLEnvCfg):
 
     # viewer settings
     viewer: ViewerCfg = ViewerCfg()
@@ -298,22 +298,21 @@ class BallRollingEnvCfg(DirectRLEnvCfg):
         sensor_camera_cfg = GelSightMiniCfg.SensorCameraCfg(
             prim_path_appendix = "/Camera",
             update_period= 0,
-            resolution = (48, 64),
+            resolution = (32, 32), #(48, 64),
             data_types = ["depth"],
             clipping_range = (0.024, 0.029),
         ),
         device = "cuda",
         debug_vis=True, # for being able to see sensor output in the gui
         # update Taxim cfg
-        optical_sim_cfg=None,
-        # optical_sim_cfg=TaximSimulatorCfg(
-        #     calib_folder_path= f"{TACEX_ASSETS_DATA_DIR}/Sensors/GelSight_Mini/calibs/480x640",
-        #     gelpad_height= GelSightMiniCfg().gelpad_dimensions.height,
-        #     gelpad_to_camera_min_distance=0.024,
-        #     with_shadow=False,
-        #     tactile_img_res = (48, 64),
-        #     device = "cuda",
-        # ),
+        optical_sim_cfg=TaximSimulatorCfg(
+            calib_folder_path= f"{TACEX_ASSETS_DATA_DIR}/Sensors/GelSight_Mini/calibs/480x640",
+            gelpad_height= GelSightMiniCfg().gelpad_dimensions.height,
+            gelpad_to_camera_min_distance=0.024,
+            with_shadow=False,
+            tactile_img_res = (32, 32),
+            device = "cuda",
+        ),
 
         # update FOTS cfg
         marker_motion_sim_cfg=None,
@@ -340,9 +339,9 @@ class BallRollingEnvCfg(DirectRLEnvCfg):
         #         debug_vis=False,
         #     )
         # ),
-        data_types=["camera_depth"], #marker_motion
+        data_types=["tactile_rgb"], #marker_motion
     )
-
+    
     # noise models
     action_noise_model: NoiseModelCfg = NoiseModelCfg(
         noise_cfg = UniformNoiseCfg(n_min=-0.001, n_max=0.001, operation="add")
@@ -383,7 +382,7 @@ class BallRollingEnvCfg(DirectRLEnvCfg):
     action_space = 6 # we use relative task_space actions: (dx, dy, dz, droll, dpitch) -> dyaw is ommitted
     observation_space = {
         "proprio_obs": 14, #16, # 3 for ee pos, 2 for orient (roll, pitch), 2 for init goal-pos (x,y), 5 for actions
-        "vision_obs": [64,48,1], # from tactile sensor
+        "vision_obs": [32,32,3], # from tactile sensor
     }
     state_space = 0
     action_scale = 0.05 # [cm]
@@ -392,7 +391,7 @@ class BallRollingEnvCfg(DirectRLEnvCfg):
 
     x_bounds = (0.1, 0.7)
     y_bounds = (-0.4, 0.4)
-    too_far_away_threshold = 0.015 
+    too_far_away_threshold = 0.02 
     min_height_threshold = 0.002
 
     curriculum_cfg = {
@@ -416,7 +415,7 @@ class BallRollingEnvCfg(DirectRLEnvCfg):
         }
     }
 
-class BallRollingEnv(DirectRLEnv):
+class BallRollingTactileRGBEnv(DirectRLEnv):
     """RL env in which the robot has to push/roll a ball to a goal position.
 
     This base env uses (absolute) joint positions.
@@ -431,9 +430,9 @@ class BallRollingEnv(DirectRLEnv):
     #   |-- _reset_idx(env_ids)
     #   |-- _get_observations()
 
-    cfg: BallRollingEnvCfg
+    cfg: BallRollingTactileRGBCfg
 
-    def __init__(self, cfg: BallRollingEnvCfg, render_mode: str | None = None, **kwargs):
+    def __init__(self, cfg: BallRollingTactileRGBCfg, render_mode: str | None = None, **kwargs):
         super().__init__(cfg, render_mode, **kwargs)
 
         self.dt = self.cfg.sim.dt * self.cfg.decimation
@@ -598,19 +597,20 @@ class BallRollingEnv(DirectRLEnv):
         light_cfg = sim_utils.DomeLightCfg(intensity=2000.0, color=(0.75, 0.75, 0.75))
         light_cfg.func("/World/Light", light_cfg)
 
-        # Physics Materials
-        gelpad_mat = sim_utils.spawn_rigid_body_material(
-            prim_path="/World/Materials/gelpad",
-            cfg=sim_utils.RigidBodyMaterialCfg(
-                static_friction=1.5,
-                dynamic_friction=1.5,
-                restitution=0.75,
-                improve_patch_friction=True,
-                compliant_contact_damping=0.5,
-                compliant_contact_stiffness=0.25
-            )
-        )
-        sim_utils.bind_physics_material("/World/envs/env_.*/Robot/gelsight_mini_gelpad",gelpad_mat.prim_path)
+        # # Physics Materials
+        # gelpad_mat = sim_utils.spawn_rigid_body_material(
+        #     prim_path="/World/Materials/gelpad",
+        #     cfg=sim_utils.RigidBodyMaterialCfg(
+        #         static_friction=1.5,
+        #         dynamic_friction=1.5,
+        #         restitution=0.75,
+        #         improve_patch_friction=True,
+        #         compliant_contact_damping=0.5,
+        #         compliant_contact_stiffness=0.25
+        #     )
+        # )
+        # sim_utils.bind_physics_material("/World/envs/env_.*/Robot/gelsight_mini_gelpad", "/World/Materials/gelpad")
+
 
     #MARK: pre-physics step calls
         
@@ -896,8 +896,8 @@ class BallRollingEnv(DirectRLEnv):
         # add noise to proprio_obs:
         proprio_obs = gaussian_noise(proprio_obs, cfg=self.cfg.gaussian_noise_cfg)
 
-        vision_obs = self.gsmini.data.output["camera_depth"]
-        
+        vision_obs = self.gsmini.data.output["tactile_rgb"] / 255.0
+        # print("indent depth ", self.gsmini._indentation_depth[0])
         obs = {
             "proprio_obs": proprio_obs,
             "vision_obs": vision_obs
@@ -916,14 +916,13 @@ class BallRollingEnv(DirectRLEnv):
         #     )
 
         # self.visualizers["Actions"].terms["actions"][:] = self.actions[:]
-        # self.visualizers["Actions"].terms["actions"][:] = self.actions[:]
         if self.cfg.debug_vis:
             self.visualizers["Observations"].terms["ee_pos"] = ee_pos_curr_b
             self.visualizers["Observations"].terms["ee_rot"][:, :1] = x
             self.visualizers["Observations"].terms["ee_rot"][:, 1:2] = y
             self.visualizers["Observations"].terms["ee_rot"][:, 2:3] = z
             self.visualizers["Observations"].terms["goal"] = self._goal_pos_b[:, :2]
-            self.visualizers["Observations"].terms["sensor_output"] = vision_obs #* 255
+            self.visualizers["Observations"].terms["sensor_output"] = vision_obs
 
         return {"policy": obs}
 

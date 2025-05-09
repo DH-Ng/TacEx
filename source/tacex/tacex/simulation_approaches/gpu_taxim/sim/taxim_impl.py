@@ -59,7 +59,7 @@ class SimulatorParameters:
         )
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=False)
 class SensorParameters:
     w: int
     h: int

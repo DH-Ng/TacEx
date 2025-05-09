@@ -114,7 +114,7 @@ class GelSightSensor(SensorBase):
     @property
     def tactile_image_shape(self) -> Tuple[int, int]:
         """Shape of the simulated tactile RGB image, i.e. (channels, height, width)."""
-        return 3, self.cfg.optical_sim_cfg.tactile_img_res[1], self.cfg.optical_sim_cfg.tactile_img_res[0]
+        return self.cfg.optical_sim_cfg.tactile_img_res[1], self.cfg.optical_sim_cfg.tactile_img_res[0], 3
 
     @property
     def camera_resolution(self) -> Tuple[int, int]:
@@ -286,13 +286,13 @@ class GelSightSensor(SensorBase):
         # create buffers for output
         if "camera_depth" in self._data.output.keys():
             self._data.output["camera_depth"] = torch.zeros(
-                (self._num_envs, 1, self.camera_resolution[1], self.camera_resolution[0]), 
+                (self._num_envs, self.camera_resolution[1], self.camera_resolution[0], 1), 
                 device=self.cfg.device
             )
 
         if "tactile_rgb" in self._data.output.keys():
             self._data.output["tactile_rgb"] = torch.zeros(
-                (self._num_envs, 3, self.cfg.optical_sim_cfg.tactile_img_res[1], self.cfg.optical_sim_cfg.tactile_img_res[0]), 
+                (self._num_envs, self.cfg.optical_sim_cfg.tactile_img_res[1], self.cfg.optical_sim_cfg.tactile_img_res[0], 3), 
                 device=self.cfg.device
             )
 
@@ -401,15 +401,15 @@ class GelSightSensor(SensorBase):
                 
                 if "camera_depth" in self._data.output.keys():
                     frame = self._data.output["camera_depth"][i].cpu().numpy()
-                    # image is channel first, convert to channel last
-                    frame = np.moveaxis(frame, 0, -1)
+                    # # image is channel first, convert to channel last
+                    # frame = np.moveaxis(frame, 0, -1)
                     # convert to 3 channel image, to later turn it into 4 channel RGBA for Isaac Widget
                     frame = np.dstack((frame, frame, frame)).astype(np.uint8)
                     
                 if "tactile_rgb" in self._data.output.keys():
                     # get tactile image
-                    frame = self.data.output["tactile_rgb"][i].permute(1, 2, 0).cpu().numpy()
-                    frame = cv2.normalize(frame, None, alpha = 0, beta = 255, norm_type = cv2.NORM_MINMAX, dtype = cv2.CV_32F)
+                    frame = self.data.output["tactile_rgb"][i].cpu().numpy()
+                    #frame = cv2.normalize(frame, None, alpha = 0, beta = 255, norm_type = cv2.NORM_MINMAX, dtype = cv2.CV_32F)
                     # frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
                     # cv2.imwrite(f"tact_rgb{self._frame[i]}.jpg", frame)
                     frame = frame.astype(np.uint8)
@@ -459,7 +459,6 @@ class GelSightSensor(SensorBase):
 
                 #TODO remove this tmp workaround for different res
                 # frame = cv2.resize(frame, (120, 160)) #(self._sensor_params.height, self._sensor_params.width)
-                
                 frame = cv2.cvtColor(frame, cv2.COLOR_RGB2RGBA) #cv.COLOR_BGR2RGBA) COLOR_RGB2RGBA
                 height, width, channels = frame.shape
 
@@ -525,7 +524,7 @@ class GelSightSensor(SensorBase):
             normalized -= self.cfg.sensor_camera_cfg.clipping_range[0]*1000
             normalized /= self.cfg.sensor_camera_cfg.clipping_range[1]*1000
             normalized = (normalized*255).type(dtype=torch.uint8)
-            self._data.output["camera_depth"] = normalized.reshape((self._num_envs, 1, self.camera_resolution[1], self.camera_resolution[0])) # add a channel to the depth image for debug_vis
+            self._data.output["camera_depth"] = normalized.reshape((self._num_envs, self.camera_resolution[1], self.camera_resolution[0], 1)) # add a channel to the depth image for debug_vis
 
             return self._data.output["camera_depth"]
 
@@ -542,7 +541,7 @@ class GelSightSensor(SensorBase):
             # e.g. use soft body deformation as height map? -> not implemented yet
             # or that we dont need a height map in general
             pass
-
+    
     def _show_height_map_inside_gui(self, index):
         plt.close()
         height_map = self._data.output["height_map"][0].cpu().numpy()

@@ -132,7 +132,6 @@ class ImagePlot(UIWidgetWrapper):
         # convert image to 4-channel RGBA
         if image.ndim == 2 or (image.ndim == 3 and image.shape[2] == 1):
             image = np.dstack((image, image, image, np.full((height, width, 1), 255, dtype=np.uint8)))
-
         elif image.ndim == 3 and image.shape[2] == 3:
             image = np.dstack((image, np.full((height, width, 1), 255, dtype=np.uint8)))
 

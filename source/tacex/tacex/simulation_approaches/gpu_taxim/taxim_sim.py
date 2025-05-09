@@ -23,7 +23,17 @@ class TaximSimulator(GelSightSimulator):
     def __init__(self, sensor: GelSightSensor, cfg: TaximSimulatorCfg):
         self.sensor = sensor
 
+        # todo make size adaptable? I mean with env_ids. This way we would always simulate everythings
+        self._indentation_depth = torch.zeros((self.sensor._num_envs), device=self.sensor._device)
+        """Indentation depth, i.e. how deep the object is pressed into the gelpad.
+        Values are in mm.
+
+        Indentation depth is equal to the maximum pressing depth of the object in the gelpad.
+        It is used for shifting the height map for the Taxim simulation.
+        """
+
         super().__init__(sensor=sensor, cfg=cfg)
+
 
     def _initialize_impl(self):
         calib_folder = Path(self.cfg.calib_folder_path)
@@ -36,45 +46,50 @@ class TaximSimulator(GelSightSimulator):
             
 
         self._taxim: Taxim = Taxim(calib_folder=calib_folder, device=self._device)
-
-        # todo make size adaptable? I mean with env_ids. This way we would always simulate everythings
-        self._indentation_depth = torch.zeros((self._num_envs), device=self._device)
-        """Indentation depth, i.e. how deep the object is pressed into the gelpad.
-        Values are in mm.
-
-        Indentation depth is equal to the maximum pressing depth of the object in the gelpad.
-        It is used for shifting the height map for the Taxim simulation.
-        """
-    
-        self.tactile_rgb_img = self._taxim.render(
-            torch.zeros((self._num_envs, self.cfg.tactile_img_res[1], self.cfg.tactile_img_res[0]),device=self._device),
-            with_shadow=self.cfg.with_shadow,
-            press_depth=self._indentation_depth,
-            orig_hm_fmt=False,
+        # update Taxim settings via settings from cfg class
+        # print(self._taxim.width)
+        # self._taxim.width = self.cfg.tactile_img_res[0]
+        # self._taxim.height = self.cfg.tactile_img_res[1]
+        
+        # tactile rgb image without indentation
+        self.background_img = (self._taxim.background_img.movedim(0, 2)*255).type(torch.uint8) 
+        
+        self.tactile_rgb_img = torch.zeros(
+            (self._num_envs, self.cfg.tactile_img_res[1], self.cfg.tactile_img_res[0], 3),
+            device=self._device, 
+            dtype=torch.uint8
         )
+        self.tactile_rgb_img[:] = self.background_img
+
         # if camera resolution is different than the tactile RGB res, scale img
         self.img_res = self.cfg.tactile_img_res
 
+
+
     def optical_simulation(self):
+        """ Returns simulation output of Taxim optical simulation.
+        
+        Images have the shape (num_envs, height, width, channels) and values in range [0,255].
+        """
         height_map = self.sensor._data.output["height_map"]
+
         # up/downscale height map if camera res different than tactile img res
         if height_map.shape != (self.cfg.tactile_img_res[1], self.cfg.tactile_img_res[0]):
             height_map = F.resize(height_map, (self.cfg.tactile_img_res[1], self.cfg.tactile_img_res[0]))
 
         if self._device == "cpu":
             height_map = height_map.cpu()
-        
-        # only render img where indentation_depth > 0
+
+        self.tactile_rgb_img[self._indentation_depth <= 0][:] = self.background_img
+
         if height_map[self._indentation_depth > 0].shape[0] > 0:
-            self.tactile_rgb_img[self._indentation_depth > 0] = self._taxim.render_direct(
+            self.tactile_rgb_img[self._indentation_depth > 0] = (self._taxim.render_direct(
                 height_map[self._indentation_depth > 0],
                 with_shadow=self.cfg.with_shadow,
                 press_depth=self._indentation_depth[self._indentation_depth > 0],
                 orig_hm_fmt=False,
-            )
+            ).movedim(1, 3)*255).type(torch.uint8) 
 
-        # use background img 
-        self.tactile_rgb_img[self._indentation_depth <= 0] = self._taxim.background_img
         return self.tactile_rgb_img
 
     def compute_indentation_depth(self):
@@ -99,3 +114,4 @@ class TaximSimulator(GelSightSimulator):
     
     def reset(self):
         self._indentation_depth = torch.zeros((self._num_envs), device=self._device)
+        self.tactile_rgb_img[:] = self.background_img
