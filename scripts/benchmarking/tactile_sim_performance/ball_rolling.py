@@ -114,7 +114,7 @@ class BallRollingEnvCfg(DirectRLEnvCfg):
     decimation = 1
     # simulation
     sim: SimulationCfg = SimulationCfg(
-        dt=0.01, #1 / 120, #0.001
+        dt=1/60, #0.01, #1 / 120, #0.001
         render_interval=decimation,
         #device="cpu",
         physx=PhysxCfg(
@@ -179,23 +179,32 @@ class BallRollingEnvCfg(DirectRLEnvCfg):
     robot: ArticulationCfg = FRANKA_PANDA_ARM_GSMINI_SINGLE_ADAPTER_HIGH_PD_CFG.replace(
         prim_path="/World/envs/env_.*/Robot",
         init_state=ArticulationCfg.InitialStateCfg(
-                        joint_pos={
-                            "panda_joint1": 0.0,
-                            "panda_joint2": 0.0,
-                            "panda_joint3": 0.0,
-                            "panda_joint4": -2.46,
-                            "panda_joint5": 0.0,
-                            "panda_joint6": 2.5,
-                            "panda_joint7": 0.741,
-                        },
-                ),
+            # joint_pos={
+            #     "panda_joint1": 0.0,
+            #     "panda_joint2": 0.0,
+            #     "panda_joint3": 0.0,
+            #     "panda_joint4": -2.46,
+            #     "panda_joint5": 0.0,
+            #     "panda_joint6": 2.5,
+            #     "panda_joint7": 0.741,
+            # },
+            joint_pos={
+                "panda_joint1": 0.0,
+                "panda_joint2": 0.43,
+                "panda_joint3": 0.0,
+                "panda_joint4": -2.37,
+                "panda_joint5": 0.0,
+                "panda_joint6": 2.79,
+                "panda_joint7": 0.741,
+            },
+        ),
     )
     gsmini = GelSightMiniCfg(
         prim_path="/World/envs/env_.*/Robot/gelsight_mini_case",
         sensor_camera_cfg = GelSightMiniCfg.SensorCameraCfg(
             prim_path_appendix = "/Camera",
             update_period= 0,
-            resolution = (480,640), #(120, 160),
+            resolution = (32,32), #(120, 160),
             data_types = ["depth"],
             clipping_range = (0.024, 0.034),
         ),
@@ -209,7 +218,7 @@ class BallRollingEnvCfg(DirectRLEnvCfg):
     gsmini.optical_sim_cfg = gsmini.optical_sim_cfg.replace(
         with_shadow=False,
         device="cuda",
-        tactile_img_res=(48, 64),
+        tactile_img_res=(32, 32),
     )
     ik_controller_cfg = DifferentialIKControllerCfg(command_type="pose", use_relative_mode=False, ik_method="dls")
 
@@ -653,10 +662,10 @@ def run_simulator(env: BallRollingEnv):
         env._pre_physics_step(None)
         env._apply_action()
         env.scene.write_data_to_sim()
+        env.sim.step(render=False)
         physics_end = time.time()
         ###
 
-        env.sim.step(render=False)
         # update isaac buffers() -> also updates sensors
         env.scene.update(dt=env.physics_dt)
         # render scene for cameras (used by sensor)

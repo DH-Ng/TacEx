@@ -99,6 +99,15 @@ class EventCfg:
             "num_buckets": 1,
         },
     )
+    robot_add_gelpad_mass = EventTerm(
+        func=mdp.randomize_rigid_body_mass,
+        mode="reset",
+        params={
+            "asset_cfg": SceneEntityCfg("robot", body_names="gelsight_mini_gelpad"),
+            "mass_distribution_params": (-0.005, 0.005),
+            "operation": "add",
+        },
+    )
     # robot_joint_stiffness_and_damping = EventTerm(
     #     func=mdp.randomize_actuator_gains,
     #     mode="reset",
@@ -177,7 +186,7 @@ class BallRollingTactileRGBCfg(DirectRLEnvCfg):
     decimation = 1
     # simulation
     sim: SimulationCfg = SimulationCfg(
-        dt=1 / 60, #0.001
+        dt=1/60,
         render_interval=decimation,
         #device="cpu",
         physx=PhysxCfg(
@@ -188,13 +197,20 @@ class BallRollingTactileRGBCfg(DirectRLEnvCfg):
         physics_material=sim_utils.RigidBodyMaterialCfg(
             friction_combine_mode="multiply",
             restitution_combine_mode="multiply",
-            static_friction=1.5,
-            dynamic_friction=1.5,
-            restitution=0.1,
-            improve_patch_friction=True,
-            compliant_contact_damping=4.25,
-            compliant_contact_stiffness=1.75
+            static_friction=5.0,
+            dynamic_friction=5.0,
+            restitution=0.0,
         ),
+        # physics_material=sim_utils.RigidBodyMaterialCfg(
+        #     friction_combine_mode="multiply",
+        #     restitution_combine_mode="multiply",
+        #     static_friction=1.5,
+        #     dynamic_friction=1.5,
+        #     restitution=0.1,
+        #     improve_patch_friction=True,
+        #     compliant_contact_damping=4.25,
+        #     compliant_contact_stiffness=1.75
+        # ),
     )
 
     # scene
@@ -204,15 +220,6 @@ class BallRollingTactileRGBCfg(DirectRLEnvCfg):
     robot: ArticulationCfg = FRANKA_PANDA_ARM_GSMINI_SINGLE_ADAPTER_HIGH_PD_CFG.replace(
         prim_path="/World/envs/env_.*/Robot",
         init_state=ArticulationCfg.InitialStateCfg(
-            # joint_pos={
-            #     "panda_joint1": -1.6945,
-            #     "panda_joint2": -1.56,
-            #     "panda_joint3": 1.778,
-            #     "panda_joint4": -2.29,
-            #     "panda_joint5": 1.71,
-            #     "panda_joint6": 1.79,
-            #     "panda_joint7": 1.59,
-            # },
             joint_pos={
                 "panda_joint1": 0.0,
                 "panda_joint2": 0.43,
@@ -222,15 +229,6 @@ class BallRollingTactileRGBCfg(DirectRLEnvCfg):
                 "panda_joint6": 2.79,
                 "panda_joint7": 0.741,
             },
-            # joint_pos={
-            #     "panda_joint1": 1.40,
-            #     "panda_joint2": 1.56,
-            #     "panda_joint3": -1.3775,
-            #     "panda_joint4": -2.275,
-            #     "panda_joint5": 1.74,
-            #     "panda_joint6": 1.71,
-            #     "panda_joint7": 1.59,
-            # },
         ),
     )
 
@@ -282,7 +280,7 @@ class BallRollingTactileRGBCfg(DirectRLEnvCfg):
             usd_path=f"{TACEX_ASSETS_DATA_DIR}/Props/ball_wood.usd", 
             #scale=(2, 1, 0.6),
             rigid_props=RigidBodyPropertiesCfg(
-                    solver_position_iteration_count=60,
+                    solver_position_iteration_count=16,
                     solver_velocity_iteration_count=1,
                     max_angular_velocity=1000.0,
                     max_linear_velocity=1000.0,
@@ -300,7 +298,7 @@ class BallRollingTactileRGBCfg(DirectRLEnvCfg):
             update_period= 0,
             resolution = (32, 32), #(48, 64),
             data_types = ["depth"],
-            clipping_range = (0.024, 0.029),
+            clipping_range = (0.015, 0.029), #(0.024, 0.029), make min value little bit smaller, due to penetration issues
         ),
         device = "cuda",
         debug_vis=True, # for being able to see sensor output in the gui
@@ -357,10 +355,10 @@ class BallRollingTactileRGBCfg(DirectRLEnvCfg):
 
     #MARK: reward cfg
     reward_cfg = {
-        "at_obj_reward": {"weight": 0.05, "minimal_distance": 0.0085},
+        "at_obj_reward": {"weight": 0.5, "min_depth": 0.25, "max_depth": 4.0},
         "off_the_ground_penalty": {"weight": -15, "max_height": 0.025},
-        "height_reward": {"weight": 0.0, "w": 10.0, "v": 0.3, "alpha": 0.00067, "target_height_cm": 1.225, "min_height": 0.002},
-        "orient_reward": {"weight": -0.35},
+        "height_reward": {"weight": 0.15, "std": 0.4901,  "alpha": 0.00067, "target_height_cm": 1.225, "min_height": 0.002}, # target height: 1cm + 0.25cm - 0.125cm
+        "orient_reward": {"weight": -1.15},
         # for solving the task
         "ee_goal_tracking": {"weight": 0.75, "std": 0.2, "std_fine": 0.36},
         "obj_goal_tracking": {"weight": 0.75, "std": 0.2},
@@ -368,7 +366,6 @@ class BallRollingTactileRGBCfg(DirectRLEnvCfg):
         "obj_goal_fine_tracking": {"weight": 1.5, "std": 0.9258},
         "obj_goal_super_fine_tracking": {"weight": 1.25, "std": 2.0373},
         "success_reward": {"weight": 5.0, "threshold": 0.005}, # 0.0025 we count it as a sucess when dist obj <-> goal is less than the threshold
-        "too_far_penalty": {"weight": -0.0, "threshold": 0.0175}, 
         # penalties for nice behavior
         "action_rate_penalty": {"weight": -1e-4},
         "joint_vel_penalty": {"weight": -1e-4},
@@ -543,7 +540,7 @@ class BallRollingTactileRGBEnv(DirectRLEnv):
             self.visualizers["Metrics"].terms["ee_orient_error"] = torch.zeros((self.num_envs))
             self.visualizers["Metrics"].terms["obj_ee_distance"] = torch.zeros((self.num_envs))
             self.visualizers["Metrics"].terms["obj_goal_distance"] = torch.zeros((self.num_envs))
-
+            self.visualizers["Metrics"].terms["indentation_depth"] = torch.zeros((self.num_envs))
 
             for vis in self.visualizers.values():
                 vis.create_visualizer()
@@ -773,7 +770,6 @@ class BallRollingTactileRGBEnv(DirectRLEnv):
             obj_goal_fine_tracking_reward,
             obj_goal_super_fine_tracking_reward,
             success_reward,
-            too_far_penalty,
             action_rate_penalty,
             joint_vel_penalty,
             full_reward       
@@ -787,7 +783,6 @@ class BallRollingTactileRGBEnv(DirectRLEnv):
             self.cfg.reward_cfg["obj_goal_fine_tracking"],
             self.cfg.reward_cfg["obj_goal_super_fine_tracking"],
             self.cfg.reward_cfg["success_reward"],
-            self.cfg.reward_cfg["too_far_penalty"],
             self.cfg.reward_cfg["action_rate_penalty"],
             self.cfg.reward_cfg["joint_vel_penalty"],
             obj_pos_b,
@@ -796,7 +791,7 @@ class BallRollingTactileRGBEnv(DirectRLEnv):
             self.actions,
             self.prev_actions,
             self._robot.data.joint_vel[:, :],
-            self.object_ee_distance,
+            self.gsmini.indentation_depth,
             self.ee_goal_distance,
             self.ee_orient_error,
             self.obj_goal_distance
@@ -824,6 +819,7 @@ class BallRollingTactileRGBEnv(DirectRLEnv):
             "Metric/ee_goal_error": self.ee_goal_distance.mean(),
             "Metric/ee_orient_error": self.ee_orient_error.mean(),
             "Metric/obj_goal_error": self.obj_goal_distance.mean(),
+            "Metric/indentation_depth": self.gsmini.indentation_depth.mean(),
             # curriculum data
             "Curriculum/goal_rand_range": self._goal_random_curr[self.curriculum_levels["goal_randomization_range"]],
         }
@@ -857,7 +853,6 @@ class BallRollingTactileRGBEnv(DirectRLEnv):
             self.visualizers["Rewards"].terms["rewards"][:, 6] = obj_goal_fine_tracking_reward
             self.visualizers["Rewards"].terms["rewards"][:, 7] = obj_goal_super_fine_tracking_reward
             self.visualizers["Rewards"].terms["rewards"][:, 8] = success_reward
-            self.visualizers["Rewards"].terms["rewards"][:, 9] = too_far_penalty
             self.visualizers["Rewards"].terms["rewards"][:, 10] = full_reward
 
             self.visualizers["Metrics"].terms["ee_height"][:]  = ee_frame_pos_b[:, 2]
@@ -865,6 +860,7 @@ class BallRollingTactileRGBEnv(DirectRLEnv):
             self.visualizers["Metrics"].terms["ee_orient_error"][:] = self.ee_orient_error
             self.visualizers["Metrics"].terms["obj_ee_distance"][:] = self.object_ee_distance
             self.visualizers["Metrics"].terms["obj_goal_distance"][:] = self.obj_goal_distance
+            self.visualizers["Metrics"].terms["indentation_depth"][:] = self.gsmini.indentation_depth
         return full_reward
 
     #MARK: observations
@@ -923,7 +919,7 @@ class BallRollingTactileRGBEnv(DirectRLEnv):
             self.visualizers["Observations"].terms["ee_rot"][:, 2:3] = z
             self.visualizers["Observations"].terms["goal"] = self._goal_pos_b[:, :2]
             self.visualizers["Observations"].terms["sensor_output"] = vision_obs
-
+            
         return {"policy": obs}
 
     ####
@@ -1070,7 +1066,6 @@ def _compute_rewards(
     obj_goal_fine_tracking_cfg: Dict[str, float],
     obj_goal_super_fine_tracking_cfg: Dict[str, float],
     success_reward_cfg: Dict[str, float], 
-    too_far_penalty_cfg: Dict[str, float],
     action_rate_penalty_cfg: Dict[str, float],
     joint_vel_penalty_cfg: Dict[str, float],
     obj_pos_b: torch.Tensor,
@@ -1080,22 +1075,23 @@ def _compute_rewards(
     prev_actions: torch.Tensor,
     joint_vel: torch.Tensor,
     # intermediate values
-    object_ee_distance: torch.Tensor,
+    indentation_depth: torch.Tensor,
     ee_goal_distance: torch.Tensor,
     ee_orient_error: torch.Tensor,
     obj_goal_distance: torch.Tensor
 ):
     # for giving agent incentive to touch the obj
     at_obj_reward = torch.where(
-        object_ee_distance <= at_obj_reward_cfg["minimal_distance"], 
+        (indentation_depth >= at_obj_reward_cfg["min_depth"]) 
+        & (indentation_depth <= at_obj_reward_cfg["max_depth"]), 
         at_obj_reward_cfg["weight"], 
         0.0
     )
-    too_far_penalty = torch.where(
-        object_ee_distance > too_far_penalty_cfg["threshold"], 
-        too_far_penalty_cfg["weight"],
-        0.0
-    )
+    # too_far_penalty = torch.where(
+    #     object_ee_distance > too_far_penalty_cfg["threshold"], 
+    #     too_far_penalty_cfg["weight"],
+    #     0.0
+    # )
     # penalty for preventing the ball from jumping
     off_the_ground_penalty = torch.where(
         obj_pos_b[:, 2] > off_the_ground_penalty_cfg["max_height"], 
@@ -1104,18 +1100,19 @@ def _compute_rewards(
     )
 
     height_diff = height_reward_cfg["target_height_cm"] - ee_frame_pos_b[:, 2]*100.0
-    height_reward = -(
-        height_reward_cfg["w"]*height_diff**2
-        + height_reward_cfg["v"]*torch.log(height_diff**2 + height_reward_cfg["alpha"])
-    )#.clamp(-1,1)
-    # penalize ee being too close to ground
-    height_reward = torch.where(
-        (ee_frame_pos_b[:, 2] <= height_reward_cfg["min_height"]), 
-        height_reward-10, 
-        height_reward
-    )
+    # height_reward = -(
+    #     height_reward_cfg["w"]*height_diff**2
+    #     + height_reward_cfg["v"]*torch.log(height_diff**2 + height_reward_cfg["alpha"])
+    # )#.clamp(-1,1)
+    # # penalize ee being too close to ground
+    # height_reward = torch.where(
+    #     (ee_frame_pos_b[:, 2] <= height_reward_cfg["min_height"]), 
+    #     height_reward-10, 
+    #     height_reward
+    # )
+    height_reward = 1 - torch.tanh((height_diff) / height_reward_cfg["std"])
     height_reward *= height_reward_cfg["weight"]
-    
+
     # ee should be upright
     # orient_reward = torch.where(
     #     (obj_goal_distance < success_reward_cfg["threshold"]) 
@@ -1159,7 +1156,7 @@ def _compute_rewards(
 
     success_reward = torch.where(
         (obj_goal_distance < success_reward_cfg["threshold"]) 
-        & (object_ee_distance < at_obj_reward_cfg["minimal_distance"]), 
+        & (indentation_depth >= at_obj_reward_cfg["min_depth"]), 
         1.0*success_reward_cfg["weight"], 
         0.0
     )
@@ -1180,7 +1177,6 @@ def _compute_rewards(
         + obj_goal_fine_tracking_reward
         + obj_goal_super_fine_tracking_reward
         + success_reward
-        + too_far_penalty
         + action_rate_penalty
         + joint_vel_penalty
     )
@@ -1195,7 +1191,6 @@ def _compute_rewards(
         obj_goal_fine_tracking_reward,
         obj_goal_super_fine_tracking_reward,
         success_reward,
-        too_far_penalty,
         action_rate_penalty,
         joint_vel_penalty,
         full_reward       

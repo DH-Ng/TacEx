@@ -122,8 +122,11 @@ class GelSightSensor(SensorBase):
         return self.cfg.sensor_camera_cfg.resolution[0], self.cfg.sensor_camera_cfg.resolution[1]  # type: ignore
 
     @property
-    def press_depth(self):
-        """How deep objects are inside the gel pad of the sensor"""
+    def indentation_depth(self):
+        """How deep objects are inside the gel pad of the sensor. 
+        
+        Units: [mm]
+        """
         return self._indentation_depth
 
     """
