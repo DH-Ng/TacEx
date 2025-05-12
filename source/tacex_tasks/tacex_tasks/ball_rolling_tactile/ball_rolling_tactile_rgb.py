@@ -359,7 +359,7 @@ class BallRollingTactileRGBCfg(DirectRLEnvCfg):
         "centering_error": {"weight": -0.05},
         "off_the_ground_penalty": {"weight": -15, "max_height": 0.025},
         "height_reward": {"weight": 0.15, "std": 0.4901,  "alpha": 0.00067, "target_height_cm": 1.225, "min_height": 0.002}, # target height: 1cm + 0.25cm - 0.125cm
-        "orient_reward": {"weight": -0.75},
+        "orient_reward": {"weight": -2.25},
         # for solving the task
         "ee_goal_tracking": {"weight": 0.75, "std": 0.2, "std_fine": 0.36},
         "obj_goal_tracking": {"weight": 0.75, "std": 0.2},
@@ -1127,8 +1127,8 @@ def _compute_rewards(
     x = wrap_to_pi(ee_frame_orient[0])
     y = wrap_to_pi(ee_frame_orient[1])
     orient_reward = torch.where(
-        (torch.abs(x) < math.pi/8) 
-        & (torch.abs(y) < math.pi/8),
+        (torch.abs(x) < math.pi/10) #8
+        & (torch.abs(y) < math.pi/10), #8
         0.0,
         1.0*orient_reward_cfg["weight"]
     )
@@ -1136,7 +1136,13 @@ def _compute_rewards(
     #     (torch.abs(x))**2
     #     + (torch.abs(y))**2
     # )
-    # orient_reward *= orient_reward_cfg["weight"]
+    # orient_reward = torch.where(
+    #     (torch.abs(x) < math.pi/8) 
+    #     & (torch.abs(y) < math.pi/8),
+    #     orient_reward,
+    #     orient_reward*1.5
+    # )
+    #orient_reward *= orient_reward_cfg["weight"]
     
     ee_goal_tracking_reward = (
         1 - torch.tanh((ee_goal_distance) / ee_goal_tracking_cfg["std"])
