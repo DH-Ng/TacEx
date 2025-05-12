@@ -355,10 +355,11 @@ class BallRollingTactileRGBCfg(DirectRLEnvCfg):
 
     #MARK: reward cfg
     reward_cfg = {
-        "at_obj_reward": {"weight": 0.5, "min_depth": 0.25, "max_depth": 4.0},
+        "at_obj_reward": {"weight": 0.25, "min_depth": 0.75, "max_depth": 4.0},
+        "centering_error": {"weight": -0.05},
         "off_the_ground_penalty": {"weight": -15, "max_height": 0.025},
         "height_reward": {"weight": 0.15, "std": 0.4901,  "alpha": 0.00067, "target_height_cm": 1.225, "min_height": 0.002}, # target height: 1cm + 0.25cm - 0.125cm
-        "orient_reward": {"weight": -1.15},
+        "orient_reward": {"weight": -0.75},
         # for solving the task
         "ee_goal_tracking": {"weight": 0.75, "std": 0.2, "std_fine": 0.36},
         "obj_goal_tracking": {"weight": 0.75, "std": 0.2},
@@ -375,7 +376,7 @@ class BallRollingTactileRGBCfg(DirectRLEnvCfg):
     goal_randomization_range_y = [-0.3, 0.3] #[-0.35, 0.35]
 
     # env
-    episode_length_s = 8.3333*3 # 1500 timesteps per episode (dt = 1/60 -> 1500*(1/60)=8.3333*3)
+    episode_length_s = 8.3333*2 # 1000 timesteps per episode (dt = 1/60 -> 1500*(1/60)=8.3333*3)
     action_space = 6 # we use relative task_space actions: (dx, dy, dz, droll, dpitch) -> dyaw is ommitted
     observation_space = {
         "proprio_obs": 14, #16, # 3 for ee pos, 2 for orient (roll, pitch), 2 for init goal-pos (x,y), 5 for actions
@@ -386,9 +387,9 @@ class BallRollingTactileRGBCfg(DirectRLEnvCfg):
 
     ball_radius = 0.005 # don't change, because rewards (e.g. height reward) are tuned for this ball size 
 
-    x_bounds = (0.1, 0.7)
+    x_bounds = (0.2, 0.8)
     y_bounds = (-0.4, 0.4)
-    too_far_away_threshold = 0.02 
+    too_far_away_threshold = 0.015
     min_height_threshold = 0.002
 
     curriculum_cfg = {
@@ -470,7 +471,7 @@ class BallRollingTactileRGBEnv(DirectRLEnv):
         self._goal_orient[:, 0] = 0.70711
         self._goal_orient[:, 3] = 0.70711
         
-        #self.success_env = torch.zeros(self.num_envs, device=self.device, dtype=torch.bool)
+        self._time_out  = torch.zeros(self.num_envs, device=self.device, dtype=torch.bool)
 
         self.object_ee_distance = torch.zeros((self.num_envs,1), device=self.device)
         self.ee_goal_distance = torch.zeros((self.num_envs,1), device=self.device)
@@ -682,9 +683,9 @@ class BallRollingTactileRGBEnv(DirectRLEnv):
         #     # reset episode length
         #     self.episode_length_buf[success_env] = 0
 
-        time_out = self.episode_length_buf >= self.max_episode_length - 1 # episode length limit
-
-        return reset_cond, time_out
+        self._time_out = self.episode_length_buf >= self.max_episode_length - 1 # episode length limit
+        
+        return reset_cond, self._time_out
     #MARK: reset
     def _reset_idx(self, env_ids: torch.Tensor | None):
         # # log task metrics
@@ -694,30 +695,31 @@ class BallRollingTactileRGBEnv(DirectRLEnv):
         #     "Metric/obj_goal_error": self.obj_goal_distance[env_ids].mean(),
         # }
 
+        # don't do full reset for env where time_out, but robot still in contact with ball
+        in_contact = self.gsmini.indentation_depth > 0
+        partial_reset_env_ids = (in_contact & self._time_out)
+
+        full_reset_env_ids = (self.reset_buf & torch.logical_not(partial_reset_env_ids)).nonzero(as_tuple=False).squeeze(-1)
+
+        # reset buffers
         super()._reset_idx(env_ids)
 
-        # reset to intial positions, if not successful
-        #env_ids = (self.reset_buf & torch.logical_not(self.success_env)).nonzero(as_tuple=False).squeeze(-1)
-        #env_ids = env_ids
-        
         # spawn obj at initial position
-        obj_pos = self.object.data.default_root_state[env_ids] 
+        obj_pos = self.object.data.default_root_state[full_reset_env_ids] 
         obj_pos[:, :2] += sample_uniform(
             -0.00025, 
             0.00025,
-            (len(env_ids), 2), 
+            (len(full_reset_env_ids), 2), 
             self.device
         )
-        obj_pos[:, :3] += self.scene.env_origins[env_ids]
-        self.object.write_root_state_to_sim(obj_pos, env_ids=env_ids)
+        obj_pos[:, :3] += self.scene.env_origins[full_reset_env_ids]
+        self.object.write_root_state_to_sim(obj_pos, env_ids=full_reset_env_ids)
 
         # reset robot state
-        joint_pos = self._robot.data.default_joint_pos[env_ids]
-        # randomize joints 3 and 4 a little bit
-        # joint_pos[:, 2:4] += sample_uniform(-0.0015, 0.0015, (len(env_ids), 2), self.device) 
+        joint_pos = self._robot.data.default_joint_pos[full_reset_env_ids]
         joint_vel = torch.zeros_like(joint_pos)
-        self._robot.set_joint_position_target(joint_pos, env_ids=env_ids)
-        self._robot.write_joint_state_to_sim(joint_pos, joint_vel, env_ids=env_ids)
+        self._robot.set_joint_position_target(joint_pos, env_ids=full_reset_env_ids)
+        self._robot.write_joint_state_to_sim(joint_pos, joint_vel, env_ids=full_reset_env_ids)
 
         # set commands: random target position 
         self._goal_pos_b[env_ids, :2] = self.object.data.default_root_state[env_ids, :2] 
@@ -775,6 +777,7 @@ class BallRollingTactileRGBEnv(DirectRLEnv):
             full_reward       
         ) = _compute_rewards(
             self.cfg.reward_cfg["at_obj_reward"],
+            self.cfg.reward_cfg["centering_error"],
             self.cfg.reward_cfg["off_the_ground_penalty"],
             self.cfg.reward_cfg["height_reward"],
             self.cfg.reward_cfg["orient_reward"],
@@ -1058,6 +1061,7 @@ def _compute_intermediate_values(
 @torch.jit.script
 def _compute_rewards(
     at_obj_reward_cfg: Dict[str, float],
+    centering_error_cfg: Dict[str, float],
     off_the_ground_penalty_cfg: Dict[str, float],
     height_reward_cfg: Dict[str, float],
     orient_reward_cfg: Dict[str, float],
@@ -1087,11 +1091,10 @@ def _compute_rewards(
         at_obj_reward_cfg["weight"], 
         0.0
     )
-    # too_far_penalty = torch.where(
-    #     object_ee_distance > too_far_penalty_cfg["threshold"], 
-    #     too_far_penalty_cfg["weight"],
-    #     0.0
-    # )
+    # trying to keep ball in center of gelpad
+    center_error = torch.square(torch.norm(obj_pos_b[:, :2]*100 - ee_frame_pos_b[:, :2]*100, dim=1))
+    center_error *= centering_error_cfg["weight"]
+
     # penalty for preventing the ball from jumping
     off_the_ground_penalty = torch.where(
         obj_pos_b[:, 2] > off_the_ground_penalty_cfg["max_height"], 
@@ -1123,17 +1126,17 @@ def _compute_rewards(
     ee_frame_orient = euler_xyz_from_quat(ee_frame_orient_b)
     x = wrap_to_pi(ee_frame_orient[0])
     y = wrap_to_pi(ee_frame_orient[1])
-    # orient_reward = torch.where(
-    #     (torch.abs(x) < math.pi/8) 
-    #     & (torch.abs(y) < math.pi/8),
-    #     0.0,
-    #     1.0*orient_reward_cfg["weight"]
-    # )
-    orient_reward = (
-        (torch.abs(x))**2
-        + (torch.abs(y))**2
+    orient_reward = torch.where(
+        (torch.abs(x) < math.pi/8) 
+        & (torch.abs(y) < math.pi/8),
+        0.0,
+        1.0*orient_reward_cfg["weight"]
     )
-    orient_reward *= orient_reward_cfg["weight"]
+    # orient_reward = (
+    #     (torch.abs(x))**2
+    #     + (torch.abs(y))**2
+    # )
+    # orient_reward *= orient_reward_cfg["weight"]
     
     ee_goal_tracking_reward = (
         1 - torch.tanh((ee_goal_distance) / ee_goal_tracking_cfg["std"])
@@ -1170,7 +1173,7 @@ def _compute_rewards(
     full_reward = (
         at_obj_reward
         + off_the_ground_penalty
-        # + height_reward
+        + center_error
         + orient_reward
         # + ee_goal_tracking_reward
         + obj_goal_tracking_reward
