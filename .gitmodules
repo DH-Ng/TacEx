@@ -1,0 +1,3 @@
+[submodule "source/tacex_ipc/tacex_ipc/libuipc"]
+	path = source/tacex_ipc/tacex_ipc/libuipc
+	url = https://github.com/Duuuc/libuipc.git
