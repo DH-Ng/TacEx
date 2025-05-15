@@ -39,3 +39,5 @@ _build
 _isaac_lab*
 
 **/*/.container.cfg
+
+build

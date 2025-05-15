@@ -37,6 +37,7 @@ RUN --mount=type=cache,target=/var/cache/apt \
     wget \
     git-lfs \
     nano \
+    tmux \
     libglew-dev \
     freeglut3-dev \
     libeigen3-dev \
@@ -46,14 +47,13 @@ RUN --mount=type=cache,target=/var/cache/apt \
     rm -rf /var/lib/apt/lists/*
 
 # # install cuda toolkit for compiling GIPC and the runtime
-# RUN wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/x86_64/cuda-keyring_1.1-1_all.deb && \
-#     dpkg -i cuda-keyring_1.1-1_all.deb && \
-#     apt-get update && apt-get -y install cuda-toolkit-12-4
+RUN wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/x86_64/cuda-keyring_1.1-1_all.deb && \
+    dpkg -i cuda-keyring_1.1-1_all.deb && \
+    apt-get update && apt-get -y install cuda-toolkit-12-4
 
 #RUN wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2004/x86_64/cuda-keyring_1.1-1_all.deb && \
 #    dpkg -i cuda-keyring_1.1-1_all.deb && \
 #    apt-get update && apt-get -y install cuda-toolkit-11-8
-
 
 # set cuda paths 
 RUN echo "export CUDA_HOME=/usr/local/cuda" >> ${HOME}/.bashrc && \
