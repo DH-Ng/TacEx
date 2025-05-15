@@ -19,7 +19,7 @@ from isaaclab.terrains import TerrainImporterCfg
 from isaaclab.utils import configclass
 from isaaclab.utils.noise import AdditiveUniformNoiseCfg as Unoise
 
-import tacex_gipc.tasks.locomotion.velocity.mdp as mdp
+import tacex_ipc.tasks.locomotion.velocity.mdp as mdp
 
 ##
 # Pre-defined configs

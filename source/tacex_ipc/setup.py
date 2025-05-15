@@ -13,13 +13,12 @@ EXTENSION_TOML_DATA = toml.load(os.path.join(EXTENSION_PATH, "config", "extensio
 # Minimum dependencies required prior to installation
 INSTALL_REQUIRES = [
     # NOTE: Add dependencies
-    "psutil",
 ]
 
 # Installation operation
 setup(
-    name="tacex_gipc",
-    packages=["tacex_gipc"],
+    name="tacex_ipc",
+    packages=["tacex_ipc"],
     author=EXTENSION_TOML_DATA["package"]["author"],
     maintainer=EXTENSION_TOML_DATA["package"]["maintainer"],
     url=EXTENSION_TOML_DATA["package"]["repository"],
