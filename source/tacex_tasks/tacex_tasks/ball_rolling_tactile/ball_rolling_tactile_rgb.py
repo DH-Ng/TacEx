@@ -355,11 +355,11 @@ class BallRollingTactileRGBCfg(DirectRLEnvCfg):
 
     #MARK: reward cfg
     reward_cfg = {
-        "at_obj_reward": {"weight": 0.25, "min_depth": 0.5, "max_depth": 4.0},
+        "at_obj_reward": {"weight": 0.25, "min_depth": 0.75, "max_depth": 4.0},
         "centering_error": {"weight": -0.05},
         "off_the_ground_penalty": {"weight": -15, "max_height": 0.025},
-        "height_reward": {"weight": -1.15, "std": 0.4901,  "alpha": 0.00067, "target_height_cm": 1.225, "min_height": 0.002}, # target height: 1cm + 0.25cm - 0.125cm
-        "orient_reward": {"weight": -0.25},
+        "height_reward": {"weight": 0.15, "std": 0.4901,  "alpha": 0.00067, "target_height_cm": 1.225, "min_height": 0.002}, # target height: 1cm + 0.25cm - 0.125cm
+        "orient_reward": {"weight": -2.25},
         # for solving the task
         "ee_goal_tracking": {"weight": 0.75, "std": 0.2, "std_fine": 0.36},
         "obj_goal_tracking": {"weight": 0.75, "std": 0.2},
@@ -468,9 +468,8 @@ class BallRollingTactileRGBEnv(DirectRLEnv):
         # make height of goal pos fixed
         self._goal_pos_b[:, 2] = self.cfg.ball_radius*2 + 0.0025 # plate height above ground = 0.0025
         self._goal_orient = torch.zeros((self.num_envs, 4), device=self.device) # goal orient is [0.70711,0,0,0.70711], i.e. upright ee (x=0, y=0, z=90°)
-        # self._goal_orient[:, 0] = 0.70711
-        # self._goal_orient[:, 3] = 0.70711
-        self._goal_orient[:, 3] = 1.0
+        self._goal_orient[:, 0] = 0.70711
+        self._goal_orient[:, 3] = 0.70711
         
         self._time_out  = torch.zeros(self.num_envs, device=self.device, dtype=torch.bool)
 
@@ -1050,6 +1049,7 @@ def _compute_intermediate_values(
     ee_goal_distance = torch.norm(ee_frame_pos_b[:, :2] - goal_pos_b[:, :2], dim=1)
     ee_orient_error = quat_error_magnitude(ee_frame_orient_b, goal_orient_b)
 
+        
     obj_goal_distance = torch.norm(obj_pos_b[:, :2] - goal_pos_b[:, :2], dim=1)
     return (
        object_ee_distance,
@@ -1113,8 +1113,7 @@ def _compute_rewards(
     #     height_reward-10, 
     #     height_reward
     # )
-    # height_reward = 1 - torch.tanh((height_diff) / height_reward_cfg["std"])
-    height_reward = height_diff**2
+    height_reward = 1 - torch.tanh((height_diff) / height_reward_cfg["std"])
     height_reward *= height_reward_cfg["weight"]
 
     # ee should be upright
@@ -1124,16 +1123,15 @@ def _compute_rewards(
     #     ee_orient_error * orient_reward_cfg["weight"]*1.5, # especially when goal position is reached
     #     ee_orient_error * orient_reward_cfg["weight"]
     # )
-    orient_reward = ee_orient_error * orient_reward_cfg["weight"]
-    # ee_frame_orient = euler_xyz_from_quat(ee_frame_orient_b)
-    # x = wrap_to_pi(ee_frame_orient[0])
-    # y = wrap_to_pi(ee_frame_orient[1])
-    # orient_reward = torch.where(
-    #     (torch.abs(x) < math.pi/10) #8
-    #     & (torch.abs(y) < math.pi/10), #8
-    #     0.0,
-    #     1.0*orient_reward_cfg["weight"]
-    # )
+    ee_frame_orient = euler_xyz_from_quat(ee_frame_orient_b)
+    x = wrap_to_pi(ee_frame_orient[0])
+    y = wrap_to_pi(ee_frame_orient[1])
+    orient_reward = torch.where(
+        (torch.abs(x) < math.pi/10) #8
+        & (torch.abs(y) < math.pi/10), #8
+        0.0,
+        1.0*orient_reward_cfg["weight"]
+    )
     # orient_reward = (
     #     (torch.abs(x))**2
     #     + (torch.abs(y))**2
@@ -1182,7 +1180,6 @@ def _compute_rewards(
         at_obj_reward
         + off_the_ground_penalty
         + center_error
-        + height_reward
         + orient_reward
         # + ee_goal_tracking_reward
         + obj_goal_tracking_reward
