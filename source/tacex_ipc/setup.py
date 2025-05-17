@@ -50,7 +50,7 @@ class CMakeBuild(build_ext):
             '-DCMAKE_LIBRARY_OUTPUT_DIRECTORY=' + extdir,
             # "-DCMAKE_CUDA_ARCHITECTURES=SM89",
             #for libuipc
-            "-DUIPC_PYTHON_EXECUTABLE_PATH=" + sys.executable,
+            # "-DUIPC_PYTHON_EXECUTABLE_PATH=" + sys.executable,
             "-DUIPC_BUILD_PYBIND=1",
         ]
         cfg = 'Debug' if self.debug else 'Release'
@@ -100,7 +100,7 @@ setup(
         "Programming Language :: Python :: 3.10",
         "Isaac Sim :: 4.5.0",
     ],
-    ext_modules=[CMakeExtension("uipc")],
+    ext_modules=[CMakeExtension("uipc", "./libuipc")],
     cmdclass=dict(build_ext=CMakeBuild),
     zip_safe=False,
 )
