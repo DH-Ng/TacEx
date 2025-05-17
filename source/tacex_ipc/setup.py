@@ -1,4 +1,4 @@
-"""Installation script for the 'tacex_gipc' python package."""
+"""Installation script for the 'tacex_ipc' python package."""
 
 import os
 import toml
@@ -23,6 +23,8 @@ EXTENSION_TOML_DATA = toml.load(os.path.join(EXTENSION_PATH, "config", "extensio
 # Minimum dependencies required prior to installation
 INSTALL_REQUIRES = [
     # NOTE: Add dependencies
+    # "cmake>=3.26",
+    # "pybind11"
 ]
 
 '''
@@ -36,35 +38,23 @@ class CMakeExtension(Extension):
 
 class CMakeBuild(build_ext):
     def run(self):
-        try:
-            out = subprocess.check_output(['cmake', '--version'])
-        except OSError:
-            raise RuntimeError(
-                "CMake must be installed to build the following extensions: " +
-                ", ".join(e.name for e in self.extensions))
-
-        # if platform.system() == "Windows":
-        #     cmake_version = LooseVersion(re.search(r'version\s*([\d.]+)',
-        #                                  out.decode()).group(1))
-        #     if cmake_version < '3.1.0':
-        #         raise RuntimeError("CMake >= 3.1.0 is required on Windows")
-
         for ext in self.extensions:
             self.build_extension(ext)
 
     def build_extension(self, ext):
         extdir = os.path.abspath(
             os.path.dirname(self.get_ext_fullpath(ext.name)))
-
         # cmake_args = ['-DCMAKE_LIBRARY_OUTPUT_DIRECTORY=' + extdir,
         #               '-DPYTHON_EXECUTABLE=' + sys.executable]
         cmake_args = [
-
-            # '-DCMAKE_LIBRARY_OUTPUT_DIRECTORY=' + extdir,
-            '-DUIPC_PYTHON_EXECUTABLE_PATH=' + sys.executable
+            '-DCMAKE_LIBRARY_OUTPUT_DIRECTORY=' + extdir,
+            # "-DCMAKE_CUDA_ARCHITECTURES=SM89",
+            #for libuipc
+            "-DUIPC_PYTHON_EXECUTABLE_PATH=" + sys.executable,
+            "-DUIPC_BUILD_PYBIND=1",
         ]
         cfg = 'Debug' if self.debug else 'Release'
-        build_args = ['--config', cfg]
+        build_args = []#['--config', cfg]
 
         if platform.system() == "Windows":
             cmake_args += ['-DCMAKE_LIBRARY_OUTPUT_DIRECTORY_{}={}'.format(
