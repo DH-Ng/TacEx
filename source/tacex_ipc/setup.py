@@ -44,14 +44,14 @@ class CMakeBuild(build_ext):
     def build_extension(self, ext):
         extdir = os.path.abspath(
             os.path.dirname(self.get_ext_fullpath(ext.name)))
-        # cmake_args = ['-DCMAKE_LIBRARY_OUTPUT_DIRECTORY=' + extdir,
-        #               '-DPYTHON_EXECUTABLE=' + sys.executable]
+
         cmake_args = [
             '-DCMAKE_LIBRARY_OUTPUT_DIRECTORY=' + extdir,
             # "-DCMAKE_CUDA_ARCHITECTURES=SM89",
             #for libuipc
             # "-DUIPC_PYTHON_EXECUTABLE_PATH=" + sys.executable,
             "-DUIPC_BUILD_PYBIND=1",
+            "-DUIPC_DEV_MODE=1"
         ]
         cfg = 'Debug' if self.debug else 'Release'
         build_args = []#['--config', cfg]
@@ -71,12 +71,13 @@ class CMakeBuild(build_ext):
         env['CXXFLAGS'] = '{} -DVERSION_INFO=\\"{}\\"'.format(
             env.get('CXXFLAGS', ''),
             self.distribution.get_version())
-        if not os.path.exists(self.build_temp):
-            os.makedirs(self.build_temp)
+        self.build_dir = "build/" # where the compiled files are placed
+        if not os.path.exists(self.build_dir):
+            os.makedirs(self.build_dir)
         subprocess.check_call(['cmake', ext.sourcedir] + cmake_args,
-                              cwd=self.build_temp, env=env)
+                              cwd=self.build_dir, env=env)
         subprocess.check_call(['cmake', '--build', '.'] + build_args,
-                              cwd=self.build_temp)
+                              cwd=self.build_dir)
 
 # with (Path(__file__).resolve().parent / "README.md").open("r", encoding="utf-8") as f:
 #     long_description = f.read()

@@ -124,7 +124,7 @@ install_isaaclab_extension() {
     # if the directory contains setup.py then install the python module
     if [ -f "$1/setup.py" ]; then
         echo -e "\t module: $1"
-        ${python_exe} -m pip install --editable $1
+        ${python_exe} -m pip install --editable $1 -v
     fi
 }
 
