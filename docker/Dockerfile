@@ -94,10 +94,15 @@ RUN /isaac-sim/python.sh -m pip install --upgrade pip && \
     rm /usr/bin/python3.10 && \ 
     ln -s /isaac-sim/kit/python/bin/python3.10 /usr/bin/python3.10
 
-# Install TacEx package
+# Install TacEx packages 
+# for installing tacex_ipc during docker build -> need to pass over CUDA-Architectures build argument
 RUN bash -i -c "source ${HOME}/.bashrc && \
-    cd ${ISAACLAB_EXTENSION_TEMPLATE_PATH} && \
-    ./tacex.sh -i && \
+    cd ${ISAACLAB_EXTENSION_TEMPLATE_PATH}/source && \
+    pip install -e tacex  && \
+    pip install -e tacex_assets  && \
+    pip install -e tacex_tasks  && \
+    pip install -e -C--build-option=build_ext -C--build-option=--DCMAKE-CUDA-ARCHITECTURES=89 \
+    -C--build-option=--DUIPC-BUILD-PYBIND=1 tacex_ipc -v  && \
     git config --global --add safe.directory /workspace/tacex"
 
 # make working directory as the tacex directory

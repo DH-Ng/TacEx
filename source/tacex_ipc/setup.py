@@ -1,4 +1,14 @@
-"""Installation script for the 'tacex_ipc' python package."""
+"""Installation script for the 'tacex_ipc' python package.
+
+Invoke with, for example:
+# in .../source/tacex_ipc folder
+pip install -e .
+
+or with user arguments:
+pip install -C--build-option=build_ext -C--build-option=--DCMAKE-CUDA-ARCHITECTURES=89 -C--build-option=--DUIPC-BUILD-PYBIND=1 .
+
+
+"""
 
 import os
 import toml
@@ -9,7 +19,6 @@ import sysconfig
 import platform
 import subprocess
 
-from distutils.version import LooseVersion
 from setuptools import setup, find_packages, Extension
 from setuptools.command.build_ext import build_ext
 
@@ -27,16 +36,33 @@ INSTALL_REQUIRES = [
     # "pybind11"
 ]
 
-'''
-Modified from https://www.benjack.io/2017/06/12/python-cpp-tests.html
-'''
 class CMakeExtension(Extension):
     def __init__(self, name, sourcedir=''):
         Extension.__init__(self, name, sources=[])
         self.sourcedir = os.path.abspath(sourcedir)
 
-
 class CMakeBuild(build_ext):
+
+    # hypens are automatically converted to underscores for attribute values
+    # -> underscore directly isnt allowed for user options string
+    user_options = build_ext.user_options + \
+        [("DCMAKE-CUDA-ARCHITECTURES=", None, "Specify CUDA architecture,e.g. 89.")] + \
+        [("DUIPC-BUILD-PYBIND=", "1", "Whether to build libuipc python bindings or not.")]    
+    print("user options ", user_options)
+    
+    def initialize_options(self):
+        super().initialize_options()
+        self.DCMAKE_CUDA_ARCHITECTURES = None
+        self.DUIPC_BUILD_PYBIND = "1"
+
+    def finalize_options(self):
+        print("")
+        print("The final option is ", self.DCMAKE_CUDA_ARCHITECTURES)
+        print("The test option is ", self.DUIPC_BUILD_PYBIND)
+        print("")
+        # assert self.DCMAKE_CUDA_ARCHITECTURES in (None)
+        super().finalize_options()
+
     def run(self):
         for ext in self.extensions:
             self.build_extension(ext)
@@ -46,13 +72,13 @@ class CMakeBuild(build_ext):
             os.path.dirname(self.get_ext_fullpath(ext.name)))
 
         cmake_args = [
-            '-DCMAKE_LIBRARY_OUTPUT_DIRECTORY=' + extdir,
-            # "-DCMAKE_CUDA_ARCHITECTURES=SM89",
-            #for libuipc
-            # "-DUIPC_PYTHON_EXECUTABLE_PATH=" + sys.executable,
-            "-DUIPC_BUILD_PYBIND=1",
+            "-DCMAKE_LIBRARY_OUTPUT_DIRECTORY=" + extdir,
+            "-DUIPC_BUILD_PYBIND="+self.DUIPC_BUILD_PYBIND, # per default = 1
             "-DUIPC_DEV_MODE=1"
         ]
+        if self.DCMAKE_CUDA_ARCHITECTURES is not None: # None means "use native cuda architecture"
+            cmake_args += ["-DCMAKE_CUDA_ARCHITECTURES="+self.DCMAKE_CUDA_ARCHITECTURES]
+
         cfg = 'Debug' if self.debug else 'Release'
         build_args = []#['--config', cfg]
 
@@ -101,7 +127,7 @@ setup(
         "Programming Language :: Python :: 3.10",
         "Isaac Sim :: 4.5.0",
     ],
-    ext_modules=[CMakeExtension("uipc", "./libuipc")],
+    ext_modules=[CMakeExtension("uipc", "libuipc")],
     cmdclass=dict(build_ext=CMakeBuild),
     zip_safe=False,
 )
