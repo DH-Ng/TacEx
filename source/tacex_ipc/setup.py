@@ -7,7 +7,8 @@ pip install -e .
 or with user arguments:
 pip install -C--build-option=build_ext -C--build-option=--DCMAKE-CUDA-ARCHITECTURES=89 -C--build-option=--DUIPC-BUILD-PYBIND=1 .
 
-
+-> custom build arguments don't work for editable install, due to build_temp method (see https://github.com/pypa/setuptools/issues/2491)
+Workaround: use ENV variables (see https://github.com/pypa/setuptools/discussions/3969)
 """
 
 import os
@@ -48,18 +49,13 @@ class CMakeBuild(build_ext):
     user_options = build_ext.user_options + \
         [("DCMAKE-CUDA-ARCHITECTURES=", None, "Specify CUDA architecture,e.g. 89.")] + \
         [("DUIPC-BUILD-PYBIND=", "1", "Whether to build libuipc python bindings or not.")]    
-    print("user options ", user_options)
-    
+
     def initialize_options(self):
         super().initialize_options()
         self.DCMAKE_CUDA_ARCHITECTURES = None
         self.DUIPC_BUILD_PYBIND = "1"
 
     def finalize_options(self):
-        print("")
-        print("The final option is ", self.DCMAKE_CUDA_ARCHITECTURES)
-        print("The test option is ", self.DUIPC_BUILD_PYBIND)
-        print("")
         # assert self.DCMAKE_CUDA_ARCHITECTURES in (None)
         super().finalize_options()
 
@@ -71,9 +67,13 @@ class CMakeBuild(build_ext):
         extdir = os.path.abspath(
             os.path.dirname(self.get_ext_fullpath(ext.name)))
 
+        # use ENV variable as workaround
+        self.DCMAKE_CUDA_ARCHITECTURES = os.environ.get('CMAKE_CUDA_ARCHITECTURES', None)
+        print("cuda_architectures", self.DCMAKE_CUDA_ARCHITECTURES)
+
         cmake_args = [
             "-DCMAKE_LIBRARY_OUTPUT_DIRECTORY=" + extdir,
-            "-DUIPC_BUILD_PYBIND="+self.DUIPC_BUILD_PYBIND, # per default = 1
+            "-DUIPC_BUILD_PYBIND=" + self.DUIPC_BUILD_PYBIND, # per default = 1
             "-DUIPC_DEV_MODE=1"
         ]
         if self.DCMAKE_CUDA_ARCHITECTURES is not None: # None means "use native cuda architecture"
@@ -128,6 +128,8 @@ setup(
         "Isaac Sim :: 4.5.0",
     ],
     ext_modules=[CMakeExtension("uipc", "libuipc")],
-    cmdclass=dict(build_ext=CMakeBuild),
+    cmdclass=dict(
+        build_ext=CMakeBuild
+    ),
     zip_safe=False,
 )
