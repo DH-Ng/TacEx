@@ -53,25 +53,6 @@ RUN --mount=type=cache,target=/var/cache/apt \
     # libglib2.0-0 \
     # ncurses-term && \
 
-# for libuipc -> see libuipc artifacts dir
-# install cmake 3.26
-RUN wget https://github.com/Kitware/CMake/releases/download/v3.26.4/cmake-3.26.4-linux-x86_64.sh && \
-    chmod +x cmake-3.26.4-linux-x86_64.sh && \
-    mkdir /opt/cmake && \
-    ./cmake-3.26.4-linux-x86_64.sh --prefix=/opt/cmake --skip-license && \
-    rm cmake-3.26.4-linux-x86_64.sh
-ENV PATH="/opt/cmake/bin:${PATH}"
-
-# install vcpkg
-RUN cd /opt && \
-git clone https://github.com/microsoft/vcpkg.git && \
-cd vcpkg && \
-./bootstrap-vcpkg.sh -disableMetrics
-
-# Set environment variable for CMake to find vcpkg
-ENV VCPKG_ROOT=/opt/vcpkg
-ENV CMAKE_TOOLCHAIN_FILE=/opt/vcpkg/scripts/buildsystems/vcpkg.cmake
-
 # set cuda paths 
 ENV CUDA_HOME=/usr/local/cuda
 ENV LD_LIBRARY_PATH=/usr/local/cuda/lib64:$LD_LIBRARY_PATH
@@ -94,17 +75,35 @@ RUN /isaac-sim/python.sh -m pip install --upgrade pip && \
     rm /usr/bin/python3.10 && \ 
     ln -s /isaac-sim/kit/python/bin/python3.10 /usr/bin/python3.10
 
-# Install TacEx packages 
-# for libuipc compiliation:
-ENV CMAKE_CUDA_ARCHITECTURES=89
+# Install Base TacEx packages 
 # -> you can also just call the tacex.sh script once you are in the container
-RUN bash -i -c "source ${HOME}/.bashrc && \
-    cd ${ISAACLAB_EXTENSION_TEMPLATE_PATH}/source && \
-    pip install -e tacex  && \
-    pip install -e tacex_assets  && \
-    pip install -e tacex_tasks  && \
-    pip install -e tacex_ipc -v  && \
-    git config --global --add safe.directory /workspace/tacex"
+# RUN bash -i -c "source ${HOME}/.bashrc && \
+#     cd ${ISAACLAB_EXTENSION_TEMPLATE_PATH}/source && \
+#     pip install -e tacex  && \
+#     pip install -e tacex_assets  && \
+#     pip install -e tacex_tasks  && \
+#     git config --global --add safe.directory /workspace/tacex"
+
+RUN bash -i -c "git config --global --add safe.directory /workspace/tacex"
+
+# For libuipc -> see libuipc artifacts dir
+# install cmake 3.26
+RUN wget https://github.com/Kitware/CMake/releases/download/v3.26.4/cmake-3.26.4-linux-x86_64.sh && \
+    chmod +x cmake-3.26.4-linux-x86_64.sh && \
+    mkdir /opt/cmake && \
+    ./cmake-3.26.4-linux-x86_64.sh --prefix=/opt/cmake --skip-license && \
+    rm cmake-3.26.4-linux-x86_64.sh
+ENV PATH="/opt/cmake/bin:${PATH}"
+
+# install vcpkg
+RUN cd /opt && \
+git clone https://github.com/microsoft/vcpkg.git && \
+cd vcpkg && \
+./bootstrap-vcpkg.sh -disableMetrics
+
+# Set environment variable for CMake to find vcpkg
+ENV VCPKG_ROOT=/opt/vcpkg
+ENV CMAKE_TOOLCHAIN_FILE=/opt/vcpkg/scripts/buildsystems/vcpkg.cmake
 
 # make working directory as the tacex directory
 # this is the default directory when the container is run
