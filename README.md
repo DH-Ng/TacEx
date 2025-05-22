@@ -242,7 +242,7 @@ To enable your extension, follow these steps:
 1. **Add the search path of your repository** to the extension manager:
     - Navigate to the extension manager using `Window` -> `Extensions`.
     - Click on the **Hamburger Icon** (☰), then go to `Settings`.
-    - In the `Extension Search Paths`, enter the absolute path to `IsaacLabExtensionTemplate/source`
+    - In the `Extension Search Paths`, enter the absolute path to `TacEx/source`
     - If not already present, in the `Extension Search Paths`, enter the path that leads to Isaac Lab's extension directory directory (`IsaacLab/source`)
     - Click on the **Hamburger Icon** (☰), then click `Refresh`.
 
