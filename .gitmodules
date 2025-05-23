@@ -1,5 +1,5 @@
 [submodule "source/tacex_ipc/libuipc"]
-	path = source/tacex_ipc/libuipc
+	path = source/tacex_ipc/external/libuipc
 	url = https://github.com/Duuuc/libuipc.git
 [submodule "source/tacex_ipc/external/wildmeshing-python"]
 	path = source/tacex_ipc/external/wildmeshing-python
