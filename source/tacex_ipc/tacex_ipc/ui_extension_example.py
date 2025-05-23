@@ -176,35 +176,22 @@ def _load_mesh(path, tet_cfg=None):
     # triangles is a list of indices: every 3 consecutive indices form a triangle
     triangles = deformableUtils.triangulate_mesh(geom_mesh)
     
-    # vertices = 
-    # edges
-    # triangles = wm.triangulate(V,)
-
-    # tet_mesh contains 2 lists,
-    # 1. conforming_tet_points: the nodal points of the tet mesh -> Gf
-    # 2. conforming_tet_indices: the indices of the points of a tet (4 consecutive numbers -> the points for a tet)
-    #conforming_tet_points, tet_indices = deformableUtils.compute_conforming_tetrahedral_mesh(points, triangles) #TODO custom tet mesh computation
-    
-    # convert Gf.Vec3f to list, which is compatible with c++
-    #tet_mesh_points = [[gf_vec[0], gf_vec[1], gf_vec[2]] for gf_vec in conforming_tet_points] # use nested list, cause easy to use with pybind
-
-    tet_gen = TetMeshGenerator()
-    tet_mesh_points, tet_indices = tet_gen.compute_tet_mesh(points, triangles, config=tet_cfg)
+    tet_gen = TetMeshGenerator(config=tet_cfg)
+    tet_mesh_points, tet_indices, surf_points, surf_indices = tet_gen.compute_tet_mesh(points, triangles)
 
     #! Don't update the points, otherwise we break the normal GIPC simulation setup
     # # remove xForm operations and update points manually
     # xform_utils.clear_xform_ops(prim_view.prims[i])
-    # geom_mesh.GetPointsAttr().Set(points)
-    # idx = np.array(tet_indices).reshape(-1,3)
-    # geom_mesh.GetFaceVertexCountsAttr().Set([3] * len(idx)) # how many vertices each face has (3, cause we use triangles)
+    # geom_mesh.GetPointsAttr().Set(surf_points)
+    # idx = np.array(surf_indices).reshape(-1,3)
+    # geom_mesh.GetFaceVertexCountsAttr().Set([3] * len(idx)) # how many vertices each face has (3, cause triangles)
     # geom_mesh.GetFaceVertexIndicesAttr().Set(idx)
-    # #geom_mesh.GetNormalsAttr().Set([]) # set to be empty, cause we use catmullClark and this gives us normals
-    # #geom_mesh.GetSubdivisionSchemeAttr().Set("catmullClark") #none
-    # self.geom_meshes.append(geom_mesh)
+    # geom_mesh.GetNormalsAttr().Set([]) # set to be empty, cause we use catmullClark and this gives us normals
+    # geom_mesh.GetSubdivisionSchemeAttr().Set("catmullClark") #none
     
     _draw_tets(tet_mesh_points, tet_indices)
     _create_tet_data_attributes(path, tet_points=tet_mesh_points, tet_indices=tet_indices)
-    return f"amount of vertices {tet_mesh_points}, amount of tet_indices: {tet_indices}"
+    return f"amount of vertices {len(tet_mesh_points)}, amount of tet_indices: {len(tet_indices)}"
 
 def _transform_points(points, transformation_matrix):
     # need a Gf matrix, otherwise matrix multiplication is going to yield wrong result
