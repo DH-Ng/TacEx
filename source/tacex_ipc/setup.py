@@ -127,7 +127,7 @@ setup(
         "Programming Language :: Python :: 3.10",
         "Isaac Sim :: 4.5.0",
     ],
-    ext_modules=[CMakeExtension("uipc", "libuipc")],
+    ext_modules=[CMakeExtension("uipc", "external/libuipc")],
     cmdclass=dict(
         build_ext=CMakeBuild
     ),
