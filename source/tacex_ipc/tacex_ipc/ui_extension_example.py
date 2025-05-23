@@ -14,11 +14,20 @@ from ctypes import alignment
 import carb
 import carb.events
 import omni.ext
-import omni.ui as ui
-import omni.usd
+# import omni.usd
+from isaacsim.util.debug_draw import _debug_draw
+draw = _debug_draw.acquire_debug_draw_interface()
+
+from omni.physx.scripts import deformableUtils
+
 from usdrt import Gf, Rt, Sdf, Usd, Vt
+from pxr import UsdGeom, Gf
+import pxr
 
 import numpy as np
+import wildmeshing as wm
+
+from tacex_ipc.utils import TetMeshGenerator, TetMeshCfg
 
 try:
     wp = None
@@ -149,6 +158,107 @@ def apply_random_rotation(stage_id, path):
     return f"Set new world orientation on {path} to {rotation}"
 
 
+### MESH STUFF
+def _load_mesh(path, tet_cfg=None):        
+    """
+    Need to make sure that we get the mesh in USD and not just the Xform of the mesh
+    """
+    stage = omni.usd.get_context().get_stage()
+    # prim = stage.GetPrimAtPath(Sdf.Path(path))
+
+    tet_mesh_points = None
+    tet_indices = None
+
+    geom_mesh = UsdGeom.Mesh.Get(stage, path)
+    tf_matrix = omni.usd.get_world_transform_matrix(geom_mesh)
+    points = _transform_points(geom_mesh.GetPointsAttr().Get(), tf_matrix)
+
+    # triangles is a list of indices: every 3 consecutive indices form a triangle
+    triangles = deformableUtils.triangulate_mesh(geom_mesh)
+    
+    # vertices = 
+    # edges
+    # triangles = wm.triangulate(V,)
+
+    # tet_mesh contains 2 lists,
+    # 1. conforming_tet_points: the nodal points of the tet mesh -> Gf
+    # 2. conforming_tet_indices: the indices of the points of a tet (4 consecutive numbers -> the points for a tet)
+    #conforming_tet_points, tet_indices = deformableUtils.compute_conforming_tetrahedral_mesh(points, triangles) #TODO custom tet mesh computation
+    
+    # convert Gf.Vec3f to list, which is compatible with c++
+    #tet_mesh_points = [[gf_vec[0], gf_vec[1], gf_vec[2]] for gf_vec in conforming_tet_points] # use nested list, cause easy to use with pybind
+
+    tet_gen = TetMeshGenerator()
+    tet_mesh_points, tet_indices = tet_gen.compute_tet_mesh(points, triangles, config=tet_cfg)
+
+    #! Don't update the points, otherwise we break the normal GIPC simulation setup
+    # # remove xForm operations and update points manually
+    # xform_utils.clear_xform_ops(prim_view.prims[i])
+    # geom_mesh.GetPointsAttr().Set(points)
+    # idx = np.array(tet_indices).reshape(-1,3)
+    # geom_mesh.GetFaceVertexCountsAttr().Set([3] * len(idx)) # how many vertices each face has (3, cause we use triangles)
+    # geom_mesh.GetFaceVertexIndicesAttr().Set(idx)
+    # #geom_mesh.GetNormalsAttr().Set([]) # set to be empty, cause we use catmullClark and this gives us normals
+    # #geom_mesh.GetSubdivisionSchemeAttr().Set("catmullClark") #none
+    # self.geom_meshes.append(geom_mesh)
+    
+    _draw_tets(tet_mesh_points, tet_indices)
+    _create_tet_data_attributes(path, tet_points=tet_mesh_points, tet_indices=tet_indices)
+    return f"amount of vertices {tet_mesh_points}, amount of tet_indices: {tet_indices}"
+
+def _transform_points(points, transformation_matrix):
+    # need a Gf matrix, otherwise matrix multiplication is going to yield wrong result
+    # transformation_matrix = Vt.Matrix4fArray.FromNumpy(transformation_matrix)[0]
+    transformed_points = []
+    # transform points by making them homogenous first and then applying the transformation matrix
+    # after that, convert to normal coor.
+    for p in points:
+        transformed_vector = Gf.Vec4f(p[0], p[1], p[2], 1) * transformation_matrix # usd applies transform to row vectors: y^T = p^T*M^T, ref. https://nvidia.github.io/warp/modules/functions.html#warp.transform_point
+        transformed_vector = Gf.Vec3f(transformed_vector[0], transformed_vector[1], transformed_vector[2])/transformed_vector[3]
+        transformed_points.append(transformed_vector)
+    return transformed_points
+
+def _draw_tets(all_vertices, tet_indices):
+        
+    # first draw the tet mesh nodes
+    # draw.draw_points(all_vertices, [(255,0,0,1)]*len(all_vertices), [10]*len(all_vertices))
+    
+    # connect nodes according to tet_indices
+    color = [(0,0,0,1)]
+    for i in range(0, len(tet_indices), 4):
+        tet_points_idx = tet_indices[i:i+4]
+        tet_points = [all_vertices[i] for i in tet_points_idx]
+        #draw.draw_points(tet_points, [(255,0,0,1)]*len(all_vertices), [10]*len(all_vertices)) 
+        draw.draw_lines([tet_points[0]]*3, tet_points[1:], color*3, [10]*3) # draw from point 0 to every other point (3 times 0, cause line from 0 to the other 3 points)
+        draw.draw_lines([tet_points[1]]*2, tet_points[2:], color*2, [10]*2)
+        draw.draw_lines([tet_points[2]], [tet_points[3]], color, [10]) # draw line between the other 2 points
+
+def _create_tet_data_attributes(path, tet_points, tet_indices):
+    """
+    Creates an attribute for a prim that holds a boolean.
+    See: https://graphics.pixar.com/usd/release/api/class_usd_prim.html.
+    The attribute can then be found in the GUI under "Raw USD Properties" of the prim.
+    Args:
+        prim: A prim that should be holding the attribute.
+        attribute_name: The name of the attribute to create.
+    Returns:
+        An attribute created at specific prim.
+    """
+    stage = omni.usd.get_context().get_stage()
+    prim = stage.GetPrimAtPath(path)
+
+    att_tet_points = prim.CreateAttribute("tet_points", pxr.Sdf.ValueTypeNames.Vector3fArray)
+    att_tet_points.Set(tet_points)
+
+    attr_tet_indices = prim.CreateAttribute("tet_indices", pxr.Sdf.ValueTypeNames.UIntArray)
+    attr_tet_indices.Set(tet_indices)
+
+    print("*"*40)
+    print("Created tet data ")
+    print("*"*40)
+
+###
+
 def deform_mesh_with_warp(stage_id, path, time):
     """Use Warp to deform a Mesh prim"""
     if path is None:
@@ -194,8 +304,8 @@ class UsdrtExamplePythonExtension(omni.ext.IExt):
     def on_startup(self, ext_id):
         print("[omni.example.python.usdrt] startup")
 
-        self._window = ui.Window(
-            "What's in Fabric?", width=300, height=300, dockPreference=ui.DockPreference.RIGHT_BOTTOM
+        self._window = omni.ui.Window(
+            "What's in Fabric?", width=300, height=300, dockPreference=omni.ui.DockPreference.RIGHT_BOTTOM
         )
         self._t = 0
         self._dt = 0.01
@@ -203,10 +313,13 @@ class UsdrtExamplePythonExtension(omni.ext.IExt):
         self.playing = False
 
         with self._window.frame:
-            with ui.VStack():
-                frame = ui.ScrollingFrame()
+            with omni.ui.VStack():
+                frame = omni.ui.ScrollingFrame()
                 with frame:
-                    label = ui.Label("Select a prim and push a button", alignment=ui.Alignment.LEFT_TOP)
+                    label = omni.ui.Label("Select a prim and push a button", alignment=omni.ui.Alignment.LEFT_TOP)
+
+                def compute_tet_mesh():
+                    label.text = _load_mesh(get_selected_prim_path())
 
                 def get_fabric_data():
                     label.text = get_fabric_data_for_prim(get_stage_id(), get_selected_prim_path())
@@ -219,9 +332,10 @@ class UsdrtExamplePythonExtension(omni.ext.IExt):
                     if not self.sub:
                         self.init_on_update()
 
-                ui.Button("What's in Fabric?", clicked_fn=get_fabric_data, height=0)
-                ui.Button("Rotate it in Fabric!", clicked_fn=rotate_prim, height=0)
-                ui.Button("Toggle: Deform it with Warp!", clicked_fn=toggle_deform_prim, height=0)
+                omni.ui.Button("Compute Tet Mesh", clicked_fn=compute_tet_mesh, height=0)
+                omni.ui.Button("What's in Fabric?", clicked_fn=get_fabric_data, height=0)
+                omni.ui.Button("Rotate it in Fabric!", clicked_fn=rotate_prim, height=0)
+                omni.ui.Button("Toggle: Deform it with Warp!", clicked_fn=toggle_deform_prim, height=0)
 
     def init_on_update(self):
         @carb.profiler.profile(zone_name="omni.example.python.usdrt.on_update")

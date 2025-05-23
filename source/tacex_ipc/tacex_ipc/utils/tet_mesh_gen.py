@@ -1,0 +1,179 @@
+
+# import pymesh
+#from meshpy.tet import MeshInfo, build, Options
+from collections.abc import MutableMapping
+import wildmeshing as wm
+
+import numpy as np
+from numpy.linalg import norm
+
+from isaaclab.utils import configclass
+
+@configclass
+class TetMeshCfg:
+    """
+    
+    References: 
+
+    """
+
+    stop_quality: int = 10000
+    """
+    Max AMIPS energy for stopping mesh optimization.
+    """
+
+    max_its: int = 10000
+    """
+    Max number of mesh optimization iterations.
+    """
+    
+    epsilon: float = 1e-3
+    """
+    Relative envelope epsilon_r.
+    Absolute epsilon = epsilon_r * diagonal_of_bbox.
+    """
+
+    edge_length_r: float = 1/10
+    """
+    Relative target edge length l_r. 
+    Absolute l = l_r * diagonal_of_bbox.
+    """
+    
+    skip_simplify: bool = False
+
+    coarsen: bool = True
+
+    log_level: int = 6
+    """
+    Log level, ranges from 0 to 6  (0 = most verbose, 6 = off).
+    """
+
+    mute_log: bool = True
+    
+class TetMeshGenerator():
+
+    def __init__(self) -> None:
+        pass
+    
+    # def fix_mesh(self, mesh, detail="normal"):
+    #     """
+    #     Remesh the input mesh to remove degeneracies and improve triangle quality.
+
+    #     Source: https://github.com/PyMesh/PyMesh/blob/main/scripts/fix_mesh.py
+    #     Args:
+    #         mesh (_type_): _description_
+    #     """
+    #     bbox_min, bbox_max = mesh.bbox
+    #     diag_len = norm(bbox_max - bbox_min)
+    #     print(f"diag_len = {diag_len}")
+    #     if detail == "high":
+    #         target_len = diag_len * 2.5e-3
+    #     elif detail == "normal":
+    #          target_len = diag_len * 5e-3 # adjusted values, cause we deal with very small objects, orig: 5e-3
+    #     elif detail == "low":
+    #         target_len = diag_len * 1e-2
+    #     elif detail == "very low":
+    #         target_len = diag_len * 5e-2
+
+    #     print("Target resolution: {} mm".format(target_len))
+
+    #     count = 0
+    #     mesh, __ = pymesh.remove_duplicated_vertices(mesh, tol=target_len*1e-2)
+    #     mesh, __ = pymesh.remove_degenerated_triangles(mesh, 100)
+    #     #mesh, __ = pymesh.split_long_edges(mesh, target_len*2)
+    #     num_vertices = mesh.num_vertices
+    #     while True:
+    #         mesh, __ = pymesh.collapse_short_edges(mesh, 1e-6, preserve_feature=True)
+    #         mesh, __ = pymesh.collapse_short_edges(mesh, target_len,
+    #                                                preserve_feature=True)
+    #         mesh, __ = pymesh.remove_obtuse_triangles(mesh, 150.0, 100)
+    #         if mesh.num_vertices == num_vertices:
+    #             break
+
+    #         num_vertices = mesh.num_vertices
+    #         print(f"#v: {num_vertices}")
+    #         count += 1
+    #         if count > 10: break
+
+    #     mesh = pymesh.resolve_self_intersection(mesh)
+    #     mesh, __ = pymesh.remove_duplicated_faces(mesh)
+    #     mesh = pymesh.compute_outer_hull(mesh)
+    #     mesh, __ = pymesh.remove_duplicated_faces(mesh)
+    #     mesh, __ = pymesh.remove_obtuse_triangles(mesh, 179.0, 5)
+    #     mesh, __ = pymesh.remove_isolated_vertices(mesh)
+        
+    #     return mesh
+    
+    def compute_tet_mesh(self, points, triangles, config: dict | TetMeshCfg = None):
+        triangles = np.array(triangles, dtype=np.uint32).reshape(-1, 3)
+        points = np.array(points)
+
+        #! Pymesh
+        #mesh = pymesh.form_mesh(points, triangles)
+        # print("input tri mesh")
+        # print(f"#vertices {mesh.num_vertices}, #faces {mesh.num_faces}")
+
+        # # # clean up tri mesh
+        # # # mesh, info = pymesh.remove_duplicated_vertices(mesh, tol=0.00005)
+        # # # mesh, info = pymesh.collapse_short_edges(mesh,  rel_threshold=0.1,  preserve_feature=True)
+        # # # mesh, info = pymesh.remove_isolated_vertices(mesh)
+        # # # mesh, info = pymesh.remove_degenerated_triangles(mesh, num_iterations=5)
+        
+        # #mesh = self.fix_mesh(mesh, detail="very low") # doesnt work well, idk why... Maybe input mesh is not good enough
+        # # print("tri mesh after cleanup: ")
+        # # print(f"#vertices {mesh.num_vertices}, #faces {mesh.num_faces}")
+
+        # # # from omni.isaac.debug_draw import _debug_draw
+        # # # draw = _debug_draw.acquire_debug_draw_interface()
+        # # # for t in range(0, len(triangles.flatten().tolist()), 3):
+        # # #     tri_points = points[t:t+3]
+        # # #     draw.draw_lines([tri_points[0]]*2, tri_points[1:], [(255,255,255,0.5)]*2, [10]*2) # draw from point 0 to every other point (3 times 0, cause line from 0 to the other 3 points)
+        # # #     draw.draw_lines([tri_points[1]], [tri_points[2]], [(255,255,255,0.5)], [10])  
+        
+        if config is None:
+            config = TetMeshCfg().to_dict()
+            print("No config for tet computation provided, using default settings.")
+        elif type(config) is TetMeshCfg:
+            config = config.to_dict()
+
+        # tetgen = pymesh.tetgen()
+        # tetgen.points = mesh.vertices # Input points.
+        # tetgen.triangles = mesh.faces # Input triangles
+        
+        # # set tetgen settings
+        # for k, v in config.items():
+        #     try:
+        #         getattr(tetgen, k)
+        #     except AttributeError:
+        #         raise ValueError("invalid option for tet generation: %s" % k)
+        #     else:
+        #         if v is not None:
+        #             setattr(tetgen, k, v)
+
+        # tetgen.run() # Execute tetgen
+        # mesh = tetgen.mesh # Extract output tetrahedral mesh.
+        # print("tet mesh information ")
+        # print(mesh.num_vertices, mesh.num_faces, mesh.num_voxels)
+        # tet_points = mesh.vertices
+        # tet_indices = mesh.voxels
+        
+        #! wildtetmeshing
+        # reference: https://github.com/wildmeshing/wildmeshing-python/blob/master/wildmeshing/runners.py
+        tetra = wm.Tetrahedralizer(
+            stop_quality=config["stop_quality"],     # Specify max AMIPS energy for stopping mesh optimization"
+            max_its=config["max_its"],          # Max number of mesh optimization iterations
+            epsilon=config["epsilon"],         # relative envelope epsilon_r. Absolute epsilon = epsilon_r * diagonal_of_bbox
+            edge_length_r=config["edge_length_r"],   # Relative target edge length l_r. Absolute l = l_r * diagonal_of_bbox
+            skip_simplify=config["skip_simplify"],
+            coarsen=config["coarsen"]
+        )
+        #tetra.set_log_level(config["log_level"]) #Log level (0 = most verbose, 6 = off). 6 also means, that no tet data files are being generated by wildmeshing
+        tetra.set_log_level(6)
+
+        tetra.set_mesh(points, triangles)
+        tetra.tetrahedralize()
+        tet_points, tet_indices, _ = tetra.get_tet_mesh()
+
+        tet_indices = np.array(tet_indices).flatten().tolist()
+
+        return tet_points, tet_indices

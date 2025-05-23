@@ -35,6 +35,7 @@ INSTALL_REQUIRES = [
     # NOTE: Add dependencies
     # "cmake>=3.26",
     # "pybind11"
+    "wildmeshing>=0.4.1"
 ]
 
 class CMakeExtension(Extension):

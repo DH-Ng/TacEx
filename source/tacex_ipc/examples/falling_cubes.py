@@ -34,7 +34,7 @@ import omni.isaac.core.utils.prims as prim_utils
 import isaaclab.sim as sim_utils
 from isaaclab.utils.assets import ISAAC_NUCLEUS_DIR
 
-from omni.isaac.debug_draw import _debug_draw
+from isaacsim.util.debug_draw import _debug_draw
 draw = _debug_draw.acquire_debug_draw_interface()
 
 import omni.isaac.core.utils.transformations as tf_utils
