@@ -150,9 +150,10 @@ def _load_mesh(path, tet_cfg=None):
     tet_indices = None
 
     geom_mesh = UsdGeom.Mesh.Get(stage, path)
-    tf_matrix = omni.usd.get_world_transform_matrix(geom_mesh)
-    points = _transform_points(geom_mesh.GetPointsAttr().Get(), tf_matrix)
-
+    # tf_matrix = omni.usd.get_world_transform_matrix(geom_mesh)
+    tf_matrix = omni.usd.get_local_transform_matrix(geom_mesh)
+    #points = _transform_points(geom_mesh.GetPointsAttr().Get(), tf_matrix)
+    points = geom_mesh.GetPointsAttr().Get()
     # triangles is a list of indices: every 3 consecutive indices form a triangle
     triangles = deformableUtils.triangulate_mesh(geom_mesh)
     
@@ -167,7 +168,8 @@ def _load_mesh(path, tet_cfg=None):
     idx = np.array(surf_indices).reshape(-1,3)
     geom_mesh.GetFaceVertexCountsAttr().Set([3] * len(idx)) # how many vertices each face has (3, cause triangles)
     geom_mesh.GetFaceVertexIndicesAttr().Set(idx)
-    # geom_mesh.GetNormalsAttr().Set([]) # set to be empty, cause we use catmullClark and this gives us normals
+    geom_mesh.GetNormalsAttr().Set([]) # set to be empty, cause we use catmullClark and this gives us normals
+    geom_mesh.SetNormalsInterpolation(UsdGeom.Tokens.faceVarying)
     # geom_mesh.GetSubdivisionSchemeAttr().Set("catmullClark") #none
 
 
@@ -182,6 +184,14 @@ def _load_mesh(path, tet_cfg=None):
     colors = [(random.uniform(0.0, 1.0), random.uniform(0.0, 1.0), random.uniform(0.0, 1.0)) for _ in range(idx.shape[0]*3)] 
     geom_mesh.CreateDisplayColorPrimvar(UsdGeom.Tokens.faceVarying).Set(colors) # num_surf_tri * 3
     
+    # set uv_coor variable
+    uv_coor = np.indices((int(idx.shape[0]*1.5),2)).transpose((1,2,0)).reshape((-1,2))
+    print("uv shape ", uv_coor.shape)
+    # geom_mesh.GetSTAttr().Set(uv_coor)
+    pv_api = UsdGeom.PrimvarsAPI(geom_mesh)
+    pv = pv_api.GetPrimvar("primvars:st")
+    pv.Set(uv_coor)
+    pv.SetInterpolation(UsdGeom.Tokens.faceVarying)
     # create a USD prim for the tetrahedra mesh
     # create_tetra_mesh(tet_mesh_points, tet_indices)
 
