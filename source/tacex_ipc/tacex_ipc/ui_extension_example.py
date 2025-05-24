@@ -15,6 +15,10 @@ import carb
 import carb.events
 import omni.ext
 # import omni.usd
+
+import isaacsim.core.utils.xforms as xform_utils
+from isaacsim.core.prims import XFormPrim
+
 from isaacsim.util.debug_draw import _debug_draw
 draw = _debug_draw.acquire_debug_draw_interface()
 
@@ -133,30 +137,6 @@ def get_fabric_data_for_prim(stage_id, path):
 
     return result
 
-def apply_random_rotation(stage_id, path):
-    """Apply a random world space rotation to a prim in Fabric"""
-    if path is None:
-        return "Nothing selected"
-
-    stage = Usd.Stage.Attach(stage_id)
-    prim = stage.GetPrimAtPath(Sdf.Path(path))
-    if not prim:
-        return f"Prim at path {path} is not in Fabric"
-
-    rtxformable = Rt.Xformable(prim)
-    if not rtxformable.HasWorldXform():
-        rtxformable.SetWorldXformFromUsd()
-
-    angle = random.random() * math.pi * 2
-    axis = Gf.Vec3f(random.random(), random.random(), random.random()).GetNormalized()
-    halfangle = angle / 2.0
-    shalfangle = math.sin(halfangle)
-    rotation = Gf.Quatf(math.cos(halfangle), axis[0] * shalfangle, axis[1] * shalfangle, axis[2] * shalfangle)
-
-    rtxformable.GetWorldOrientationAttr().Set(rotation)
-
-    return f"Set new world orientation on {path} to {rotation}"
-
 
 ### MESH STUFF
 def _load_mesh(path, tet_cfg=None):        
@@ -179,16 +159,32 @@ def _load_mesh(path, tet_cfg=None):
     tet_gen = TetMeshGenerator(config=tet_cfg)
     tet_mesh_points, tet_indices, surf_points, surf_indices = tet_gen.compute_tet_mesh(points, triangles)
 
+
     #! Don't update the points, otherwise we break the normal GIPC simulation setup
     # # remove xForm operations and update points manually
     # xform_utils.clear_xform_ops(prim_view.prims[i])
-    # geom_mesh.GetPointsAttr().Set(surf_points)
-    # idx = np.array(surf_indices).reshape(-1,3)
-    # geom_mesh.GetFaceVertexCountsAttr().Set([3] * len(idx)) # how many vertices each face has (3, cause triangles)
-    # geom_mesh.GetFaceVertexIndicesAttr().Set(idx)
+    geom_mesh.GetPointsAttr().Set(surf_points)
+    idx = np.array(surf_indices).reshape(-1,3)
+    geom_mesh.GetFaceVertexCountsAttr().Set([3] * len(idx)) # how many vertices each face has (3, cause triangles)
+    geom_mesh.GetFaceVertexIndicesAttr().Set(idx)
     # geom_mesh.GetNormalsAttr().Set([]) # set to be empty, cause we use catmullClark and this gives us normals
     # geom_mesh.GetSubdivisionSchemeAttr().Set("catmullClark") #none
+
+
+    print("surf points ", surf_points.shape[0])
+    print("surf tri ", idx.shape[0])
+    print("tet points ", tet_mesh_points.shape[0])
+    # set color with per vertex interpolation    
+    # colors = [(random.uniform(0.0, 1.0), random.uniform(0.0, 1.0), random.uniform(0.0, 1.0)) for _ in range(surf_points.shape[0])] 
+    # geom_mesh.CreateDisplayColorPrimvar(UsdGeom.Tokens.vertex).Set(colors)
+
+    # set color with per face interpolation  
+    colors = [(random.uniform(0.0, 1.0), random.uniform(0.0, 1.0), random.uniform(0.0, 1.0)) for _ in range(idx.shape[0]*3)] 
+    geom_mesh.CreateDisplayColorPrimvar(UsdGeom.Tokens.faceVarying).Set(colors) # num_surf_tri * 3
     
+    # create a USD prim for the tetrahedra mesh
+    # create_tetra_mesh(tet_mesh_points, tet_indices)
+
     _draw_tets(tet_mesh_points, tet_indices)
     _create_tet_data_attributes(path, tet_points=tet_mesh_points, tet_indices=tet_indices)
     return f"amount of vertices {len(tet_mesh_points)}, amount of tet_indices: {len(tet_indices)}"
@@ -245,6 +241,55 @@ def _create_tet_data_attributes(path, tet_points, tet_indices):
     print("*"*40)
 
 ###
+
+# Create Tetrahedra mesh prim
+def create_tetra_mesh(tet_points, tet_indices):
+    # Create Point List
+    N = 500
+    scale = 1.0 #0.05
+    # colors = [(1, 1, 1, 1) for _ in range(N)]
+    colors = [(random.uniform(0.0, 1.0), random.uniform(0.0, 1.0), random.uniform(0.0, 1.0))]
+    sizes = [(random.uniform(0.1, 2.0), random.uniform(0.1, 2.0), random.uniform(0.1, 2.0)) for _ in range(N)]
+    face_count = 4
+
+    # Set up Geometry to be Instanced, i.e. the first tetrahedra
+    point_list = []
+    for i in range(0, len(tet_indices), 4):
+        tet_path = f"/World/TetMesh/tet_{i}"
+        stage = omni.usd.get_context().get_stage()
+        tet = UsdGeom.Mesh.Define(stage, tet_path)
+
+        idx = tet_indices[i:i+4]
+        tet.CreatePointsAttr(tet_points[idx])
+        tet.CreateFaceVertexCountsAttr([3]*face_count)
+        tet.CreateFaceVertexIndicesAttr([0,1,2, 0,1,3, 0,2,3, 1,2,3])
+        # tet.CreateDisplayColorPrimvar(UsdGeom.Tokens.uniform).Set([(1, 1, 1)]*face_count)
+        # tet.CreateDisplayOpacityPrimvar(UsdGeom.Tokens.uniform).Set([0.15]*face_count)
+        tet.CreateDisplayColorPrimvar(UsdGeom.Tokens.vertex).Set([(random.uniform(0.0, 1.0), random.uniform(0.0, 1.0), random.uniform(0.0, 1.0))]*4)
+        # tet.CreateDisplayOpacityPrimvar(UsdGeom.Tokens.vertex).Set([0.15]*face_count)
+        tet.AddScaleOp().Set(Gf.Vec3d(1, 1, 1) * scale) # scale is w.r.t to origin -> doesn't make sense if we set "world-pos" for the tet points
+    
+    # Set up Point Instancer
+
+    # instance_path = "/World/TetMesh/PointInstancer"
+    # point_instancer = UsdGeom.PointInstancer(stage.DefinePrim(instance_path, "PointInstancer"))
+    # # Create & Set the Positions Attribute
+    # point_list = []
+    # for i in range(0, len(tet_indices), 4):
+    #     idx = tet_indices[i:i+4]
+    #     point_list.append(tet_points[idx])
+
+    # positions_attr = point_instancer.CreatePositionsAttr()
+    # positions_attr.Set(point_list)
+    # # scale_attr = point_instancer.CreateScalesAttr()
+    # # scale_attr.Set(sizes)
+    
+    # # Set the Instanced Geometry
+    # point_instancer.CreatePrototypesRel().SetTargets([tet.GetPath()])
+
+    # proto_indices_attr = point_instancer.CreateProtoIndicesAttr()
+    # proto_indices_attr.Set([0] * len(point_list))
+
 
 def deform_mesh_with_warp(stage_id, path, time):
     """Use Warp to deform a Mesh prim"""
@@ -311,9 +356,6 @@ class UsdrtExamplePythonExtension(omni.ext.IExt):
                 def get_fabric_data():
                     label.text = get_fabric_data_for_prim(get_stage_id(), get_selected_prim_path())
 
-                def rotate_prim():
-                    label.text = apply_random_rotation(get_stage_id(), get_selected_prim_path())
-
                 def toggle_deform_prim():
                     self.playing = not self.playing
                     if not self.sub:
@@ -321,7 +363,6 @@ class UsdrtExamplePythonExtension(omni.ext.IExt):
 
                 omni.ui.Button("Compute Tet Mesh", clicked_fn=compute_tet_mesh, height=0)
                 omni.ui.Button("What's in Fabric?", clicked_fn=get_fabric_data, height=0)
-                omni.ui.Button("Rotate it in Fabric!", clicked_fn=rotate_prim, height=0)
                 omni.ui.Button("Toggle: Deform it with Warp!", clicked_fn=toggle_deform_prim, height=0)
 
     def init_on_update(self):
