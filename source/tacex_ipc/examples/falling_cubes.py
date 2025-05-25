@@ -27,25 +27,29 @@ simulation_app.set_setting("/app/useFabricSceneDelegate", True)
 #simulation_app.set_setting("/omnihydra/parallelHydraSprimSync", False)
 
 """Rest everything follows."""
+import pathlib
+
 import omni
 
-import omni.isaac.core.utils.prims as prim_utils
-
-import isaaclab.sim as sim_utils
-from isaaclab.utils.assets import ISAAC_NUCLEUS_DIR
-
+from isaacsim.core.prims import XFormPrim
+import isaacsim.core.utils.prims as prims_utils
 from isaacsim.util.debug_draw import _debug_draw
 draw = _debug_draw.acquire_debug_draw_interface()
 
-import omni.isaac.core.utils.transformations as tf_utils
+import isaaclab.sim as sim_utils
+from isaaclab.utils.assets import ISAAC_NUCLEUS_DIR
+from isaaclab.assets import AssetBaseCfg
+
 from pxr import UsdGeom, Usd, Sdf, PhysxSchema, UsdPhysics, Gf, UsdShade, Vt
-#from pxr import UsdGeom, Sdf, Gf, 
+
 import numpy as np
 import random
 import warp as wp
 
-from gipc_isaac.sim_gipc import SimGIPC, CfgGIPC 
-from gipc_isaac.tet_mesh_generation import CfgTetMesh
+import vtk
+from uipc.core import Engine, World, Scene, SceneIO
+
+from tacex_ipc import UipcSim, UipcSimCfg, UipcObject, UipcObjectCfg
 
 def design_scene():
     """Designs the scene by spawning ground plane, light, objects and meshes from usd files."""
@@ -61,27 +65,17 @@ def design_scene():
     cfg_light_dome.func("/World/lightDome", cfg_light_dome, translation=(1, 0, 10))
 
     # create a new xform prim for all objects to be spawned under
-    prim_utils.create_prim("/World/Objects", "Xform")
-
-    own_cube_cfg = sim_utils.UsdFileCfg(usd_path="/workspace/isaaclab/data_storage/TacEx/examples/assets/cube.usd")
+    prims_utils.define_prim("/World/Objects", "Xform")
     
-    amount_cubes = 6
-    # spawn multiple cubes
-    for i in range(amount_cubes):
-        own_cube_cfg.func(f"/World/Objects/Cube{i}", own_cube_cfg, translation=(0.0, 0, 0.05 + i/10), orientation=(0.72,-0.3,0.42,-0.45) )     
-        #own_cube_cfg.func(f"/World/Objects/Cube_x{i}", own_cube_cfg, translation=(1, 0, 0.05 + i/10), orientation=(0.72,-0.3,0.42,-0.45) )     
-        #own_cube_cfg.func(f"/World/Objects/Cube_y{i}", own_cube_cfg, translation=(0, 1, 0.05 + i/10), orientation=(0.72,-0.3,0.42,-0.45) )     
+    # cube_big_cfg = sim_utils.UsdFileCfg(usd_path="/workspace/isaaclab/data_storage/TacEx/examples/assets/cube_big.usd")
 
-    cube_big_cfg = sim_utils.UsdFileCfg(usd_path="/workspace/isaaclab/data_storage/TacEx/examples/assets/cube_big.usd")
-
-    cube_big_cfg.func(f"/World/Objects/Big_cube", cube_big_cfg, translation=(0.0, 0, 0.5 + 0.05 + (amount_cubes/10))) # make sure that big cube is at the top
-    #cube_big_cfg.func(f"/World/Objects/Big_cube_x", cube_big_cfg, translation=(1, 0, 0.5 + 0.05 + (amount_cubes/10))) # make sure that big cube is at the top
+    # cube_big_cfg.func(f"/World/Objects/Big_cube", cube_big_cfg, translation=(0.0, 0, 0.5 + 0.05 + (amount_cubes/10))) # make sure that big cube is at the top
+    # #cube_big_cfg.func(f"/World/Objects/Big_cube_x", cube_big_cfg, translation=(1, 0, 0.5 + 0.05 + (amount_cubes/10))) # make sure that big cube is at the top
     #cube_big_cfg.func(f"/World/Objects/Big_cube_y", cube_big_cfg, translation=(0, 1, 0.5 + 0.05 + (amount_cubes/10))) # make sure that big cube is at the top
    
     # # spawn a usd file of a table into the scene
     # cfg = sim_utils.UsdFileCfg(usd_path=f"{ISAAC_NUCLEUS_DIR}/Props/Mounts/SeattleLabTable/table_instanceable.usd")
     # cfg.func("/World/Objects/Table", cfg, translation=(0.0, 0.0, 1.05))
-
 
 
 def change_mat_color(stage, shader_prim_path, color):
@@ -130,103 +124,106 @@ def main():
     # Initialize the simulation context
     sim_cfg = sim_utils.SimulationCfg(dt=0.01)
     sim = sim_utils.SimulationContext(sim_cfg)
-
     # Set main camera
     sim.set_camera_view([2.0, 0.0, 2.5], [-0.5, 0.0, 0.5])
 
-    # Design scene by adding assets to it
+    # Design scene by spawning assets
     design_scene()
 
-    stage = omni.usd.get_context().get_stage() 
+    # Initialize uipc sim
+    uipc_cfg = UipcSimCfg()
+    uipc_sim = UipcSim(uipc_cfg)
 
-    gipc_sim_cfg: CfgGIPC = CfgGIPC(
-        friction_rate = 0.4,
-        collision_detection_buff_scale = 1,
-        debug=True,
-        preconditioner_type=0,
+    # spawn uipc cube
+    tet_cube_asset_path = pathlib.Path(__file__).parent.resolve() / "assets" / "cube.usd"
+    cube_cfg = UipcObjectCfg(
+        prim_path="/World/Objects/Cube0",
+        init_state=AssetBaseCfg.InitialStateCfg(pos=[0.0, 0, 5.0]), #rot=(0.72,-0.3,0.42,-0.45)
+        spawn=sim_utils.UsdFileCfg(usd_path=str(tet_cube_asset_path)),
     )
-    gipc_sim = SimGIPC(gipc_sim_cfg)
+    cube = UipcObject(cube_cfg, uipc_sim)
+    # cube._initialize_impl()
 
-    cfg = CfgTetMesh()
-    cfg = cfg.replace(stop_quality=1000)
-    cfg = cfg.replace(max_its=1000)
-    cfg = cfg.replace(edge_length_r=1/2)
-    cfg = cfg.replace(epsilon=1e-3)
+    # Play the simulator
+    sim.reset()
+    
+    # only after Isaac Sim got resetted (= objects init), otherwise wold init is false
+    uipc_sim.setup_scene()
 
-    gipc_sim.create_objects(prim_paths_expr="/World/Objects/Cube.*", name="cube", debug_view=True, tet_cfg=cfg)
-    gipc_sim.create_objects(prim_paths_expr="/World/Objects/Big_cube.*", name="cube_big", debug_view=True, tet_cfg=cfg)
-
-    #print("Num obj cube ", gipc_sim.objects["cube"].num_objects)
-
-    gipc_sim.init_scene()
+    # sio = SceneIO(uipc_sim.scene)
 
     # Now we are ready!
     print("[INFO]: Setup complete...")
-    # Play the simulator
-    sim.reset()
-    gipc_sim.step()
 
     step = 1
-    start_gipc_test = False
+    start_uipc_test = False
 
     # Simulate physics
     while simulation_app.is_running():
 
         # perform step
         sim.step()
-        if start_gipc_test:
+        if start_uipc_test:
             # draw the old points
-            draw.clear_points()
-            points = np.array(gipc_sim.sim.get_vertices())
-            draw.draw_points(points, [(255,0,255,0.5)]*points.shape[0], [30]*points.shape[0])
+            # draw.clear_points()
+            # points = np.array(gipc_sim.sim.get_vertices())
+            # draw.draw_points(points, [(255,0,255,0.5)]*points.shape[0], [30]*points.shape[0])
 
             print("Step number ", step)
-            gipc_sim.step()
-            gipc_sim.update_render_meshes()
-            gipc_sim.render_tet_surface_wireframes(clean_up_first=True)
-            
+            uipc_sim.step()
+            # gipc_sim.render_tet_surface_wireframes(clean_up_first=True)
+            uipc_sim.update_meshes()
             sim.render()
-            gipc_sim.update_render_meshes()
+            
+            # sio.write_surface(f"falling_cubes/obj/scene_surface{uipc_sim.world.frame()}.obj")
 
-            #draw.clear_points()
-            points = np.array(gipc_sim.sim.get_vertices())
-            draw.draw_points(points, [(255,50 + 50,0,0.5)]*points.shape[0], [30]*points.shape[0])
-            # draw debug view every 5 steps
-            if step % 5 == 0:
-                # update positions
-                #gipc_sim.objects["cube"].update_positions(gipc_sim.vertices)
-                #gipc_sim.objects["cube"].draw_debug_view()
+            # # convert to vtk file
+            # reader = vtk.vtkOBJReader()
+            # reader.SetFileName(f"falling_cubes/obj/scene_surface{uipc_sim.world.frame()}.obj")
+            # reader.Update()
+            # obj = reader.GetOutput()
 
-                gipc_sim.objects["cube_big"].update_positions(gipc_sim.vertices)
-                #gipc_sim.objects["cube_big"].draw_debug_view()
+            # writer = vtk.vtkPolyDataWriter()
+            # writer.SetFileName(f"falling_cubes/vtk/scene_surface{uipc_sim.world.frame()}.vtk")
+            # writer.SetInputData(obj)
+            # writer.Write()
+
+            # #draw.clear_points()
+            # points = np.array(gipc_sim.sim.get_vertices())
+            # draw.draw_points(points, [(255,50 + 50,0,0.5)]*points.shape[0], [30]*points.shape[0])
+            # # draw debug view every 5 steps
+            # if step % 5 == 0:
+            #     # update positions
+            #     #gipc_sim.objects["cube"].update_positions(gipc_sim.vertices)
+            #     #gipc_sim.objects["cube"].draw_debug_view()
+
+            #     gipc_sim.objects["cube_big"].update_positions(gipc_sim.vertices)
+            #     #gipc_sim.objects["cube_big"].draw_debug_view()
             
             step += 1      
         
         # start GIPC sim after pausing and playing the sim
         if sim.is_playing() is False:
             #! test
-            start_gipc_test = True
-            print("Start GIPC simulation")
-            change_mat_color(stage, "/World/Objects/Big_cube/Looks/OmniPBR/Shader", (0.9,0.17,0.31))
-            # change_mat_color(stage, "/World/Objects/Big_cube_x/Looks/OmniPBR/Shader", (0.9,0.17,0.31))
-            # change_mat_color(stage, "/World/Objects/Big_cube_y/Looks/OmniPBR/Shader", (0.9,0.17,0.31))
+            start_uipc_test = True
+            print("Start uipc simulation")
 
-        if step % 50 == 0:
-            print("Reset simulation")
-            print("Render block ", sim.get_block_on_render())
-            if start_gipc_test:
-                gipc_sim.reset()
-                #gipc_sim.step()
-                gipc_sim.update_render_meshes()
-                gipc_sim.render_tet_surface_wireframes(clean_up_first=True)
-                sim.render()
+        # if step % 50 == 0:
+        #     print("Reset simulation")
+        #     print("Render block ", sim.get_block_on_render())
+        #     if start_gipc_test:
+        #         gipc_sim.reset()
+        #         #gipc_sim.step()
+        #         gipc_sim.update_render_meshes()
+        #         gipc_sim.render_tet_surface_wireframes(clean_up_first=True)
+        #         sim.render()
                 
-                start_gipc_test = False
-                change_mat_color(stage, "/World/Objects/Big_cube/Looks/OmniPBR/Shader", (0,0,1))
+        #         start_gipc_test = False
+        #         change_mat_color(stage, "/World/Objects/Big_cube/Looks/OmniPBR/Shader", (0,0,1))
 
-                # draw.clear_points()
-                # draw.clear_lines()
-            step = 1
+        #         # draw.clear_points()
+        #         # draw.clear_lines()
+        #     step = 1
           
 if __name__ == "__main__":
     # run the main function

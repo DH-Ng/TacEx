@@ -173,9 +173,9 @@ def _load_mesh(path, tet_cfg=None):
     # geom_mesh.GetSubdivisionSchemeAttr().Set("catmullClark") #none
 
 
-    print("surf points ", surf_points.shape[0])
-    print("surf tri ", idx.shape[0])
-    print("tet points ", tet_mesh_points.shape[0])
+    # print("surf points ", surf_points.shape[0])
+    # print("surf tri ", idx.shape[0])
+    # print("tet points ", tet_mesh_points.shape[0])
     # set color with per vertex interpolation    
     # colors = [(random.uniform(0.0, 1.0), random.uniform(0.0, 1.0), random.uniform(0.0, 1.0)) for _ in range(surf_points.shape[0])] 
     # geom_mesh.CreateDisplayColorPrimvar(UsdGeom.Tokens.vertex).Set(colors)
@@ -192,12 +192,10 @@ def _load_mesh(path, tet_cfg=None):
     pv = pv_api.GetPrimvar("primvars:st")
     pv.Set(uv_coor)
     pv.SetInterpolation(UsdGeom.Tokens.faceVarying)
-    # create a USD prim for the tetrahedra mesh
-    # create_tetra_mesh(tet_mesh_points, tet_indices)
 
-    _draw_tets(tet_mesh_points, tet_indices)
-    _create_tet_data_attributes(path, tet_points=tet_mesh_points, tet_indices=tet_indices)
-    return f"amount of vertices {len(tet_mesh_points)}, amount of tet_indices: {len(tet_indices)}"
+    # _draw_tets(tet_mesh_points, tet_indices)
+    _create_tet_data_attributes(path, tet_points=tet_mesh_points, tet_indices=tet_indices, tet_surf_indices=surf_indices)
+    return f"Amount of tet points {len(tet_mesh_points)},\nAmount of tetrahedra: {len(tet_indices)/4},\nAmount of surface points: {len(surf_indices)/3}"
 
 def _transform_points(points, transformation_matrix):
     # need a Gf matrix, otherwise matrix multiplication is going to yield wrong result
@@ -226,7 +224,7 @@ def _draw_tets(all_vertices, tet_indices):
         draw.draw_lines([tet_points[1]]*2, tet_points[2:], color*2, [10]*2)
         draw.draw_lines([tet_points[2]], [tet_points[3]], color, [10]) # draw line between the other 2 points
 
-def _create_tet_data_attributes(path, tet_points, tet_indices):
+def _create_tet_data_attributes(path, tet_points, tet_indices, tet_surf_indices):
     """
     Creates an attribute for a prim that holds a boolean.
     See: https://graphics.pixar.com/usd/release/api/class_usd_prim.html.
@@ -235,119 +233,37 @@ def _create_tet_data_attributes(path, tet_points, tet_indices):
         prim: A prim that should be holding the attribute.
         attribute_name: The name of the attribute to create.
     Returns:
-        An attribute created at specific prim.
     """
     stage = omni.usd.get_context().get_stage()
     prim = stage.GetPrimAtPath(path)
 
-    att_tet_points = prim.CreateAttribute("tet_points", pxr.Sdf.ValueTypeNames.Vector3fArray)
-    att_tet_points.Set(tet_points)
+    attr_tet_points = prim.CreateAttribute("tet_points", pxr.Sdf.ValueTypeNames.Vector3fArray)
+    attr_tet_points.Set(tet_points)
 
     attr_tet_indices = prim.CreateAttribute("tet_indices", pxr.Sdf.ValueTypeNames.UIntArray)
     attr_tet_indices.Set(tet_indices)
 
+    attr_tet_surf_indices = prim.CreateAttribute("tet_surf_indices", pxr.Sdf.ValueTypeNames.UIntArray)
+    attr_tet_surf_indices.Set(tet_surf_indices)
+
     print("*"*40)
-    print("Created tet data ")
+    print("Created tet data: ")
+    print(f"tet_points (num {tet_points.shape[0]})")
+    print(f"tet_indices (num {len(tet_indices)})")
+    print(f"tet_surf_indices (num {len(tet_indices)})")
     print("*"*40)
-
-###
-
-# Create Tetrahedra mesh prim
-def create_tetra_mesh(tet_points, tet_indices):
-    # Create Point List
-    N = 500
-    scale = 1.0 #0.05
-    # colors = [(1, 1, 1, 1) for _ in range(N)]
-    colors = [(random.uniform(0.0, 1.0), random.uniform(0.0, 1.0), random.uniform(0.0, 1.0))]
-    sizes = [(random.uniform(0.1, 2.0), random.uniform(0.1, 2.0), random.uniform(0.1, 2.0)) for _ in range(N)]
-    face_count = 4
-
-    # Set up Geometry to be Instanced, i.e. the first tetrahedra
-    point_list = []
-    for i in range(0, len(tet_indices), 4):
-        tet_path = f"/World/TetMesh/tet_{i}"
-        stage = omni.usd.get_context().get_stage()
-        tet = UsdGeom.Mesh.Define(stage, tet_path)
-
-        idx = tet_indices[i:i+4]
-        tet.CreatePointsAttr(tet_points[idx])
-        tet.CreateFaceVertexCountsAttr([3]*face_count)
-        tet.CreateFaceVertexIndicesAttr([0,1,2, 0,1,3, 0,2,3, 1,2,3])
-        # tet.CreateDisplayColorPrimvar(UsdGeom.Tokens.uniform).Set([(1, 1, 1)]*face_count)
-        # tet.CreateDisplayOpacityPrimvar(UsdGeom.Tokens.uniform).Set([0.15]*face_count)
-        tet.CreateDisplayColorPrimvar(UsdGeom.Tokens.vertex).Set([(random.uniform(0.0, 1.0), random.uniform(0.0, 1.0), random.uniform(0.0, 1.0))]*4)
-        # tet.CreateDisplayOpacityPrimvar(UsdGeom.Tokens.vertex).Set([0.15]*face_count)
-        tet.AddScaleOp().Set(Gf.Vec3d(1, 1, 1) * scale) # scale is w.r.t to origin -> doesn't make sense if we set "world-pos" for the tet points
-    
-    # Set up Point Instancer
-
-    # instance_path = "/World/TetMesh/PointInstancer"
-    # point_instancer = UsdGeom.PointInstancer(stage.DefinePrim(instance_path, "PointInstancer"))
-    # # Create & Set the Positions Attribute
-    # point_list = []
-    # for i in range(0, len(tet_indices), 4):
-    #     idx = tet_indices[i:i+4]
-    #     point_list.append(tet_points[idx])
-
-    # positions_attr = point_instancer.CreatePositionsAttr()
-    # positions_attr.Set(point_list)
-    # # scale_attr = point_instancer.CreateScalesAttr()
-    # # scale_attr.Set(sizes)
-    
-    # # Set the Instanced Geometry
-    # point_instancer.CreatePrototypesRel().SetTargets([tet.GetPath()])
-
-    # proto_indices_attr = point_instancer.CreateProtoIndicesAttr()
-    # proto_indices_attr.Set([0] * len(point_list))
-
-
-def deform_mesh_with_warp(stage_id, path, time):
-    """Use Warp to deform a Mesh prim"""
-    if path is None:
-        return "Nothing selected"
-
-    stage = Usd.Stage.Attach(stage_id)
-    prim = stage.GetPrimAtPath(Sdf.Path(path))
-    if not prim:
-        return f"Prim at path {path} is not in Fabric"
-
-    if not prim.HasAttribute("points"):
-        return f"Prim at path {path} does not have points attribute"
-
-    if not wp:
-        return "Warp failed to initialize. Install/Load the warp extension."
-
-    # Tell OmniHydra to render points from Fabric
-    if not prim.HasAttribute("Deformable"):
-        prim.CreateAttribute("Deformable", Sdf.ValueTypeNames.PrimTypeTag, True)
-
-    points = prim.GetAttribute("points")
-    pointsarray = np.array(points.Get())
-    warparray = wp.array(pointsarray, dtype=wp.vec3, device="cuda")
-
-    wp.launch(
-        kernel=deform, 
-        dim=len(pointsarray), 
-        inputs=[warparray, time], 
-        device="cuda"
-    )
-
-    points.Set(Vt.Vec3fArray(warparray.numpy()))
-
-    return f"Deformed points on prim {path}"
-
 
 # Any class derived from `omni.ext.IExt` in top level module (defined in `python.modules` of `extension.toml`) will be
 # instantiated when extension gets enabled and `on_startup(ext_id)` will be called. Later when extension gets disabled
 # on_shutdown() is called.
-class UsdrtExamplePythonExtension(omni.ext.IExt):
+class TacexIPCExtension(omni.ext.IExt):
     # ext_id is current extension id. It can be used with extension manager to query additional information, like where
     # this extension is located on filesystem.
     def on_startup(self, ext_id):
-        print("[omni.example.python.usdrt] startup")
+        print("[tacex_ipc] startup")
 
         self._window = omni.ui.Window(
-            "What's in Fabric?", width=300, height=300, dockPreference=omni.ui.DockPreference.RIGHT_BOTTOM
+            "Generate Tet Meshes for the IPC simulation:", width=300, height=300, dockPreference=omni.ui.DockPreference.RIGHT_BOTTOM
         )
         self._t = 0
         self._dt = 0.01
@@ -363,33 +279,23 @@ class UsdrtExamplePythonExtension(omni.ext.IExt):
                 def compute_tet_mesh():
                     label.text = _load_mesh(get_selected_prim_path())
 
-                def get_fabric_data():
-                    label.text = get_fabric_data_for_prim(get_stage_id(), get_selected_prim_path())
-
-                def toggle_deform_prim():
-                    self.playing = not self.playing
-                    if not self.sub:
-                        self.init_on_update()
-
                 omni.ui.Button("Compute Tet Mesh", clicked_fn=compute_tet_mesh, height=0)
-                omni.ui.Button("What's in Fabric?", clicked_fn=get_fabric_data, height=0)
-                omni.ui.Button("Toggle: Deform it with Warp!", clicked_fn=toggle_deform_prim, height=0)
 
-    def init_on_update(self):
-        @carb.profiler.profile(zone_name="omni.example.python.usdrt.on_update")
-        def on_update(e: carb.events.IEvent):
-            if not self.playing:
-                return
-            try:
-                deform_mesh_with_warp(get_stage_id(), get_selected_prim_path(), self._t)
-                self._t += self._dt
-            except Exception as e:
-                carb.log_error(e)
-            return
+    # def init_on_update(self):
+    #     @carb.profiler.profile(zone_name="omni.example.python.usdrt.on_update")
+    #     def on_update(e: carb.events.IEvent):
+    #         if not self.playing:
+    #             return
+    #         try:
+    #             deform_mesh_with_warp(get_stage_id(), get_selected_prim_path(), self._t)
+    #             self._t += self._dt
+    #         except Exception as e:
+    #             carb.log_error(e)
+    #         return
 
-        update_stream = omni.kit.app.get_app().get_update_event_stream()
-        self.sub = update_stream.create_subscription_to_pop(on_update, name="omni.example.python.usdrt.on_update")
-        return
+    #     update_stream = omni.kit.app.get_app().get_update_event_stream()
+    #     self.sub = update_stream.create_subscription_to_pop(on_update, name="omni.example.python.usdrt.on_update")
+    #     return
     
     def on_shutdown(self):
-        print("[omni.example.python.usdrt] shutdown")
+        print("[tacex_ipc] shutdown")

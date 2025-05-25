@@ -82,16 +82,31 @@ sio.write_surface(f"scene_surface{world.frame()}.obj")
 for i in range(1000):
     world.advance()
     world.retrieve()
-    sio.write_surface(f"falling_tets/obj/scene_surface{world.frame()}.obj")
-    # sgui.update()
+    # sio.write_surface(f"falling_tets/obj/scene_surface{world.frame()}.obj")
+    # # sgui.update()
 
-    # convert to vtk file
-    reader = vtk.vtkOBJReader()
-    reader.SetFileName(f"falling_tets/obj/scene_surface{world.frame()}.obj")
-    reader.Update()
-    obj = reader.GetOutput()
+    # # convert to vtk file
+    # reader = vtk.vtkOBJReader()
+    # reader.SetFileName(f"falling_tets/obj/scene_surface{world.frame()}.obj")
+    # reader.Update()
+    # obj = reader.GetOutput()
 
-    writer = vtk.vtkPolyDataWriter()
-    writer.SetFileName(f"falling_tets/vtk/scene_surface{world.frame()}.vtk")
-    writer.SetInputData(obj)
-    writer.Write()
+    # writer = vtk.vtkPolyDataWriter()
+    # writer.SetFileName(f"falling_tets/vtk/scene_surface{world.frame()}.vtk")
+    # writer.SetInputData(obj)
+    # writer.Write()
+
+    # print("scene obj")
+    # print(scene.objects().find("upper_tet")[0].geometry().positions().view())
+
+    trimesh = sio.simplicial_surface(2)
+    print("with scene io ")
+    print(trimesh.positions().view().reshape(-1,3))
+    # obj1_pos = mesh1.positions().view()[:,:,0]
+    # # print("obj1 ")
+    # # print(obj1_pos)
+    # # print("")
+
+    # tf_view = mesh1.transforms().view()[0]
+    # print("Transformation matrix ")
+    # print(tf_view)
