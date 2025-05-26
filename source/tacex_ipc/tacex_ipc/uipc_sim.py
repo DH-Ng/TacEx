@@ -5,11 +5,14 @@ from typing import Any, Dict, Tuple, Union, List, TYPE_CHECKING
 from isaaclab.utils import configclass
 
 import uipc
+from uipc import Vector3, Transform, Quaternion, AngleAxis
 from uipc import Logger, Timer
 from uipc.core import Engine, World, Scene
-from uipc.geometry import tetmesh, label_surface, label_triangle_orient, flip_inward_triangles
+from uipc.geometry import tetmesh, label_surface, label_triangle_orient, flip_inward_triangles, ground
 from uipc.constitution import AffineBodyConstitution
 from uipc.unit import MPa, GPa
+
+import numpy as np
 
 if TYPE_CHECKING:
     from tacex_ipc import UipcObject
@@ -30,19 +33,28 @@ class UipcSim():
             cfg = UipcSimCfg()
         self.cfg = cfg
 
+        Logger.set_level(Logger.Error)
+
         self.engine: Engine = Engine(self.cfg.device)
         self.world: World = World(self.engine)
         self.config = Scene.default_config()
 
         dt = 0.02
         self.config["dt"] = dt
-        
+        self.config["sanity_check"] = {
+            "enable": True,
+            "mode": "quiet" # do not export mesh
+        }
+
         self.config["gravity"] = [[0.0], [0.0], [-9.8]]
         self.scene = Scene(self.config)
 
         self.uipc_objects: list[UipcObject] = []
 
-        Logger.set_level(Logger.Error)
+        # create ground
+        ground_obj = self.scene.objects().create("ground")
+        g = ground(0.0, [0.0, 0.0, 1.0])
+        ground_obj.geometries().create(g)
 
     def setup_scene(self):
         self.world.init(self.scene)

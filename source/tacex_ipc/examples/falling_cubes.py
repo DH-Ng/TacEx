@@ -59,7 +59,7 @@ def design_scene():
 
     # spawn distant light
     cfg_light_dome = sim_utils.DomeLightCfg(
-        intensity=3000.0,
+        intensity=1000.0,
         color=(0.75, 0.75, 0.75),
     )
     cfg_light_dome.func("/World/lightDome", cfg_light_dome, translation=(1, 0, 10))
@@ -138,7 +138,7 @@ def main():
     tet_cube_asset_path = pathlib.Path(__file__).parent.resolve() / "assets" / "cube.usd"
     cube_cfg = UipcObjectCfg(
         prim_path="/World/Objects/Cube0",
-        init_state=AssetBaseCfg.InitialStateCfg(pos=[0.0, 0, 5.0]), #rot=(0.72,-0.3,0.42,-0.45)
+        init_state=AssetBaseCfg.InitialStateCfg(pos=[0.0, 0.0, 15.0], rot=(0.72,-0.3,0.42,-0.45)), #rot=(0.72,-0.3,0.42,-0.45)
         spawn=sim_utils.UsdFileCfg(usd_path=str(tet_cube_asset_path)),
     )
     cube = UipcObject(cube_cfg, uipc_sim)

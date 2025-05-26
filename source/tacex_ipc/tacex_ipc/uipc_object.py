@@ -17,13 +17,20 @@ import omni.usd
 import usdrt
 from isaacsim.core.prims import XFormPrim
 
+# from isaacsim.core.utils.extensions import enable_extension
+# enable_extension("isaacsim.util.debug_draw")
+try:
+    from isaacsim.util.debug_draw import _debug_draw
+    draw = _debug_draw.acquire_debug_draw_interface()
+except:
+    draw = None
+
 import isaaclab.sim as sim_utils
 import isaaclab.utils.math as math_utils
 import isaaclab.utils.string as string_utils
 
 from isaaclab.utils import configclass
 from isaaclab.assets import AssetBase, AssetBaseCfg
-
 
 
 import uipc
@@ -358,23 +365,71 @@ class UipcObject(AssetBase):
         self.objects = []
         # setup tet meshes for uipc
         for prim in self._prim_view.prims:
-            tet_points = np.array(prim.GetAttribute("tet_points").Get())
-            tet_indices = np.array(prim.GetAttribute("tet_indices").Get()).reshape(-1,4) # uipc wants 2D array
-            tet_surf_indices = np.array(prim.GetAttribute("tet_surf_indices").Get()).reshape(-1,3)
-
+            prim_path = str(prim.GetPrimPath())
             # setup mesh updates via Fabric
-            fabric_prim = self.stage.GetPrimAtPath(usdrt.Sdf.Path(str(prim.GetPrimPath())))
+            fabric_prim = self.stage.GetPrimAtPath(usdrt.Sdf.Path(prim_path))
             if not fabric_prim:
-                print(f"Prim at path {prim.GetPrimPath()} is not in Fabric")
+                print(f"Prim at path {prim_path} is not in Fabric")
             if not fabric_prim.HasAttribute("points"):
-                print(f"Prim at path {prim.GetPrimPath()} does not have points attribute")
+                print(f"Prim at path {prim_path} does not have points attribute")
 
             # Tell OmniHydra to render points from Fabric
             if not fabric_prim.HasAttribute("Deformable"):
                 fabric_prim.CreateAttribute("Deformable", usdrt.Sdf.ValueTypeNames.PrimTypeTag, True)
 
-            mesh = tetmesh(tet_points, tet_indices)
+            # extract world transform
+            # tf_matrix = omni.usd.get_local_transform_matrix(prim)
+            # print("tf ", tf_matrix)
+            tf_world = np.array(omni.usd.get_world_transform_matrix(prim))
+            # clear xform world transform
+            rtxformable = usdrt.Rt.Xformable(fabric_prim)
+            # rtxformable.ClearWorldXform()
+
+            rtxformable.CreateFabricHierarchyWorldMatrixAttr()
+            # rtxformable.SetWorldXformFromUsd()
+            world_tf = rtxformable.GetFabricHierarchyWorldMatrixAttr().Get()
+            print("test ", rtxformable.GetWorldPositionAttr().Get())
+
+            rtxformable.GetFabricHierarchyWorldMatrixAttr().Set(usdrt.Gf.Matrix4d())
+            print("test2 ", rtxformable.GetFabricHierarchyWorldMatrixAttr().Get())
+            #tf_world = np.array(rtxformable.GetFabricHierarchyWorldMatrixAttr().Get())
+            
+            # update Transform
+            # fabric_id = self.stage.GetFabricId()
+            # hier = usdrt.hierarchy.IFabricHierarchy().get_fabric_hierarchy(fabric_id, omni.usd.get_context().get_stage_id())
+            # print("tf ", usdrt.Gf.Matrix4d(np.array(tf_matrix)))
+            # hier.set_world_xform(usdrt.Sdf.Path(prim_path), usdrt.Gf.Matrix4d(np.array(tf_matrix)))
+            # hier.update_world_xforms()
+            # world_xform = hier.get_world_xform(usdrt.Sdf.Path(prim_path))
+            # print("world xform ", np.array(world_xform))
+            # print("local xform ", hier.get_local_xform(usdrt.Sdf.Path(prim_path)))
+
+            # print("new xform: ", usdrt.Gf.Matrix4d(tf_view))
+            # hier.set_local_xform(usdrt.Sdf.Path(prim_path), usdrt.Gf.Matrix4d(tf_view))
+            # # hier.set_world_xform(path, Gf.Matrix4d(1))
+            # hier.update_world_xforms()
+            print("tf ", tf_world.T)
+            tet_points = np.array(prim.GetAttribute("tet_points").Get())
+            print("orig ")
+            print(tet_points)
+            # transform points to world coor
+            tet_points_new = tf_world.T @ np.vstack((tet_points.T, np.ones(tet_points.shape[0])))
+            tet_points_new = (tet_points_new[:-1].T)
+            print("new ")
+            print(tet_points_new)
+            draw.draw_points(tet_points_new, [(0,0,255,0.5)]*tet_points_new.shape[0], [30]*tet_points_new.shape[0])
+
+            tet_indices = np.array(prim.GetAttribute("tet_indices").Get()).reshape(-1,4) # uipc wants 2D array
+            print("idx")
+            print(tet_indices)
+            tet_surf_indices = np.array(prim.GetAttribute("tet_surf_indices").Get()).reshape(-1,3)
+                        
+            mesh = tetmesh(tet_points_new.copy(), tet_indices)
             self.uipc_meshes.append(mesh)
+
+            # update mesh with world coor. points
+            fabric_mesh_points = fabric_prim.GetAttribute("points")
+            fabric_mesh_points.Set(usdrt.Vt.Vec3fArray(tet_points_new))
 
             # create constitution and contact model
             abd = AffineBodyConstitution()
@@ -441,8 +496,8 @@ class UipcObject(AssetBase):
     def _update_meshes(self):
         for i, prim_path in enumerate(self._prim_view.prim_paths):
             #uipc_points = self.objects[i].geometry().positions().view()[:,:,0] #todo check how it can be optimized -> how can we use third dim effectively?
-            trimesh = self.sio.simplicial_surface(2).positions().view().reshape(-1,3)
-            print("Updated points ", trimesh)
+            trimesh_points = self.sio.simplicial_surface(2).positions().view().reshape(-1,3)
+            print("Updated points ", trimesh_points)
 
             # tf_view = view(self.objects[i].geometry().transforms())[0]
             # print("Transformation matrix ")
@@ -450,7 +505,21 @@ class UipcObject(AssetBase):
 
             fabric_prim = self.stage.GetPrimAtPath(usdrt.Sdf.Path(prim_path))
             mesh_points = fabric_prim.GetAttribute("points")
-            mesh_points.Set(usdrt.Vt.Vec3fArray(trimesh))
+            mesh_points.Set(usdrt.Vt.Vec3fArray(trimesh_points))
+
+            # draw.clear_points()
+            points = np.array(trimesh_points)
+            draw.draw_points(points, [(255,0,255,0.5)]*points.shape[0], [30]*points.shape[0])
+
+            # extract world transform
+            # update Transform
+            # fabric_id = self.stage.GetFabricId()
+            # hier = usdrt.hierarchy.IFabricHierarchy().get_fabric_hierarchy(fabric_id, omni.usd.get_context().get_stage_id())
+            # hier.update_world_xforms()
+            # world_xform = hier.get_world_xform(usdrt.Sdf.Path(prim_path))
+            # print("world xform ", np.array(world_xform))
+            # print("local xform ", hier.get_local_xform(usdrt.Sdf.Path(prim_path)))
+
             # # update Transform
             # fabric_id = self.stage.GetFabricId()
             # hier = usdrt.hierarchy.IFabricHierarchy().get_fabric_hierarchy(fabric_id, omni.usd.get_context().get_stage_id())
