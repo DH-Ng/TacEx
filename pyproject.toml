@@ -59,7 +59,7 @@ known_isaaclabparty = [
 known_firstparty = "tacex"
 known_assets_firstparty = "tacex_assets"
 known_extra_firstparty = [
-    "tacex_gipc",
+    "tacex_ipc",
     "tacex_tasks"
 ]
 known_local_folder = "config"
@@ -736,6 +736,6 @@ extraPaths = [
 
     "${workspaceFolder}/source/tacex_assets",
     "${workspaceFolder}/source/tacex",
-    "${workspaceFolder}/source/tacex_gipc",
+    "${workspaceFolder}/source/tacex_ipc",
     "${workspaceFolder}/source/tacex_tasks"
 ]

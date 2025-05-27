@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import numpy as np
 from omni import physx
 import scipy.spatial.transform as tf
 from dataclasses import dataclass, MISSING
@@ -45,7 +44,6 @@ from .simulation_approaches.gelsight_simulator import GelSightSimulator
 from .gelsight_sensor_data import GelSightSensorData
 if TYPE_CHECKING:
     from .gelsight_sensor_cfg import GelSightSensorCfg
-
 
 class GelSightSensor(SensorBase):
     cfg: GelSightSensorCfg
@@ -199,7 +197,7 @@ class GelSightSensor(SensorBase):
 
         prim_paths_expr = self.cfg.prim_path
         print(f"Initializing GelSight Sensor {prim_paths_expr}...")
-        self._view = XFormPrim(prim_paths_expr=prim_paths_expr, name=f"{prim_paths_expr}")
+        self._view = XFormPrim(prim_paths_expr=prim_paths_expr, name=f"{prim_paths_expr}", usd=False)
         self._view.initialize()
         # Check that sizes are correct
         if self._view.count != self._num_envs:

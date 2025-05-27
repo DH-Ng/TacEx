@@ -41,3 +41,5 @@ _isaac_lab*
 **/*/.container.cfg
 
 build
+CMakeBuild
+__tracked_surface.stl

@@ -7,23 +7,22 @@ version = "0.1.0"
 category = "isaaclab"
 readme  = "README.md"
 
-title = "Extension Template"
-author = "Isaac Lab Project Developers"
-maintainer = "Isaac Lab Project Developers"
-description="Extension Template for Isaac Lab"
+title = "Integration of libuipc for IsaacLab"
+author = "Duc"
+maintainer = "Duc"
+description="Integration of libuipc for IsaacLab - Incremental Potentional Contact in Isaac Sim for Reinforcement Learning."
 repository = "https://github.com/isaac-sim/IsaacLabExtensionTemplate.git"
 keywords = ["extension", "template", "isaaclab"]
 
 [dependencies]
 "isaaclab" = {}
 "isaaclab_assets" = {}
-"isaaclab_mimic" = {}
 "isaaclab_rl" = {}
 "isaaclab_tasks" = {}
 # NOTE: Add additional dependencies here
 
 [[python.module]]
-name = "tacex_gipc"
+name = "tacex_ipc"
 
 [isaaclab_settings]
 # TODO: Uncomment and list any apt dependencies here.

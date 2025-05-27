@@ -1,6 +1,6 @@
 from isaaclab.utils import configclass
 
-from tacex_gipc.tasks.locomotion.velocity.velocity_env_cfg import LocomotionVelocityRoughEnvCfg
+from tacex_uipc.tasks.locomotion.velocity.velocity_env_cfg import LocomotionVelocityRoughEnvCfg
 
 ##
 # Pre-defined configs
