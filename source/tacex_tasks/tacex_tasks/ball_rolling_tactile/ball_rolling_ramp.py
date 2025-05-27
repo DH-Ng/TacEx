@@ -170,8 +170,8 @@ class BallRollingRampCfg(DirectRLEnvCfg):
 
     # viewer settings
     viewer: ViewerCfg = ViewerCfg()
-    viewer.eye = (1, -0.5, 0.1)
-    viewer.lookat = (-19.4, 18.2, -1.1)
+    viewer.eye = (0.2, -0.55, 0.1)
+    viewer.lookat = (48.8, 80.0, -0.1)
 
     viewer.origin_type = "env"
     viewer.env_idx = 0
@@ -259,7 +259,7 @@ class BallRollingRampCfg(DirectRLEnvCfg):
             )
         )
     )
-    ramp_slope = -math.pi/8
+    ramp_slope = -math.pi/12 #8
     ramp: RigidObjectCfg = RigidObjectCfg(
         prim_path="/World/envs/env_.*/ramp",
         init_state=RigidObjectCfg.InitialStateCfg(
