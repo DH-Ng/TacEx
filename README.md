@@ -34,7 +34,7 @@ The structure is similar to the one from the IsaacLab repo.
 
 
 ```bash
-git clone https://github.com/Duuuc/TacEx---Tactile-Extension.git
+git clone --recursive https://github.com/Duuuc/TacEx---Tactile-Extension.git
 ```
 - TacEx consists of multiple extensions. To install them all use the `tacex_install.sh` script:
 ```bash
