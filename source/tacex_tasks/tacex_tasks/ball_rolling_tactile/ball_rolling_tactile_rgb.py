@@ -220,14 +220,23 @@ class BallRollingTactileRGBCfg(DirectRLEnvCfg):
     robot: ArticulationCfg = FRANKA_PANDA_ARM_GSMINI_SINGLE_ADAPTER_HIGH_PD_CFG.replace(
         prim_path="/World/envs/env_.*/Robot",
         init_state=ArticulationCfg.InitialStateCfg(
+            # joint_pos={
+            #     "panda_joint1": 0.0,
+            #     "panda_joint2": 0.43,
+            #     "panda_joint3": 0.0,
+            #     "panda_joint4": -2.37,
+            #     "panda_joint5": 0.0,
+            #     "panda_joint6": 2.79,
+            #     "panda_joint7": 0.741,
+            # },
             joint_pos={
-                "panda_joint1": 0.0,
-                "panda_joint2": 0.43,
-                "panda_joint3": 0.0,
-                "panda_joint4": -2.37,
+                "panda_joint1": -1.02,
+                "panda_joint2": 0.3175,
+                "panda_joint3": 0.06,
+                "panda_joint4": -2.60,
                 "panda_joint5": 0.0,
-                "panda_joint6": 2.79,
-                "panda_joint7": 0.741,
+                "panda_joint6": 2.91,
+                "panda_joint7": -0.12,
             },
         ),
     )
@@ -275,7 +284,7 @@ class BallRollingTactileRGBCfg(DirectRLEnvCfg):
     # rigid body ball
     object: RigidObjectCfg = RigidObjectCfg(
         prim_path= "/World/envs/env_.*/rigid_ball",
-        init_state=RigidObjectCfg.InitialStateCfg(pos=(0.5, 0, 0.0051+0.0025)),
+        init_state=RigidObjectCfg.InitialStateCfg(pos=(0.25, -0.35, 0.0051+0.0025)),
         spawn=sim_utils.UsdFileCfg(
             usd_path=f"{TACEX_ASSETS_DATA_DIR}/Props/ball_wood.usd", 
             #scale=(2, 1, 0.6),
@@ -358,23 +367,24 @@ class BallRollingTactileRGBCfg(DirectRLEnvCfg):
         "at_obj_reward": {"weight": 0.25, "min_depth": 0.5, "max_depth": 4.0},
         "centering_error": {"weight": -0.05},
         "off_the_ground_penalty": {"weight": -15, "max_height": 0.025},
-        "height_reward": {"weight": -1.15, "std": 0.4901,  "alpha": 0.00067, "target_height_cm": 1.225, "min_height": 0.002}, # target height: 1cm + 0.25cm - 0.125cm
-        "orient_reward": {"weight": -0.25},
+        "height_reward": {"weight": 0.15, "std": 0.4901,  "alpha": 0.00067, "target_height_cm": 1.225, "min_height": 0.002}, # target height: 1cm + 0.25cm - 0.125cm
+        "orient_reward": {"weight": -1.25},
         # for solving the task
         "ee_goal_tracking": {"weight": 0.75, "std": 0.2, "std_fine": 0.36},
-        "obj_goal_tracking": {"weight": 0.75, "std": 0.2},
+        "obj_goal_tracking": {"weight": 0.75, "std": 0.6}, #0.2
         # "obj_goal_tracking": {"weight": -0.0108, "w": 0.0482, "v": 0.7870, "alpha": 0.0083},
-        "obj_goal_fine_tracking": {"weight": 1.5, "std": 0.9258},
-        "obj_goal_super_fine_tracking": {"weight": 1.25, "std": 2.0373},
+        "obj_goal_fine_tracking": {"weight": 1.25, "std": 0.2},
+        "obj_goal_super_fine_tracking": {"weight": 1.75, "std": 0.08},
         "success_reward": {"weight": 5.0, "threshold": 0.005}, # 0.0025 we count it as a sucess when dist obj <-> goal is less than the threshold
         # penalties for nice behavior
         "action_rate_penalty": {"weight": -1e-4},
         "joint_vel_penalty": {"weight": -1e-4},
     }
 
-    goal_randomization_range_x = [-0.2, 0.2] #[-0.25, 0.25]
-    goal_randomization_range_y = [-0.3, 0.3] #[-0.35, 0.35]
-
+    # goal_randomization_range_x = [-0.25, 0.25] #[-0.25, 0.25]
+    # goal_randomization_range_y = [-0.35, 0.35] #[-0.35, 0.35]
+    goal_randomization_range_x = [0.0, 0.5] #[-0.25, 0.25]
+    goal_randomization_range_y = [0.0, 0.7] #[-0.35, 0.35]
     # env
     episode_length_s = 8.3333*2 # 1000 timesteps per episode (dt = 1/60 -> 1500*(1/60)=8.3333*3)
     action_space = 6 # we use relative task_space actions: (dx, dy, dz, droll, dpitch) -> dyaw is ommitted
@@ -394,8 +404,8 @@ class BallRollingTactileRGBCfg(DirectRLEnvCfg):
 
     curriculum_cfg = {
         "goal_randomization_range": {
-            "min": 0, 
-            "max": 0.05, 
+            "min": 0.00, 
+            "max": 0.00, 
             "num_levels": 10, 
             "threshold": 550.0, # if episode reward is this high, then go to next level
         },
@@ -468,9 +478,8 @@ class BallRollingTactileRGBEnv(DirectRLEnv):
         # make height of goal pos fixed
         self._goal_pos_b[:, 2] = self.cfg.ball_radius*2 + 0.0025 # plate height above ground = 0.0025
         self._goal_orient = torch.zeros((self.num_envs, 4), device=self.device) # goal orient is [0.70711,0,0,0.70711], i.e. upright ee (x=0, y=0, z=90°)
-        # self._goal_orient[:, 0] = 0.70711
-        # self._goal_orient[:, 3] = 0.70711
-        self._goal_orient[:, 3] = 1.0
+        self._goal_orient[:, 0] = 0.70711
+        self._goal_orient[:, 3] = 0.70711
         
         self._time_out  = torch.zeros(self.num_envs, device=self.device, dtype=torch.bool)
 
@@ -1050,6 +1059,7 @@ def _compute_intermediate_values(
     ee_goal_distance = torch.norm(ee_frame_pos_b[:, :2] - goal_pos_b[:, :2], dim=1)
     ee_orient_error = quat_error_magnitude(ee_frame_orient_b, goal_orient_b)
 
+        
     obj_goal_distance = torch.norm(obj_pos_b[:, :2] - goal_pos_b[:, :2], dim=1)
     return (
        object_ee_distance,
@@ -1086,8 +1096,8 @@ def _compute_rewards(
 ):
     # for giving agent incentive to touch the obj
     at_obj_reward = torch.where(
-        (indentation_depth >= at_obj_reward_cfg["min_depth"]) 
-        & (indentation_depth <= at_obj_reward_cfg["max_depth"]), 
+        (indentation_depth > at_obj_reward_cfg["min_depth"]) 
+        & (indentation_depth < at_obj_reward_cfg["max_depth"]), 
         at_obj_reward_cfg["weight"], 
         0.0
     )
@@ -1113,8 +1123,7 @@ def _compute_rewards(
     #     height_reward-10, 
     #     height_reward
     # )
-    # height_reward = 1 - torch.tanh((height_diff) / height_reward_cfg["std"])
-    height_reward = height_diff**2
+    height_reward = 1 - torch.tanh((height_diff) / height_reward_cfg["std"])
     height_reward *= height_reward_cfg["weight"]
 
     # ee should be upright
@@ -1124,16 +1133,15 @@ def _compute_rewards(
     #     ee_orient_error * orient_reward_cfg["weight"]*1.5, # especially when goal position is reached
     #     ee_orient_error * orient_reward_cfg["weight"]
     # )
-    orient_reward = ee_orient_error * orient_reward_cfg["weight"]
-    # ee_frame_orient = euler_xyz_from_quat(ee_frame_orient_b)
-    # x = wrap_to_pi(ee_frame_orient[0])
-    # y = wrap_to_pi(ee_frame_orient[1])
-    # orient_reward = torch.where(
-    #     (torch.abs(x) < math.pi/10) #8
-    #     & (torch.abs(y) < math.pi/10), #8
-    #     0.0,
-    #     1.0*orient_reward_cfg["weight"]
-    # )
+    ee_frame_orient = euler_xyz_from_quat(ee_frame_orient_b)
+    x = wrap_to_pi(ee_frame_orient[0])
+    y = wrap_to_pi(ee_frame_orient[1])
+    orient_reward = torch.where(
+        (torch.abs(x) < math.pi/10) #8
+        & (torch.abs(y) < math.pi/10), #8
+        0.0,
+        1.0*orient_reward_cfg["weight"]
+    )
     # orient_reward = (
     #     (torch.abs(x))**2
     #     + (torch.abs(y))**2
@@ -1159,15 +1167,16 @@ def _compute_rewards(
     )
     obj_goal_tracking_reward *= obj_goal_tracking_cfg["weight"]
     
-    obj_goal_fine_tracking_reward = 1 - torch.tanh((obj_goal_distance*10.0) / obj_goal_fine_tracking_cfg["std"]) #[dm]
+    obj_goal_fine_tracking_reward = 1 - torch.tanh((obj_goal_distance) / obj_goal_fine_tracking_cfg["std"])
     obj_goal_fine_tracking_reward *= obj_goal_fine_tracking_cfg["weight"]
 
-    obj_goal_super_fine_tracking_reward = 1 - torch.tanh((obj_goal_distance*100.0) / obj_goal_super_fine_tracking_cfg["std"])**2 #[cm]
+    obj_goal_super_fine_tracking_reward = 1 - torch.tanh((obj_goal_distance) / obj_goal_super_fine_tracking_cfg["std"])**2 
     obj_goal_super_fine_tracking_reward *= obj_goal_super_fine_tracking_cfg["weight"]
 
     success_reward = torch.where(
         (obj_goal_distance < success_reward_cfg["threshold"]) 
-        & (indentation_depth >= at_obj_reward_cfg["min_depth"]), 
+        & (indentation_depth > at_obj_reward_cfg["min_depth"])
+        & (indentation_depth < at_obj_reward_cfg["max_depth"]), 
         1.0*success_reward_cfg["weight"], 
         0.0
     )
@@ -1182,7 +1191,6 @@ def _compute_rewards(
         at_obj_reward
         + off_the_ground_penalty
         + center_error
-        + height_reward
         + orient_reward
         # + ee_goal_tracking_reward
         + obj_goal_tracking_reward
