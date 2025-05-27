@@ -65,3 +65,17 @@ gym.register(
 #         "skrl_sac_cfg_entry_point": f"{agents.__name__}:skrl_sac_cfg.yaml",
 #     },
 # )
+
+# isaaclab -p ./scripts/reinforcement_learning/skrl/train.py --task TacEx-Ball-Rolling-Ramp-v0 --num_envs 512 --enable_cameras
+from .ball_rolling_ramp import BallRollingRampEnv, BallRollingRampCfg 
+gym.register(
+    id="TacEx-Ball-Rolling-Ramp-v0",
+    entry_point=f"{__name__}.ball_rolling_ramp:BallRollingRampEnv",
+    disable_env_checker=True,
+    kwargs={
+        "env_cfg_entry_point": BallRollingRampCfg,
+        "skrl_cfg_entry_point": f"{agents.__name__}:skrl_ppo_tactile_rgb_cfg.yaml",
+        # "skrl_cfg_entry_point": f"{agents.__name__}:skrl_ppo_cfg.yaml",
+        "skrl_sac_cfg_entry_point": f"{agents.__name__}:skrl_sac_cfg.yaml",
+    },
+)

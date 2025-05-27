@@ -166,7 +166,7 @@ class EventCfg:
         },
     )
 @configclass
-class BallRollingTactileRGBCfg(DirectRLEnvCfg):
+class BallRollingRampCfg(DirectRLEnvCfg):
 
     # viewer settings
     viewer: ViewerCfg = ViewerCfg()
@@ -220,30 +220,29 @@ class BallRollingTactileRGBCfg(DirectRLEnvCfg):
     robot: ArticulationCfg = FRANKA_PANDA_ARM_GSMINI_SINGLE_ADAPTER_HIGH_PD_CFG.replace(
         prim_path="/World/envs/env_.*/Robot",
         init_state=ArticulationCfg.InitialStateCfg(
-            # joint_pos={
-            #     "panda_joint1": 0.0,
-            #     "panda_joint2": 0.43,
-            #     "panda_joint3": 0.0,
-            #     "panda_joint4": -2.37,
-            #     "panda_joint5": 0.0,
-            #     "panda_joint6": 2.79,
-            #     "panda_joint7": 0.741,
-            # },
             joint_pos={
-                "panda_joint1": -1.02,
-                "panda_joint2": 0.3175,
-                "panda_joint3": 0.06,
-                "panda_joint4": -2.60,
+                "panda_joint1": 0.0,
+                "panda_joint2": 0.43,
+                "panda_joint3": 0.0,
+                "panda_joint4": -2.37,
                 "panda_joint5": 0.0,
-                "panda_joint6": 2.91,
-                "panda_joint7": -0.12,
+                "panda_joint6": 2.79,
+                "panda_joint7": 0.741,
             },
+            # joint_pos={
+            #     "panda_joint1": -1.02,
+            #     "panda_joint2": 0.3175,
+            #     "panda_joint3": 0.06,
+            #     "panda_joint4": -2.60,
+            #     "panda_joint5": 0.0,
+            #     "panda_joint6": 2.91,
+            #     "panda_joint7": -0.12,
+            # },
         ),
     )
 
     ik_controller_cfg = DifferentialIKControllerCfg(command_type="pose", use_relative_mode=True, ik_method="dls")
 
-    # plate
     plate: RigidObjectCfg = RigidObjectCfg(
         prim_path="/World/envs/env_.*/ground_plate",
         init_state=RigidObjectCfg.InitialStateCfg(pos=(0.5, 0, 0)),
@@ -260,7 +259,27 @@ class BallRollingTactileRGBCfg(DirectRLEnvCfg):
             )
         )
     )
-    
+    ramp_slope = -math.pi/8
+    ramp: RigidObjectCfg = RigidObjectCfg(
+        prim_path="/World/envs/env_.*/ramp",
+        init_state=RigidObjectCfg.InitialStateCfg(
+            pos=(0.525, 0, 0), 
+            rot=math_utils.quat_from_euler_xyz(roll=torch.tensor([0]), pitch=torch.tensor([ramp_slope]), yaw=torch.tensor([0]))[0].tolist()
+        ),
+        spawn=sim_utils.UsdFileCfg(
+            usd_path=f"{TACEX_ASSETS_DATA_DIR}/Props/ramp.usd",
+            scale=(0.4, 0.45, 1),
+            rigid_props=RigidBodyPropertiesCfg(
+                solver_position_iteration_count=16,
+                solver_velocity_iteration_count=1,
+                max_angular_velocity=1000.0,
+                max_linear_velocity=1000.0,
+                max_depenetration_velocity=5.0,
+                kinematic_enabled=True
+            )
+        )
+    )
+
     marker_cfg = FRAME_MARKER_CFG.copy()
     marker_cfg.markers["frame"].scale = (0.01, 0.01, 0.01)
     marker_cfg.prim_path = "/Visuals/FrameTransformer"
@@ -284,7 +303,7 @@ class BallRollingTactileRGBCfg(DirectRLEnvCfg):
     # rigid body ball
     object: RigidObjectCfg = RigidObjectCfg(
         prim_path= "/World/envs/env_.*/rigid_ball",
-        init_state=RigidObjectCfg.InitialStateCfg(pos=(0.25, -0.35, 0.0051+0.0025)), #pos=(0.5, 0.0, 0.0051+0.0025)
+        init_state=RigidObjectCfg.InitialStateCfg(pos=(0.5, 0.0, 0.0051+0.0025)),
         spawn=sim_utils.UsdFileCfg(
             usd_path=f"{TACEX_ASSETS_DATA_DIR}/Props/ball_wood.usd", 
             #scale=(2, 1, 0.6),
@@ -368,7 +387,7 @@ class BallRollingTactileRGBCfg(DirectRLEnvCfg):
         "centering_error": {"weight": -0.05},
         "off_the_ground_penalty": {"weight": -15, "max_height": 0.025},
         "height_reward": {"weight": 0.15, "std": 0.4901,  "alpha": 0.00067, "target_height_cm": 1.225, "min_height": 0.002}, # target height: 1cm + 0.25cm - 0.125cm
-        "orient_reward": {"weight": -1.25},
+        "orient_reward": {"weight": -0.05},
         # for solving the task
         "ee_goal_tracking": {"weight": 0.75, "std": 0.2, "std_fine": 0.36},
         "obj_goal_tracking": {"weight": 0.75, "std": 0.6}, #0.2
@@ -381,10 +400,9 @@ class BallRollingTactileRGBCfg(DirectRLEnvCfg):
         "joint_vel_penalty": {"weight": -1e-4},
     }
 
-    # goal_randomization_range_x = [-0.25, 0.25] #[-0.25, 0.25]
-    # goal_randomization_range_y = [-0.35, 0.35] #[-0.35, 0.35]
-    goal_randomization_range_x = [0.05, 0.45] #[-0.25, 0.25]
-    goal_randomization_range_y = [0.05, 0.65] #[-0.35, 0.35]
+    goal_randomization_range_x = [0.05, 0.35] #[-0.25, 0.25]
+    goal_randomization_range_y = [-0.2, 0.2] #[-0.35, 0.35]
+    
     # env
     episode_length_s = 8.3333*2 # 1000 timesteps per episode (dt = 1/60 -> 1500*(1/60)=8.3333*3)
     action_space = 6 # we use relative task_space actions: (dx, dy, dz, droll, dpitch) -> dyaw is ommitted
@@ -423,7 +441,7 @@ class BallRollingTactileRGBCfg(DirectRLEnvCfg):
         }
     }
 
-class BallRollingTactileRGBEnv(DirectRLEnv):
+class BallRollingRampEnv(DirectRLEnv):
     """RL env in which the robot has to push/roll a ball to a goal position.
 
     This base env uses (absolute) joint positions.
@@ -438,9 +456,9 @@ class BallRollingTactileRGBEnv(DirectRLEnv):
     #   |-- _reset_idx(env_ids)
     #   |-- _get_observations()
 
-    cfg: BallRollingTactileRGBCfg
+    cfg: BallRollingRampCfg
 
-    def __init__(self, cfg: BallRollingTactileRGBCfg, render_mode: str | None = None, **kwargs):
+    def __init__(self, cfg: BallRollingRampCfg, render_mode: str | None = None, **kwargs):
         super().__init__(cfg, render_mode, **kwargs)
 
         self.dt = self.cfg.sim.dt * self.cfg.decimation
@@ -569,6 +587,9 @@ class BallRollingTactileRGBEnv(DirectRLEnv):
 
         plate = RigidObject(self.cfg.plate)
         self.scene.rigid_objects["plate"] = plate
+
+        ramp = RigidObject(self.cfg.ramp)
+        self.scene.rigid_objects["ramp"] = ramp
 
         # sensors
         self._ee_frame = FrameTransformer(self.cfg.ee_frame_cfg)
@@ -1034,7 +1055,8 @@ class BallRollingTactileRGBEnv(DirectRLEnv):
     def _debug_vis_callback(self, event):
         # update the markers
         translations = self._goal_pos_b.clone() + self.scene.env_origins
-        translations[:, 2] = self.cfg.ball_radius + 0.0025
+        h = (self._goal_pos_b[:, 0] - self.cfg.ramp.init_state.pos[0])*math.tan(-self.cfg.ramp_slope)
+        translations[:, 2] = self.cfg.ball_radius + 0.0025 + h
         self.goal_pos_visualizer.visualize(translations=translations)
 
         # ee_pos_curr, ee_quat_curr = self._compute_frame_pose()
