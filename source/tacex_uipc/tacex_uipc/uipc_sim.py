@@ -4,10 +4,18 @@ from typing import Any, Dict, Tuple, Union, List, TYPE_CHECKING
 
 from isaaclab.utils import configclass
 
+import usdrt
+
+try:
+    from isaacsim.util.debug_draw import _debug_draw
+    draw = _debug_draw.acquire_debug_draw_interface()
+except:
+    draw = None
+
 import uipc
 from uipc import Vector3, Transform, Quaternion, AngleAxis
 from uipc import Logger, Timer
-from uipc.core import Engine, World, Scene
+from uipc.core import Engine, World, Scene, SceneIO
 from uipc.geometry import tetmesh, label_surface, label_triangle_orient, flip_inward_triangles, ground
 from uipc.constitution import AffineBodyConstitution
 from uipc.unit import MPa, GPa
@@ -49,12 +57,16 @@ class UipcSim():
         self.config["gravity"] = [[0.0], [0.0], [-9.8]]
         self.scene = Scene(self.config)
 
-        self.uipc_objects: list[UipcObject] = []
+        self._fabric_meshes = []
+        self._last_point_index = [0]
 
         # create ground
         ground_obj = self.scene.objects().create("ground")
         g = ground(0.0, [0.0, 0.0, 1.0])
         ground_obj.geometries().create(g)
+
+        # for updating render meshes
+        self.sio = SceneIO(self.scene)
 
     def setup_scene(self):
         self.world.init(self.scene)
@@ -63,6 +75,19 @@ class UipcSim():
         self.world.advance()
         self.world.retrieve()
     
-    def update_meshes(self):
-        for uipc_obj in self.uipc_objects:
-            uipc_obj._update_meshes()
+    def update_render_meshes(self):
+        all_trimesh_points = self.sio.simplicial_surface(2).positions().view().reshape(-1,3)
+        
+        for i, fabric_prim in enumerate(self._fabric_meshes):
+            trimesh_points = all_trimesh_points[self._last_point_index[i]:self._last_point_index[i+1]]
+            # print("Updated points ", trimesh_points)
+
+            fabric_mesh_points = fabric_prim.GetAttribute("points")
+            fabric_mesh_points.Set(usdrt.Vt.Vec3fArray(trimesh_points))
+
+        draw.clear_points()
+        # points = np.array(all_trimesh_points)
+        # draw.draw_points(points, [(255,0,255,0.5)]*points.shape[0], [30]*points.shape[0])
+
+    def simple_update_render_meshes(self):
+        pass

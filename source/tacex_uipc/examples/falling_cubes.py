@@ -138,16 +138,37 @@ def main():
     tet_cube_asset_path = pathlib.Path(__file__).parent.resolve() / "assets" / "cube.usd"
     cube_cfg = UipcObjectCfg(
         prim_path="/World/Objects/Cube0",
-        init_state=AssetBaseCfg.InitialStateCfg(pos=[0.0, 0.0, 15.0], rot=(0.72,-0.3,0.42,-0.45)), #rot=(0.72,-0.3,0.42,-0.45)
-        spawn=sim_utils.UsdFileCfg(usd_path=str(tet_cube_asset_path)),
+        init_state=AssetBaseCfg.InitialStateCfg(pos=[0.0, 0.0, 1.0], rot=(0.72,-0.3,0.42,-0.45)), #rot=(0.72,-0.3,0.42,-0.45)
+        spawn=sim_utils.UsdFileCfg(
+            usd_path=str(tet_cube_asset_path),
+            scale=(1.0, 1.0, 1.0)
+        ),
     )
     cube = UipcObject(cube_cfg, uipc_sim)
-    # cube._initialize_impl()
+
+    num_cubes = 23
+    cubes = []
+    for i in range(num_cubes):
+        # might lead to intersections due to random pos
+        pos = (random.uniform(-1.0, 1.0), random.uniform(-1.0, 1.0), random.uniform(2.5, 6.0))
+        rot = (random.uniform(-1.0, 1.0), random.uniform(-1.0, 1.0), random.uniform(-1.0, 1.0), random.uniform(-1.0, 1.0))
+        cube_cfg = UipcObjectCfg(
+            prim_path=f"/World/Objects/Cube{i+1}",
+            init_state=AssetBaseCfg.InitialStateCfg(pos=pos, rot=rot), #rot=(0.72,-0.3,0.42,-0.45)
+            spawn=sim_utils.UsdFileCfg(
+                usd_path=str(tet_cube_asset_path),
+                scale=(0.15, 0.15, 0.15)
+            ),
+        )
+        cubeX = UipcObject(cube_cfg, uipc_sim)
+        cubes.append(cubeX)
 
     # Play the simulator
     sim.reset()
     
     # only after Isaac Sim got resetted (= objects init), otherwise wold init is false
+    # because _initialize_impl() of the object is called in the sim.reset() method
+    # and setup_scene() relies on objects being _intialized_impl()
     uipc_sim.setup_scene()
 
     # sio = SceneIO(uipc_sim.scene)
@@ -172,7 +193,7 @@ def main():
             print("Step number ", step)
             uipc_sim.step()
             # gipc_sim.render_tet_surface_wireframes(clean_up_first=True)
-            uipc_sim.update_meshes()
+            uipc_sim.update_render_meshes()
             sim.render()
             
             # sio.write_surface(f"falling_cubes/obj/scene_surface{uipc_sim.world.frame()}.obj")
@@ -206,7 +227,7 @@ def main():
         if sim.is_playing() is False:
             #! test
             start_uipc_test = True
-            print("Start uipc simulation")
+            print("Start uipc simulation by pressing Play")
 
         # if step % 50 == 0:
         #     print("Reset simulation")
