@@ -46,7 +46,7 @@ import warp as wp
 wp.init()
 
 if TYPE_CHECKING:
-    from tacex_ipc import UipcSim
+    from tacex_uipc import UipcSim
 
 @configclass
 class UipcObjectCfg(AssetBaseCfg):

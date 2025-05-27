@@ -31,7 +31,7 @@ import pxr
 import numpy as np
 import wildmeshing as wm
 
-from tacex_ipc.utils import TetMeshGenerator, TetMeshCfg
+from tacex_uipc.utils import TetMeshGenerator, TetMeshCfg
 
 try:
     wp = None

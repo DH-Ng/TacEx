@@ -15,7 +15,7 @@ from uipc.unit import MPa, GPa
 import numpy as np
 
 if TYPE_CHECKING:
-    from tacex_ipc import UipcObject
+    from tacex_uipc import UipcObject
 
 @configclass
 class UipcSimCfg:

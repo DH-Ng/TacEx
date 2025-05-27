@@ -111,8 +111,8 @@ class CMakeBuild(build_ext):
 
 # Installation operation
 setup(
-    name="tacex_ipc",
-    packages=["tacex_ipc"],
+    name="tacex_uipc",
+    packages=["tacex_uipc"],
     author=EXTENSION_TOML_DATA["package"]["author"],
     maintainer=EXTENSION_TOML_DATA["package"]["maintainer"],
     url=EXTENSION_TOML_DATA["package"]["repository"],

@@ -46,10 +46,10 @@ import numpy as np
 import random
 import warp as wp
 
-import vtk
+# import vtk
 from uipc.core import Engine, World, Scene, SceneIO
 
-from tacex_ipc import UipcSim, UipcSimCfg, UipcObject, UipcObjectCfg
+from tacex_uipc import UipcSim, UipcSimCfg, UipcObject, UipcObjectCfg
 
 def design_scene():
     """Designs the scene by spawning ground plane, light, objects and meshes from usd files."""
