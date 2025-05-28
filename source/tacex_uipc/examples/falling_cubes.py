@@ -21,7 +21,7 @@ args_cli = parser.parse_args()
 app_launcher = AppLauncher(args_cli)
 simulation_app = app_launcher.app
 
-simulation_app.set_setting("/app/useFabricSceneDelegate", True)
+# simulation_app.set_setting("/app/useFabricSceneDelegate", True)
 #simulation_app.set_setting("/app/usdrt/scene_delegate/enableProxyCubes", False)
 #simulation_app.set_setting("/app/usdrt/scene_delegate/geometryStreaming/enabled", False)
 #simulation_app.set_setting("/omnihydra/parallelHydraSprimSync", False)
@@ -39,6 +39,7 @@ draw = _debug_draw.acquire_debug_draw_interface()
 import isaaclab.sim as sim_utils
 from isaaclab.utils.assets import ISAAC_NUCLEUS_DIR
 from isaaclab.assets import AssetBaseCfg
+from isaaclab.utils.timer import Timer
 
 from pxr import UsdGeom, Usd, Sdf, PhysxSchema, UsdPhysics, Gf, UsdShade, Vt
 
@@ -122,6 +123,7 @@ def main():
     """Main function."""
 
     # Initialize the simulation context
+    # render_cfg = sim_utils.RenderCfg(rendering_mode=)
     sim_cfg = sim_utils.SimulationCfg(dt=0.01)
     sim = sim_utils.SimulationContext(sim_cfg)
     # Set main camera
@@ -146,11 +148,12 @@ def main():
     )
     cube = UipcObject(cube_cfg, uipc_sim)
 
-    num_cubes = 23
+    num_cubes = 30
     cubes = []
     for i in range(num_cubes):
         # might lead to intersections due to random pos
-        pos = (random.uniform(-1.0, 1.0), random.uniform(-1.0, 1.0), random.uniform(2.5, 6.0))
+        # pos = (random.uniform(-1.0, 1.0), random.uniform(-1.0, 1.0), random.uniform(2.5, 6.0))
+        pos = (0,0, 2 + 0.3*i)
         rot = (random.uniform(-1.0, 1.0), random.uniform(-1.0, 1.0), random.uniform(-1.0, 1.0), random.uniform(-1.0, 1.0))
         cube_cfg = UipcObjectCfg(
             prim_path=f"/World/Objects/Cube{i+1}",
@@ -171,8 +174,6 @@ def main():
     # and setup_scene() relies on objects being _intialized_impl()
     uipc_sim.setup_scene()
 
-    # sio = SceneIO(uipc_sim.scene)
-
     # Now we are ready!
     print("[INFO]: Setup complete...")
 
@@ -184,67 +185,45 @@ def main():
 
         # perform step
         sim.step()
+
+
         if start_uipc_test:
             # draw the old points
             # draw.clear_points()
             # points = np.array(gipc_sim.sim.get_vertices())
             # draw.draw_points(points, [(255,0,255,0.5)]*points.shape[0], [30]*points.shape[0])
 
+            print("====================================================================================")
             print("Step number ", step)
-            uipc_sim.step()
+            ## if you want to replay frames which were saved via world.dump()
+            # if(uipc_sim.world.recover(uipc_sim.world.frame() + 1)):
+            #     uipc_sim.world.retrieve()
+            # else:
+            #     uipc_sim.step()
+            with Timer("[INFO]: Time taken for uipc sim step."):
+                uipc_sim.step()
             # gipc_sim.render_tet_surface_wireframes(clean_up_first=True)
-            uipc_sim.update_render_meshes()
+            with Timer("[INFO]: Time taken for updating the render meshes."):
+                uipc_sim.update_render_meshes()
+            #sim.forward()
+            # sim._update_fabric(0.0, 0.0)
             sim.render()
-            
-            # sio.write_surface(f"falling_cubes/obj/scene_surface{uipc_sim.world.frame()}.obj")
-
-            # # convert to vtk file
-            # reader = vtk.vtkOBJReader()
-            # reader.SetFileName(f"falling_cubes/obj/scene_surface{uipc_sim.world.frame()}.obj")
-            # reader.Update()
-            # obj = reader.GetOutput()
-
-            # writer = vtk.vtkPolyDataWriter()
-            # writer.SetFileName(f"falling_cubes/vtk/scene_surface{uipc_sim.world.frame()}.vtk")
-            # writer.SetInputData(obj)
-            # writer.Write()
-
-            # #draw.clear_points()
-            # points = np.array(gipc_sim.sim.get_vertices())
-            # draw.draw_points(points, [(255,50 + 50,0,0.5)]*points.shape[0], [30]*points.shape[0])
-            # # draw debug view every 5 steps
-            # if step % 5 == 0:
-            #     # update positions
-            #     #gipc_sim.objects["cube"].update_positions(gipc_sim.vertices)
-            #     #gipc_sim.objects["cube"].draw_debug_view()
-
-            #     gipc_sim.objects["cube_big"].update_positions(gipc_sim.vertices)
-            #     #gipc_sim.objects["cube_big"].draw_debug_view()
-            
+            uipc_sim.get_time_report()
             step += 1      
         
-        # start GIPC sim after pausing and playing the sim
+        # start UIPC sim after pausing and playing the sim
         if sim.is_playing() is False:
-            #! test
             start_uipc_test = True
             print("Start uipc simulation by pressing Play")
 
-        # if step % 50 == 0:
-        #     print("Reset simulation")
-        #     print("Render block ", sim.get_block_on_render())
-        #     if start_gipc_test:
-        #         gipc_sim.reset()
-        #         #gipc_sim.step()
-        #         gipc_sim.update_render_meshes()
-        #         gipc_sim.render_tet_surface_wireframes(clean_up_first=True)
-        #         sim.render()
-                
-        #         start_gipc_test = False
-        #         change_mat_color(stage, "/World/Objects/Big_cube/Looks/OmniPBR/Shader", (0,0,1))
-
-        #         # draw.clear_points()
-        #         # draw.clear_lines()
-        #     step = 1
+        if step % 500 == 0:
+            print("Reset simulation")
+            if start_uipc_test:
+                uipc_sim.reset()
+                start_uipc_test = False
+                # draw.clear_points()
+                # draw.clear_lines()
+            step = 1
           
 if __name__ == "__main__":
     # run the main function

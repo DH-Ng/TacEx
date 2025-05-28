@@ -130,7 +130,7 @@ class UipcObject(AssetBase):
             tet_points_world = (tet_points_world[:-1].T)
             # print("new ")
             # print(tet_points_world)
-            draw.draw_points(tet_points_world, [(0,0,255,0.5)]*tet_points_world.shape[0], [30]*tet_points_world.shape[0])
+            # draw.draw_points(tet_points_world, [(0,0,255,0.5)]*tet_points_world.shape[0], [30]*tet_points_world.shape[0])
 
             tet_indices = np.array(prim.GetAttribute("tet_indices").Get()).reshape(-1,4) # uipc wants 2D array
             # print("idx")

@@ -41,6 +41,7 @@ class UipcSim():
             cfg = UipcSimCfg()
         self.cfg = cfg
 
+        Timer.enable_all()
         Logger.set_level(Logger.Error)
 
         self.engine: Engine = Engine(self.cfg.device)
@@ -70,11 +71,17 @@ class UipcSim():
 
     def setup_scene(self):
         self.world.init(self.scene)
+        self.world.retrieve()
 
     def step(self):
         self.world.advance()
         self.world.retrieve()
-    
+
+    def reset(self):
+        self.world.recover(1) # go back to frame 1
+        self.world.retrieve()
+        self.update_render_meshes()
+
     def update_render_meshes(self):
         all_trimesh_points = self.sio.simplicial_surface(2).positions().view().reshape(-1,3)
         
@@ -85,9 +92,14 @@ class UipcSim():
             fabric_mesh_points = fabric_prim.GetAttribute("points")
             fabric_mesh_points.Set(usdrt.Vt.Vec3fArray(trimesh_points))
 
-        draw.clear_points()
+        # draw.clear_points()
         # points = np.array(all_trimesh_points)
         # draw.draw_points(points, [(255,0,255,0.5)]*points.shape[0], [30]*points.shape[0])
 
     def simple_update_render_meshes(self):
         pass
+
+    def get_time_report(self):
+        # self.world.dump() # -> creates files which describe state of the world at this time step [needed if you want to use world.recover()]
+        Timer.report()
+        # report = Timer.report_as_json()

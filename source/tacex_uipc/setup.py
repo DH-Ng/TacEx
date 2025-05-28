@@ -75,7 +75,8 @@ class CMakeBuild(build_ext):
         cmake_args = [
             "-DCMAKE_LIBRARY_OUTPUT_DIRECTORY=" + extdir,
             "-DUIPC_BUILD_PYBIND=" + self.DUIPC_BUILD_PYBIND, # per default = 1
-            "-DUIPC_DEV_MODE=1"
+            "-DUIPC_DEV_MODE=1",
+            "-DUIPC_BUILD_GUI=0"
         ]
         if self.DCMAKE_CUDA_ARCHITECTURES is not None: # None means "use native cuda architecture"
             cmake_args += ["-DCMAKE_CUDA_ARCHITECTURES="+self.DCMAKE_CUDA_ARCHITECTURES]
