@@ -215,27 +215,8 @@ class MeshGenerator():
         tet_mesh_points, tet_indices, surf_points, surf_indices = self.compute_tet_mesh(points, triangles)
 
         # update the usd mesh
-        prim.GetPointsAttr().Set(surf_points)
-        idx = np.array(surf_indices.copy()).reshape(-1,3)
-        prim.GetFaceVertexCountsAttr().Set([3] * idx.shape[0]) # how many vertices each face has (3, cause triangles)
-        prim.GetFaceVertexIndicesAttr().Set(idx)
-        prim.GetNormalsAttr().Set([]) # set to be empty, cause we use catmullClark and this gives us normals
-        prim.SetNormalsInterpolation(UsdGeom.Tokens.faceVarying)
-        # prim.GetSubdivisionSchemeAttr().Set("catmullClark") #none
-
-        # set color with per face interpolation  
-        colors = [(random.uniform(0.0, 0.75), random.uniform(0.0, 0.75), random.uniform(0.0, 0.75)) for _ in range(idx.shape[0]*3)] 
-        prim.CreateDisplayColorPrimvar(UsdGeom.Tokens.faceVarying).Set(colors) # num_surf_tri * 3
+        #self.update_surface_mesh(prim, surf_points=surf_points, triangles=surf_indices)
         
-        # set uv_coor variable
-        uv_coor = np.indices((int(idx.shape[0]*1.5),2)).transpose((1,2,0)).reshape((-1,2))
-        print("uv shape ", uv_coor.shape)
-        # geom_mesh.GetSTAttr().Set(uv_coor)
-        pv_api = UsdGeom.PrimvarsAPI(prim)
-        pv = pv_api.GetPrimvar("primvars:st")
-        pv.Set(uv_coor)
-        pv.SetInterpolation(UsdGeom.Tokens.faceVarying)
-
         # # draw the tet mesh
         # color = [(0,0,0,1)]
         # for i in range(0, len(tet_indices), 4):
@@ -248,7 +229,7 @@ class MeshGenerator():
 
 
         return tet_mesh_points, tet_indices, surf_points, surf_indices
-
+    
     def compute_tet_mesh(self, points, triangles):
         triangles = np.array(triangles, dtype=np.uint32).reshape(-1, 3)
         points = np.array(points, dtype=np.float64)
@@ -290,4 +271,27 @@ class MeshGenerator():
         surf_indices = np.array(surf_indices).flatten().tolist()
         return tet_points, tet_indices, surf_points, surf_indices
     
-    
+    @staticmethod
+    def update_surface_mesh(prim: UsdGeom.Mesh, surf_points, triangles: list[int]):
+        triangles = np.array(triangles).reshape(-1,3)
+
+        prim.GetPointsAttr().Set(surf_points)
+        prim.GetFaceVertexCountsAttr().Set([3] * triangles.shape[0]) # how many vertices each face has (3, cause triangles)
+        prim.GetFaceVertexIndicesAttr().Set(triangles)
+        prim.GetNormalsAttr().Set([]) # set to be empty, cause we use catmullClark and this gives us normals
+        prim.SetNormalsInterpolation(UsdGeom.Tokens.faceVarying)
+        # prim.GetSubdivisionSchemeAttr().Set("catmullClark") #none
+
+        # set color with per face interpolation  
+        colors = [(random.uniform(0.0, 0.75), random.uniform(0.0, 0.75), random.uniform(0.0, 0.75)) for _ in range(triangles.shape[0]*3)] 
+        prim.CreateDisplayColorPrimvar(UsdGeom.Tokens.faceVarying).Set(colors) # num_surf_tri * 3
+        
+        # set uv_coor variable
+        uv_coor = np.indices((int(triangles.shape[0]*1.5),2)).transpose((1,2,0)).reshape((-1,2))
+        print("uv shape ", uv_coor.shape)
+        # geom_mesh.GetSTAttr().Set(uv_coor)
+        pv_api = UsdGeom.PrimvarsAPI(prim)
+        pv = pv_api.GetPrimvar("primvars:st")
+        pv.Set(uv_coor)
+        pv.SetInterpolation(UsdGeom.Tokens.faceVarying)
+        

@@ -145,7 +145,7 @@ def _generate_tet_mesh(path, tet_cfg=None):
     """
     if tet_cfg is None:
         tet_cfg = TetMeshCfg(
-            edge_length_r=1/10
+            edge_length_r=0.75
         )
     mesh_gen = MeshGenerator(tet_cfg)
 
@@ -163,7 +163,7 @@ def _generate_tet_mesh(path, tet_cfg=None):
     _draw_tets(tet_points, tet_indices)
     _draw_surface_trimesh(surf_points, tet_surf_indices)
 
-    _create_tet_data_attributes(path, tet_points=tet_points, tet_indices=tet_indices, tet_surf_points=surf_points,tet_surf_indices=tet_surf_indices)
+    _create_tet_data_attributes(path, tet_points=tet_points, tet_indices=tet_indices, tet_surf_points=surf_points, tet_surf_indices=tet_surf_indices)
     return f"Amount of tet points {len(tet_points)},\nAmount of tetrahedra: {int(len(tet_indices)/4)},\nAmount of surface points: {int(len(tet_surf_indices)/3)}"
 
 def _transform_points(points, transformation_matrix):
@@ -224,7 +224,7 @@ def _create_tet_data_attributes(path, tet_points, tet_indices, tet_surf_points, 
     attr_tet_indices = prim.CreateAttribute("tet_indices", pxr.Sdf.ValueTypeNames.UIntArray)
     attr_tet_indices.Set(tet_indices)
 
-    attr_tet_surf_points = prim.CreateAttribute("tet_surf_points", pxr.Sdf.ValueTypeNames.UIntArray)
+    attr_tet_surf_points = prim.CreateAttribute("tet_surf_points", pxr.Sdf.ValueTypeNames.Vector3fArray)
     attr_tet_surf_points.Set(tet_surf_points)
 
     attr_tet_surf_indices = prim.CreateAttribute("tet_surf_indices", pxr.Sdf.ValueTypeNames.UIntArray)
@@ -234,9 +234,22 @@ def _create_tet_data_attributes(path, tet_points, tet_indices, tet_surf_points, 
     print("Created tet data: ")
     print(f"tet_points (num {tet_points.shape[0]})")
     print(f"tet_indices (num {len(tet_indices)})")
-    print(f"tet_surf_points (num {len(tet_indices)})")
-    print(f"tet_surf_indices (num {len(tet_indices)})")
+    print(f"tet_surf_points (num {tet_surf_points.shape[0]})")
+    print(f"tet_surf_indices (num {len(tet_surf_indices)})")
     print("*"*40)
+
+def _update_surf_mesh(path):
+    stage = omni.usd.get_context().get_stage()
+    prim = stage.GetPrimAtPath(pxr.Sdf.Path(path))
+    print("prim ", prim)
+    # extract surface data of tet mesh 
+    surf_points = prim.GetAttribute("tet_surf_points").Get()
+    tet_surf_indices = prim.GetAttribute("tet_surf_indices").Get()
+    
+    surf_points = np.array(surf_points)
+    triangles = tet_surf_indices
+    MeshGenerator.update_surface_mesh(UsdGeom.Mesh(prim), surf_points=surf_points, triangles=triangles)
+    print("Updated Surface Mesh of ", path)
 
 # Any class derived from `omni.ext.IExt` in top level module (defined in `python.modules` of `extension.toml`) will be
 # instantiated when extension gets enabled and `on_startup(ext_id)` will be called. Later when extension gets disabled
@@ -264,7 +277,11 @@ class TacexIPCExtension(omni.ext.IExt):
                 def compute_tet_mesh():
                     label.text = _generate_tet_mesh(get_selected_prim_path())
 
+                def update_surf_mesh():
+                    _update_surf_mesh(get_selected_prim_path())
+                    
                 omni.ui.Button("Compute Tet Mesh", clicked_fn=compute_tet_mesh, height=0)
+                omni.ui.Button("Update Surface Mesh", clicked_fn=update_surf_mesh, height=0)
 
     # def init_on_update(self):
     #     @carb.profiler.profile(zone_name="omni.example.python.usdrt.on_update")

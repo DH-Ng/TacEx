@@ -148,7 +148,7 @@ def main():
     )
     cube = UipcObject(cube_cfg, uipc_sim)
 
-    num_cubes = 0 # 5 #30
+    num_cubes = 30
     cubes = []
     for i in range(num_cubes):
         # might lead to intersections due to random pos

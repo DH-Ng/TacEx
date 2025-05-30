@@ -112,7 +112,7 @@ class UipcObject(AssetBase):
                 # Load precomputed mesh data from USD file.
                 tet_points = np.array(prim_children[0].GetAttribute("tet_points").Get())
                 tet_indices = prim_children[0].GetAttribute("tet_indices").Get()
-                surf_points = prim_children[0].GetAttribute("tet_indices").Get()
+                surf_points = np.array(prim_children[0].GetAttribute("tet_surf_points").Get())
                 tet_surf_indices = prim_children[0].GetAttribute("tet_surf_indices").Get()
             else:
                 mesh_gen = MeshGenerator(config=self.cfg.mesh_cfg)
@@ -137,8 +137,8 @@ class UipcObject(AssetBase):
             #     draw.draw_lines([tet_points[2]], [tet_points[3]], color, [10]) # draw line between the other 2 points
 
             #draw surface mesh
-            tet_surf_points_world = tf_world.T @ np.vstack((surf_points.T, np.ones(surf_points.shape[0])))
-            tet_surf_points_world = (tet_surf_points_world[:-1].T)
+            # tet_surf_points_world = tf_world.T @ np.vstack((surf_points.T, np.ones(surf_points.shape[0])))
+            # tet_surf_points_world = (tet_surf_points_world[:-1].T)
             # for i in range(0, len(tet_surf_indices), 3):
             #     tet_points_idx = tet_surf_indices[i:i+3]
             #     tet_points = [tet_surf_points_world[i] for i in tet_points_idx]
@@ -152,6 +152,22 @@ class UipcObject(AssetBase):
 
             # create uipc mesh
             mesh = tetmesh(tet_points_world.copy(), tet_indices.copy())
+            # enable the contact by labeling the surface 
+            label_surface(mesh)
+            # label_triangle_orient(mesh)
+            surf = extract_surface(mesh)
+            tet_surf_points_world = surf.positions().view().reshape(-1,3)
+            surf = surf.triangles().topo().view().reshape(-1).tolist()
+            MeshGenerator.update_surface_mesh(prim=usd_mesh, surf_points=tet_surf_points_world, triangles=surf)
+
+            #color = [(0,125,125,0.5)]
+            # for i in range(0, len(surf), 3):
+            #     tet_points_idx = surf[i:i+3]
+            #     tet_points = [tet_surf_points_world[i] for i in tet_points_idx]
+            #     draw.draw_points(tet_points, [(0,255,255,1)]*len(tet_points), [50]*len(tet_points)) 
+            #     draw.draw_lines([tet_points[0]]*2, tet_points[1:], color*2, [10]*2) # draw from point 0 to every other point (3 times 0, cause line from 0 to the other 3 points)
+            #     draw.draw_lines([tet_points[1]]*1, tet_points[2:], color*1, [10]*1)
+            # surf = np.array(surf).reshape(-1,3)
             self.uipc_meshes.append(mesh)
 
             mesh = self.uipc_meshes[0]
@@ -167,10 +183,6 @@ class UipcObject(AssetBase):
             # apply the default contact model to the base mesh
             default_element.apply_to(mesh)
 
-            # enable the contact by labeling the surface 
-            label_surface(mesh)
-            # label_triangle_orient(mesh)
-
             # create objects
             obj = self._uipc_sim.scene.objects().create(self.cfg.prim_path)
             obj_geo_slot, _ = obj.geometries().create(mesh)
@@ -179,21 +191,6 @@ class UipcObject(AssetBase):
             # log information about the rigid body
             omni.log.info(f"UIPC body initialized at: {self.cfg.prim_path}.")
             omni.log.info(f"Number of instances: {self.num_instances}")
-
-            # TA = mesh.triangles()
-            # ctet_view = TA.topo().view().reshape(-1,3)
-            # ctet_view = ctet_view.reshape(-1).tolist()
-            # label_triangle_orient(mesh)
-            surf = extract_surface(mesh)
-            surf = surf.triangles().topo().view().reshape(-1).tolist()
-            print("uipc surf" , len(surf))
-            color = [(0,125,125,0.5)]
-            for i in range(0, len(surf), 3):
-                tet_points_idx = surf[i:i+3]
-                tet_points = [tet_points_world[i] for i in tet_points_idx]
-                draw.draw_points(tet_points, [(0,255,255,1)]*len(tet_points), [50]*len(tet_points)) 
-                draw.draw_lines([tet_points[0]]*2, tet_points[1:], color*2, [10]*2) # draw from point 0 to every other point (3 times 0, cause line from 0 to the other 3 points)
-                draw.draw_lines([tet_points[1]]*1, tet_points[2:], color*1, [10]*1)
 
             # setup mesh updates via Fabric
             fabric_prim = self.stage.GetPrimAtPath(usdrt.Sdf.Path(usd_mesh_path))
@@ -216,7 +213,7 @@ class UipcObject(AssetBase):
             # update fabric mesh with world coor. points
             fabric_mesh_points_attr = fabric_prim.GetAttribute("points")
             fabric_mesh_points_attr.Set(usdrt.Vt.Vec3fArray(tet_surf_points_world))
-            print("surface ", tet_surf_points_world.shape)
+
             # update topology of fabric mesh
             # fabric_mesh = usdrt.UsdGeom.Mesh(fabric_prim)
             # fabric_mesh.CreateFaceVertexCountsAttr()

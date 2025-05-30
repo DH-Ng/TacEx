@@ -88,7 +88,6 @@ class UipcSim():
         #triangles = self.sio.simplicial_surface(2).triangles().topo().view()
         for i, fabric_prim in enumerate(self._fabric_meshes):
             trimesh_points = all_trimesh_points[self._last_point_index[i]:self._last_point_index[i+1]]
-            print("Updated points ", trimesh_points.shape)
             #draw.draw_points(trimesh_points, [(0,0,255,0.5)]*trimesh_points.shape[0], [30]*trimesh_points.shape[0])
             
             fabric_mesh_points = fabric_prim.GetAttribute("points")
