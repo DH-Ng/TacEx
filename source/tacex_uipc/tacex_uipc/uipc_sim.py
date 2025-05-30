@@ -42,7 +42,7 @@ class UipcSim():
         self.cfg = cfg
 
         Timer.enable_all()
-        Logger.set_level(Logger.Error)
+        # Logger.set_level(Logger.Error)
 
         self.engine: Engine = Engine(self.cfg.device)
         self.world: World = World(self.engine)
@@ -66,12 +66,13 @@ class UipcSim():
         g = ground(0.0, [0.0, 0.0, 1.0])
         ground_obj.geometries().create(g)
 
-        # for updating render meshes
-        self.sio = SceneIO(self.scene)
 
     def setup_scene(self):
         self.world.init(self.scene)
         self.world.retrieve()
+
+        # for updating render meshes
+        self.sio = SceneIO(self.scene)
 
     def step(self):
         self.world.advance()
@@ -84,11 +85,12 @@ class UipcSim():
 
     def update_render_meshes(self):
         all_trimesh_points = self.sio.simplicial_surface(2).positions().view().reshape(-1,3)
-        
+        #triangles = self.sio.simplicial_surface(2).triangles().topo().view()
         for i, fabric_prim in enumerate(self._fabric_meshes):
             trimesh_points = all_trimesh_points[self._last_point_index[i]:self._last_point_index[i+1]]
-            # print("Updated points ", trimesh_points)
-
+            print("Updated points ", trimesh_points.shape)
+            #draw.draw_points(trimesh_points, [(0,0,255,0.5)]*trimesh_points.shape[0], [30]*trimesh_points.shape[0])
+            
             fabric_mesh_points = fabric_prim.GetAttribute("points")
             fabric_mesh_points.Set(usdrt.Vt.Vec3fArray(trimesh_points))
 

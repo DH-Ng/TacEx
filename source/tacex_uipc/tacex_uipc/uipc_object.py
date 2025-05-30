@@ -11,11 +11,12 @@ from typing import TYPE_CHECKING
 
 import omni.log
 import omni.physics.tensors.impl.api as physx
-from pxr import UsdPhysics
 
 import omni.usd
 import usdrt
 from isaacsim.core.prims import XFormPrim
+from pxr import UsdPhysics, UsdGeom, Gf, Usd
+import usdrt.UsdGeom
 
 # from isaacsim.core.utils.extensions import enable_extension
 # enable_extension("isaacsim.util.debug_draw")
@@ -37,19 +38,23 @@ import uipc
 from uipc import builtin, view
 from uipc.core import Engine, World, Scene, SceneIO
 from uipc import Vector3, Vector2, Transform, Logger, Quaternion, AngleAxis
-from uipc.geometry import tetmesh, label_surface, label_triangle_orient, flip_inward_triangles
+from uipc.geometry import tetmesh, label_surface, label_triangle_orient, flip_inward_triangles, extract_surface
 from uipc.constitution import AffineBodyConstitution
 from uipc.unit import MPa, GPa
 
+import random
 import numpy as np
 import warp as wp
 wp.init()
+
+from tacex_uipc.utils import TetMeshCfg, MeshGenerator
 
 if TYPE_CHECKING:
     from tacex_uipc import UipcSim
 
 @configclass
 class UipcObjectCfg(AssetBaseCfg):
+    mesh_cfg: TetMeshCfg = None
     constitution_type: str = "AffineBodyConstitution"
 
     # contact_model: 
@@ -86,7 +91,8 @@ class UipcObject(AssetBase):
         """
         super().__init__(cfg)
         self._uipc_sim = uipc_sim
-        prim_paths_expr = self.cfg.prim_path + "/mesh"
+
+        prim_paths_expr = self.cfg.prim_path #+ "/mesh"
         print(f"Initializing uipc objects {prim_paths_expr}...")
         self._prim_view = XFormPrim(prim_paths_expr=prim_paths_expr, name=f"{prim_paths_expr}", usd=False)
         self._prim_view.initialize()
@@ -96,14 +102,105 @@ class UipcObject(AssetBase):
         self.uipc_meshes = []
         self.objects = []
         # setup tet meshes for uipc
-        for prim in self._prim_view.prims:
-            prim_path = str(prim.GetPrimPath())
+        for prim in self._prim_view.prims: # todo dont loop over all prims of the view -> just take one base prim. Rather loop over the prim children?
+            # need to access the mesh data of the usd prim
+            prim_children = prim.GetChildren()
+            usd_mesh = UsdGeom.Mesh(prim_children[0])
+            usd_mesh_path = str(usd_mesh.GetPath())
+            
+            if self.cfg.mesh_cfg is None:
+                # Load precomputed mesh data from USD file.
+                tet_points = np.array(prim_children[0].GetAttribute("tet_points").Get())
+                tet_indices = prim_children[0].GetAttribute("tet_indices").Get()
+                surf_points = prim_children[0].GetAttribute("tet_indices").Get()
+                tet_surf_indices = prim_children[0].GetAttribute("tet_surf_indices").Get()
+            else:
+                mesh_gen = MeshGenerator(config=self.cfg.mesh_cfg)
+                if type(self.cfg.mesh_cfg) == TetMeshCfg:
+                    tet_points, tet_indices, surf_points, tet_surf_indices = mesh_gen.generate_tet_mesh_for_prim(usd_mesh)
+
+            # transform local tet points to world coor
+            tf_world = np.array(omni.usd.get_world_transform_matrix(prim))
+            tet_points_world = tf_world.T @ np.vstack((tet_points.T, np.ones(tet_points.shape[0])))
+            tet_points_world = (tet_points_world[:-1].T)
+            # print("new ")
+            # print(tet_points_world)
+            # draw.draw_points(tet_points_world, [(0,0,255,0.5)]*tet_points_world.shape[0], [30]*tet_points_world.shape[0])
+            # draw the tet mesh
+            color = [(125,0,0,0.5)]
+            # for i in range(0, len(tet_indices), 4):
+            #     tet_points_idx = tet_indices[i:i+4]
+            #     tet_points = [tet_points_world[i] for i in tet_points_idx]
+            #     #draw.draw_points(tet_points, [(255,0,0,1)]*len(all_vertices), [10]*len(all_vertices)) 
+            #     draw.draw_lines([tet_points[0]]*3, tet_points[1:], color*3, [10]*3) # draw from point 0 to every other point (3 times 0, cause line from 0 to the other 3 points)
+            #     draw.draw_lines([tet_points[1]]*2, tet_points[2:], color*2, [10]*2)
+            #     draw.draw_lines([tet_points[2]], [tet_points[3]], color, [10]) # draw line between the other 2 points
+
+            #draw surface mesh
+            tet_surf_points_world = tf_world.T @ np.vstack((surf_points.T, np.ones(surf_points.shape[0])))
+            tet_surf_points_world = (tet_surf_points_world[:-1].T)
+            # for i in range(0, len(tet_surf_indices), 3):
+            #     tet_points_idx = tet_surf_indices[i:i+3]
+            #     tet_points = [tet_surf_points_world[i] for i in tet_points_idx]
+            #     draw.draw_points(tet_points, [(255,255,255,1)]*len(tet_points), [40]*len(tet_points)) 
+            #     draw.draw_lines([tet_points[0]]*2, tet_points[1:], color*2, [10]*2) # draw from point 0 to every other point (3 times 0, cause line from 0 to the other 3 points)
+            #     draw.draw_lines([tet_points[1]]*1, tet_points[2:], color*1, [10]*1)
+
+            # uipc wants 2D array
+            tet_indices = np.array(tet_indices).reshape(-1,4)
+            tet_surf_indices = np.array(tet_surf_indices).reshape(-1,3)
+
+            # create uipc mesh
+            mesh = tetmesh(tet_points_world.copy(), tet_indices.copy())
+            self.uipc_meshes.append(mesh)
+
+            mesh = self.uipc_meshes[0]
+
+            # create constitution and contact model
+            abd = AffineBodyConstitution()
+            # friction ratio and contact resistance
+            self._uipc_sim.scene.contact_tabular().default_model(0.5, 1.0 * GPa)
+            default_element = self._uipc_sim.scene.contact_tabular().default_element()
+
+            # apply the constitution and contact model to the base mesh
+            abd.apply_to(mesh, 10 * MPa) # stiffness (hardness) of 100 MPa (= hard-rubber-like material)
+            # apply the default contact model to the base mesh
+            default_element.apply_to(mesh)
+
+            # enable the contact by labeling the surface 
+            label_surface(mesh)
+            # label_triangle_orient(mesh)
+
+            # create objects
+            obj = self._uipc_sim.scene.objects().create(self.cfg.prim_path)
+            obj_geo_slot, _ = obj.geometries().create(mesh)
+            self.objects.append(obj_geo_slot)
+
+            # log information about the rigid body
+            omni.log.info(f"UIPC body initialized at: {self.cfg.prim_path}.")
+            omni.log.info(f"Number of instances: {self.num_instances}")
+
+            # TA = mesh.triangles()
+            # ctet_view = TA.topo().view().reshape(-1,3)
+            # ctet_view = ctet_view.reshape(-1).tolist()
+            # label_triangle_orient(mesh)
+            surf = extract_surface(mesh)
+            surf = surf.triangles().topo().view().reshape(-1).tolist()
+            print("uipc surf" , len(surf))
+            color = [(0,125,125,0.5)]
+            for i in range(0, len(surf), 3):
+                tet_points_idx = surf[i:i+3]
+                tet_points = [tet_points_world[i] for i in tet_points_idx]
+                draw.draw_points(tet_points, [(0,255,255,1)]*len(tet_points), [50]*len(tet_points)) 
+                draw.draw_lines([tet_points[0]]*2, tet_points[1:], color*2, [10]*2) # draw from point 0 to every other point (3 times 0, cause line from 0 to the other 3 points)
+                draw.draw_lines([tet_points[1]]*1, tet_points[2:], color*1, [10]*1)
+
             # setup mesh updates via Fabric
-            fabric_prim = self.stage.GetPrimAtPath(usdrt.Sdf.Path(prim_path))
+            fabric_prim = self.stage.GetPrimAtPath(usdrt.Sdf.Path(usd_mesh_path))
             if not fabric_prim:
-                print(f"Prim at path {prim_path} is not in Fabric")
+                print(f"Prim at path {usd_mesh_path} is not in Fabric")
             if not fabric_prim.HasAttribute("points"):
-                print(f"Prim at path {prim_path} does not have points attribute")
+                print(f"Prim at path {usd_mesh_path} does not have points attribute")
 
             # Tell OmniHydra to render points from Fabric
             if not fabric_prim.HasAttribute("Deformable"):
@@ -111,45 +208,30 @@ class UipcObject(AssetBase):
 
             # extract world transform
             # tf_matrix = omni.usd.get_local_transform_matrix(prim)
-            # print("tf ", tf_matrix)
-            tf_world = np.array(omni.usd.get_world_transform_matrix(prim))
-            # clear xform world transform
             rtxformable = usdrt.Rt.Xformable(fabric_prim)
-            # rtxformable.ClearWorldXform()
-
             rtxformable.CreateFabricHierarchyWorldMatrixAttr()
-            # rtxformable.SetWorldXformFromUsd()
             # set world matrix to identity matrix -> uipc already gives us world vertices 
             rtxformable.GetFabricHierarchyWorldMatrixAttr().Set(usdrt.Gf.Matrix4d())
-            # print("tf ", tf_world.T)
-            tet_points = np.array(prim.GetAttribute("tet_points").Get())
-            # print("orig ")
-            # print(tet_points)
-            # transform points to world coor
-            tet_points_world = tf_world.T @ np.vstack((tet_points.T, np.ones(tet_points.shape[0])))
-            tet_points_world = (tet_points_world[:-1].T)
-            # print("new ")
-            # print(tet_points_world)
-            # draw.draw_points(tet_points_world, [(0,0,255,0.5)]*tet_points_world.shape[0], [30]*tet_points_world.shape[0])
 
-            tet_indices = np.array(prim.GetAttribute("tet_indices").Get()).reshape(-1,4) # uipc wants 2D array
-            # print("idx")
-            # print(tet_indices)
-            tet_surf_indices = np.array(prim.GetAttribute("tet_surf_indices").Get()).reshape(-1,3)
-            
-            mesh = tetmesh(tet_points_world.copy(), tet_indices)
-            self.uipc_meshes.append(mesh)
+            # update fabric mesh with world coor. points
+            fabric_mesh_points_attr = fabric_prim.GetAttribute("points")
+            fabric_mesh_points_attr.Set(usdrt.Vt.Vec3fArray(tet_surf_points_world))
+            print("surface ", tet_surf_points_world.shape)
+            # update topology of fabric mesh
+            # fabric_mesh = usdrt.UsdGeom.Mesh(fabric_prim)
+            # fabric_mesh.CreateFaceVertexCountsAttr()
+            # fabric_mesh.GetFaceVertexCountsAttr()#.Set([3]*tet_surf_indices.shape[0])
+            # print("test", len(fabric_mesh.GetFaceVertexCountsAttr().Get()))
 
-            # update mesh with world coor. points
-            fabric_mesh_points = fabric_prim.GetAttribute("points")
-            fabric_mesh_points.Set(usdrt.Vt.Vec3fArray(tet_points_world))
+            # fabric_mesh.CreateFaceVertexIndicesAttr()
+            # fabric_mesh.GetFaceVertexIndicesAttr().Set(tet_surf_indices)
 
             # add fabric meshes to uipc sim class for updating the render meshes
             self._uipc_sim._fabric_meshes.append(fabric_prim)
             # for later finding corresponding points of the meshes
-            num_surf_points = np.unique(tet_surf_indices)
+            num_surf_points = tet_surf_points_world.shape[0] #np.unique(tet_surf_indices)
             self._uipc_sim._last_point_index.append(
-                self._uipc_sim._last_point_index[-1] + num_surf_points.shape[0]
+                self._uipc_sim._last_point_index[-1] + num_surf_points
             )
             
 
@@ -414,30 +496,6 @@ class UipcObject(AssetBase):
 
     def _initialize_impl(self):
         
-        mesh = self.uipc_meshes[0]
-
-        # create constitution and contact model
-        abd = AffineBodyConstitution()
-        # friction ratio and contact resistance
-        self._uipc_sim.scene.contact_tabular().default_model(0.5, 1.0 * GPa)
-        default_element = self._uipc_sim.scene.contact_tabular().default_element()
-        
-        # apply the constitution and contact model to the base mesh
-        abd.apply_to(mesh, 10 * MPa) # stiffness (hardness) of 100 MPa (= hard-rubber-like material)
-        # apply the default contact model to the base mesh
-        default_element.apply_to(mesh)
-
-        # enable the contact by labeling the surface 
-        label_surface(mesh)
-
-        # create objects
-        obj = self._uipc_sim.scene.objects().create(self.cfg.prim_path)
-        obj_geo_slot, _ = obj.geometries().create(mesh)
-        self.objects.append(obj_geo_slot)
-
-        # log information about the rigid body
-        omni.log.info(f"UIPC body initialized at: {self.cfg.prim_path}.")
-        omni.log.info(f"Number of instances: {self.num_instances}")
 
         # create buffers
         # self._create_buffers()

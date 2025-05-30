@@ -1,7 +1,7 @@
-"""Installation script for the 'tacex_ipc' python package.
+"""Installation script for the 'tacex_uipc' python package.
 
 Invoke with, for example:
-# in .../source/tacex_ipc folder
+# in .../source/tacex_uipc folder
 pip install -e .
 
 or with user arguments:

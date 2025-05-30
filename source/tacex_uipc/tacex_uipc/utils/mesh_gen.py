@@ -1,9 +1,15 @@
 
 # import pymesh
 #from meshpy.tet import MeshInfo, build, Options
+from omni.physx.scripts import deformableUtils
+from pxr import UsdPhysics, UsdGeom, Gf
+from isaacsim.util.debug_draw import _debug_draw
+draw = _debug_draw.acquire_debug_draw_interface()
+
 from collections.abc import MutableMapping
 import wildmeshing as wm
 
+import random
 import numpy as np
 from numpy.linalg import norm
 
@@ -11,6 +17,52 @@ from isaaclab.utils import configclass
 
 @configclass
 class TetMeshCfg:
+    """
+    
+    References: 
+
+    """
+
+    stop_quality: int = 10
+    """
+    Max AMIPS energy for stopping mesh optimization.
+
+    Larger means less optimization and sooner stopping.
+    """
+
+    max_its: int = 80
+    """
+    Max number of mesh optimization iterations.
+    """
+    
+    epsilon_r: float = 1e-2
+    """ Relative envelope epsilon_r (definies the envelope size).
+
+    -> Absolute epsilon = epsilon_r * diagonal_of_bbox.
+
+    Smaller envelope pereserves features better.  
+    Larger Envelope + larger edge_length = tetmesh with low res
+    """
+
+    edge_length_r: float = 1/2
+    """ Relative target edge length l_r. 
+    
+    -> Absolute l = l_r * diagonal_of_bbox.
+
+    Smaller edge length gives denser mesh.
+    """
+    
+    skip_simplify: bool = False
+
+    coarsen: bool = True
+
+    log_level: int = 6
+    """
+    Log level, ranges from 0 to 6  (0 = most verbose, 6 = off).
+    """
+
+@configclass
+class TriMeshCfg:
     """
     
     References: 
@@ -53,7 +105,7 @@ class TetMeshCfg:
     Log level, ranges from 0 to 6  (0 = most verbose, 6 = off).
     """
 
-class TetMeshGenerator():
+class MeshGenerator():
 
     def __init__(self, config: dict | TetMeshCfg = None) -> None:
         if config is None:
@@ -144,10 +196,62 @@ class TetMeshGenerator():
     #     mesh, __ = pymesh.remove_isolated_vertices(mesh)
         
     #     return mesh
-    
+    def generate_tet_mesh_for_prim(self, prim: UsdGeom.Mesh):
+        # compute mesh
+        points = np.array(prim.GetPointsAttr().Get())
+        # triangles is a list of indices: every 3 consecutive indices form a triangle
+        triangles = deformableUtils.triangulate_mesh(prim)
+
+        #draw surface mesh
+        # color = [(125,0,125,0.5)]
+        # for i in range(0, len(triangles), 3):
+        #     tet_points_idx = triangles[i:i+3]
+        #     tet_points = [points[i] for i in tet_points_idx]
+        #     draw.draw_points(tet_points, [(255,255,255,1)]*len(tet_points), [40]*len(tet_points)) 
+        #     draw.draw_lines([tet_points[0]]*2, tet_points[1:], color*2, [10]*2) # draw from point 0 to every other point (3 times 0, cause line from 0 to the other 3 points)
+        #     draw.draw_lines([tet_points[1]]*1, tet_points[2:], color*1, [10]*1)
+
+
+        tet_mesh_points, tet_indices, surf_points, surf_indices = self.compute_tet_mesh(points, triangles)
+
+        # update the usd mesh
+        prim.GetPointsAttr().Set(surf_points)
+        idx = np.array(surf_indices.copy()).reshape(-1,3)
+        prim.GetFaceVertexCountsAttr().Set([3] * idx.shape[0]) # how many vertices each face has (3, cause triangles)
+        prim.GetFaceVertexIndicesAttr().Set(idx)
+        prim.GetNormalsAttr().Set([]) # set to be empty, cause we use catmullClark and this gives us normals
+        prim.SetNormalsInterpolation(UsdGeom.Tokens.faceVarying)
+        # prim.GetSubdivisionSchemeAttr().Set("catmullClark") #none
+
+        # set color with per face interpolation  
+        colors = [(random.uniform(0.0, 0.75), random.uniform(0.0, 0.75), random.uniform(0.0, 0.75)) for _ in range(idx.shape[0]*3)] 
+        prim.CreateDisplayColorPrimvar(UsdGeom.Tokens.faceVarying).Set(colors) # num_surf_tri * 3
+        
+        # set uv_coor variable
+        uv_coor = np.indices((int(idx.shape[0]*1.5),2)).transpose((1,2,0)).reshape((-1,2))
+        print("uv shape ", uv_coor.shape)
+        # geom_mesh.GetSTAttr().Set(uv_coor)
+        pv_api = UsdGeom.PrimvarsAPI(prim)
+        pv = pv_api.GetPrimvar("primvars:st")
+        pv.Set(uv_coor)
+        pv.SetInterpolation(UsdGeom.Tokens.faceVarying)
+
+        # # draw the tet mesh
+        # color = [(0,0,0,1)]
+        # for i in range(0, len(tet_indices), 4):
+        #     tet_points_idx = tet_indices[i:i+4]
+        #     tet_points = [tet_mesh_points[i] for i in tet_points_idx]
+        #     #draw.draw_points(tet_points, [(255,0,0,1)]*len(all_vertices), [10]*len(all_vertices)) 
+        #     draw.draw_lines([tet_points[0]]*3, tet_points[1:], color*3, [10]*3) # draw from point 0 to every other point (3 times 0, cause line from 0 to the other 3 points)
+        #     draw.draw_lines([tet_points[1]]*2, tet_points[2:], color*2, [10]*2)
+        #     draw.draw_lines([tet_points[2]], [tet_points[3]], color, [10]) # draw line between the other 2 points
+
+
+        return tet_mesh_points, tet_indices, surf_points, surf_indices
+
     def compute_tet_mesh(self, points, triangles):
         triangles = np.array(triangles, dtype=np.uint32).reshape(-1, 3)
-        points = np.array(points)
+        points = np.array(points, dtype=np.float64)
 
         #! Pymesh
         #mesh = pymesh.form_mesh(points, triangles)
@@ -164,12 +268,12 @@ class TetMeshGenerator():
         # # print("tri mesh after cleanup: ")
         # # print(f"#vertices {mesh.num_vertices}, #faces {mesh.num_faces}")
 
-        # # # from omni.isaac.debug_draw import _debug_draw
-        # # # draw = _debug_draw.acquire_debug_draw_interface()
-        # # # for t in range(0, len(triangles.flatten().tolist()), 3):
-        # # #     tri_points = points[t:t+3]
-        # # #     draw.draw_lines([tri_points[0]]*2, tri_points[1:], [(255,255,255,0.5)]*2, [10]*2) # draw from point 0 to every other point (3 times 0, cause line from 0 to the other 3 points)
-        # # #     draw.draw_lines([tri_points[1]], [tri_points[2]], [(255,255,255,0.5)], [10])  
+        # # from omni.isaac.debug_draw import _debug_draw
+        # # draw = _debug_draw.acquire_debug_draw_interface()
+        # # for t in range(0, len(triangles.flatten().tolist()), 3):
+        # #     tri_points = points[t:t+3]
+        # #     draw.draw_lines([tri_points[0]]*2, tri_points[1:], [(255,255,255,0.5)]*2, [10]*2) # draw from point 0 to every other point (3 times 0, cause line from 0 to the other 3 points)
+        # #     draw.draw_lines([tri_points[1]], [tri_points[2]], [(255,255,255,0.5)], [10])  
         
         self.tetrahedralizer.set_mesh(points, triangles)
         self.tetrahedralizer.tetrahedralize()
@@ -182,8 +286,8 @@ class TetMeshGenerator():
 
         # surface
         surf_points, surf_indices = self.tetrahedralizer.get_tracked_surfaces()
+        surf_points = surf_points[0] # surf_points is a list -> in case object consists of multiple surfaces
         surf_indices = np.array(surf_indices).flatten().tolist()
-
-        return tet_points, tet_indices, surf_points[0], surf_indices
+        return tet_points, tet_indices, surf_points, surf_indices
     
     

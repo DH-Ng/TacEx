@@ -51,6 +51,7 @@ import warp as wp
 from uipc.core import Engine, World, Scene, SceneIO
 
 from tacex_uipc import UipcSim, UipcSimCfg, UipcObject, UipcObjectCfg
+from tacex_uipc.utils import TetMeshCfg
 
 def design_scene():
     """Designs the scene by spawning ground plane, light, objects and meshes from usd files."""
@@ -60,7 +61,7 @@ def design_scene():
 
     # spawn distant light
     cfg_light_dome = sim_utils.DomeLightCfg(
-        intensity=1000.0,
+        intensity=3000.0,
         color=(0.75, 0.75, 0.75),
     )
     cfg_light_dome.func("/World/lightDome", cfg_light_dome, translation=(1, 0, 10))
@@ -68,16 +69,6 @@ def design_scene():
     # create a new xform prim for all objects to be spawned under
     prims_utils.define_prim("/World/Objects", "Xform")
     
-    # cube_big_cfg = sim_utils.UsdFileCfg(usd_path="/workspace/isaaclab/data_storage/TacEx/examples/assets/cube_big.usd")
-
-    # cube_big_cfg.func(f"/World/Objects/Big_cube", cube_big_cfg, translation=(0.0, 0, 0.5 + 0.05 + (amount_cubes/10))) # make sure that big cube is at the top
-    # #cube_big_cfg.func(f"/World/Objects/Big_cube_x", cube_big_cfg, translation=(1, 0, 0.5 + 0.05 + (amount_cubes/10))) # make sure that big cube is at the top
-    #cube_big_cfg.func(f"/World/Objects/Big_cube_y", cube_big_cfg, translation=(0, 1, 0.5 + 0.05 + (amount_cubes/10))) # make sure that big cube is at the top
-   
-    # # spawn a usd file of a table into the scene
-    # cfg = sim_utils.UsdFileCfg(usd_path=f"{ISAAC_NUCLEUS_DIR}/Props/Mounts/SeattleLabTable/table_instanceable.usd")
-    # cfg.func("/World/Objects/Table", cfg, translation=(0.0, 0.0, 1.05))
-
 
 def change_mat_color(stage, shader_prim_path, color):
     # source: https://forums.developer.nvidia.com/t/randomize-materials-and-textures-based-on-a-probability-extract-path-to-material-and-texture-from-usd/270188/4
@@ -136,6 +127,14 @@ def main():
     uipc_cfg = UipcSimCfg()
     uipc_sim = UipcSim(uipc_cfg)
 
+    mesh_cfg = TetMeshCfg(
+        stop_quality=8,
+        max_its=100,
+        edge_length_r=1/5,
+        # epsilon_r=0.01
+    )
+    print("Mesh cfg ", mesh_cfg)
+
     # spawn uipc cube
     tet_cube_asset_path = pathlib.Path(__file__).parent.resolve() / "assets" / "cube.usd"
     cube_cfg = UipcObjectCfg(
@@ -145,10 +144,11 @@ def main():
             usd_path=str(tet_cube_asset_path),
             scale=(1.0, 1.0, 1.0)
         ),
+        mesh_cfg=mesh_cfg
     )
     cube = UipcObject(cube_cfg, uipc_sim)
 
-    num_cubes = 30
+    num_cubes = 0 # 5 #30
     cubes = []
     for i in range(num_cubes):
         # might lead to intersections due to random pos
@@ -192,7 +192,8 @@ def main():
             # draw.clear_points()
             # points = np.array(gipc_sim.sim.get_vertices())
             # draw.draw_points(points, [(255,0,255,0.5)]*points.shape[0], [30]*points.shape[0])
-
+            print("")
+            print("====================================================================================")
             print("====================================================================================")
             print("Step number ", step)
             ## if you want to replay frames which were saved via world.dump()
@@ -207,6 +208,7 @@ def main():
                 uipc_sim.update_render_meshes()
             #sim.forward()
             # sim._update_fabric(0.0, 0.0)
+            # render the updated meshes
             sim.render()
             uipc_sim.get_time_report()
             step += 1      

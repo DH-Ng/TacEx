@@ -733,7 +733,7 @@
 
         "${workspaceFolder}/source/tacex_assets",
         "${workspaceFolder}/source/tacex",
-        "${workspaceFolder}/source/tacex_ipc",
+        "${workspaceFolder}/source/tacex_uipc",
         "${workspaceFolder}/source/tacex_tasks"
     ]
 }

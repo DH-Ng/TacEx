@@ -31,7 +31,7 @@ import pxr
 import numpy as np
 import wildmeshing as wm
 
-from tacex_uipc.utils import TetMeshGenerator, TetMeshCfg
+from tacex_uipc.utils import MeshGenerator, TetMeshCfg
 
 try:
     wp = None
@@ -139,63 +139,32 @@ def get_fabric_data_for_prim(stage_id, path):
 
 
 ### MESH STUFF
-def _load_mesh(path, tet_cfg=None):        
+def _generate_tet_mesh(path, tet_cfg=None):        
     """
-    Need to make sure that we get the mesh in USD and not just the Xform of the mesh
+    Need to make sure that we load the geom mesh in USD and not just the Xform of the prim
     """
+    if tet_cfg is None:
+        tet_cfg = TetMeshCfg(
+            edge_length_r=1/10
+        )
+    mesh_gen = MeshGenerator(tet_cfg)
+
     stage = omni.usd.get_context().get_stage()
     # prim = stage.GetPrimAtPath(Sdf.Path(path))
-
-    tet_mesh_points = None
-    tet_indices = None
-
     geom_mesh = UsdGeom.Mesh.Get(stage, path)
-    # tf_matrix = omni.usd.get_world_transform_matrix(geom_mesh)
-    tf_matrix = omni.usd.get_local_transform_matrix(geom_mesh)
-    #points = _transform_points(geom_mesh.GetPointsAttr().Get(), tf_matrix)
-    points = geom_mesh.GetPointsAttr().Get()
-    # triangles is a list of indices: every 3 consecutive indices form a triangle
-    triangles = deformableUtils.triangulate_mesh(geom_mesh)
-    
-    tet_gen = TetMeshGenerator(config=tet_cfg)
-    tet_mesh_points, tet_indices, surf_points, surf_indices = tet_gen.compute_tet_mesh(points, triangles)
+    tet_points, tet_indices, surf_points, tet_surf_indices = mesh_gen.generate_tet_mesh_for_prim(geom_mesh)
 
+    # Dont transform ->  we want to save the local points. Transformations happens during loading of the obj
+    # tf_world = np.array(omni.usd.get_world_transform_matrix(geom_mesh))
+    # tet_points = tf_world.T @ np.vstack((tet_points.T, np.ones(tet_points.shape[0])))
+    # tet_points = (tet_points[:-1].T)
 
-    #! Don't update the points, otherwise we break the normal GIPC simulation setup
-    # # remove xForm operations and update points manually
-    # xform_utils.clear_xform_ops(prim_view.prims[i])
-    geom_mesh.GetPointsAttr().Set(surf_points)
-    idx = np.array(surf_indices).reshape(-1,3)
-    geom_mesh.GetFaceVertexCountsAttr().Set([3] * len(idx)) # how many vertices each face has (3, cause triangles)
-    geom_mesh.GetFaceVertexIndicesAttr().Set(idx)
-    geom_mesh.GetNormalsAttr().Set([]) # set to be empty, cause we use catmullClark and this gives us normals
-    geom_mesh.SetNormalsInterpolation(UsdGeom.Tokens.faceVarying)
-    # geom_mesh.GetSubdivisionSchemeAttr().Set("catmullClark") #none
+    draw.clear_lines()
+    _draw_tets(tet_points, tet_indices)
+    _draw_surface_trimesh(surf_points, tet_surf_indices)
 
-
-    # print("surf points ", surf_points.shape[0])
-    # print("surf tri ", idx.shape[0])
-    # print("tet points ", tet_mesh_points.shape[0])
-    # set color with per vertex interpolation    
-    # colors = [(random.uniform(0.0, 1.0), random.uniform(0.0, 1.0), random.uniform(0.0, 1.0)) for _ in range(surf_points.shape[0])] 
-    # geom_mesh.CreateDisplayColorPrimvar(UsdGeom.Tokens.vertex).Set(colors)
-
-    # set color with per face interpolation  
-    colors = [(random.uniform(0.0, 1.0), random.uniform(0.0, 1.0), random.uniform(0.0, 1.0)) for _ in range(idx.shape[0]*3)] 
-    geom_mesh.CreateDisplayColorPrimvar(UsdGeom.Tokens.faceVarying).Set(colors) # num_surf_tri * 3
-    
-    # set uv_coor variable
-    uv_coor = np.indices((int(idx.shape[0]*1.5),2)).transpose((1,2,0)).reshape((-1,2))
-    print("uv shape ", uv_coor.shape)
-    # geom_mesh.GetSTAttr().Set(uv_coor)
-    pv_api = UsdGeom.PrimvarsAPI(geom_mesh)
-    pv = pv_api.GetPrimvar("primvars:st")
-    pv.Set(uv_coor)
-    pv.SetInterpolation(UsdGeom.Tokens.faceVarying)
-
-    # _draw_tets(tet_mesh_points, tet_indices)
-    _create_tet_data_attributes(path, tet_points=tet_mesh_points, tet_indices=tet_indices, tet_surf_indices=surf_indices)
-    return f"Amount of tet points {len(tet_mesh_points)},\nAmount of tetrahedra: {len(tet_indices)/4},\nAmount of surface points: {len(surf_indices)/3}"
+    _create_tet_data_attributes(path, tet_points=tet_points, tet_indices=tet_indices, tet_surf_points=surf_points,tet_surf_indices=tet_surf_indices)
+    return f"Amount of tet points {len(tet_points)},\nAmount of tetrahedra: {int(len(tet_indices)/4)},\nAmount of surface points: {int(len(tet_surf_indices)/3)}"
 
 def _transform_points(points, transformation_matrix):
     # need a Gf matrix, otherwise matrix multiplication is going to yield wrong result
@@ -210,12 +179,13 @@ def _transform_points(points, transformation_matrix):
     return transformed_points
 
 def _draw_tets(all_vertices, tet_indices):
-        
+
+    draw.clear_lines()
     # first draw the tet mesh nodes
     # draw.draw_points(all_vertices, [(255,0,0,1)]*len(all_vertices), [10]*len(all_vertices))
     
     # connect nodes according to tet_indices
-    color = [(0,0,0,1)]
+    color = [(125,0,0,0.5)]
     for i in range(0, len(tet_indices), 4):
         tet_points_idx = tet_indices[i:i+4]
         tet_points = [all_vertices[i] for i in tet_points_idx]
@@ -224,7 +194,18 @@ def _draw_tets(all_vertices, tet_indices):
         draw.draw_lines([tet_points[1]]*2, tet_points[2:], color*2, [10]*2)
         draw.draw_lines([tet_points[2]], [tet_points[3]], color, [10]) # draw line between the other 2 points
 
-def _create_tet_data_attributes(path, tet_points, tet_indices, tet_surf_indices):
+def _draw_surface_trimesh(all_vertices, tet_surf_indices):
+    color = [(0,0,125,0.5)]
+    #draw surface mesh
+    for i in range(0, len(tet_surf_indices), 3):
+        tet_points_idx = tet_surf_indices[i:i+3]
+        tet_points = [all_vertices[i] for i in tet_points_idx]
+        draw.draw_points(tet_points, [(255,255,255,1)]*len(tet_points), [40]*len(tet_points)) 
+        draw.draw_lines([tet_points[0]]*2, tet_points[1:], color*2, [10]*2) # draw from point 0 to every other point (3 times 0, cause line from 0 to the other 3 points)
+        draw.draw_lines([tet_points[1]]*1, tet_points[2:], color*1, [10]*1)
+
+
+def _create_tet_data_attributes(path, tet_points, tet_indices, tet_surf_points, tet_surf_indices):
     """
     Creates an attribute for a prim that holds a boolean.
     See: https://graphics.pixar.com/usd/release/api/class_usd_prim.html.
@@ -243,6 +224,9 @@ def _create_tet_data_attributes(path, tet_points, tet_indices, tet_surf_indices)
     attr_tet_indices = prim.CreateAttribute("tet_indices", pxr.Sdf.ValueTypeNames.UIntArray)
     attr_tet_indices.Set(tet_indices)
 
+    attr_tet_surf_points = prim.CreateAttribute("tet_surf_points", pxr.Sdf.ValueTypeNames.UIntArray)
+    attr_tet_surf_points.Set(tet_surf_points)
+
     attr_tet_surf_indices = prim.CreateAttribute("tet_surf_indices", pxr.Sdf.ValueTypeNames.UIntArray)
     attr_tet_surf_indices.Set(tet_surf_indices)
 
@@ -250,6 +234,7 @@ def _create_tet_data_attributes(path, tet_points, tet_indices, tet_surf_indices)
     print("Created tet data: ")
     print(f"tet_points (num {tet_points.shape[0]})")
     print(f"tet_indices (num {len(tet_indices)})")
+    print(f"tet_surf_points (num {len(tet_indices)})")
     print(f"tet_surf_indices (num {len(tet_indices)})")
     print("*"*40)
 
@@ -260,7 +245,7 @@ class TacexIPCExtension(omni.ext.IExt):
     # ext_id is current extension id. It can be used with extension manager to query additional information, like where
     # this extension is located on filesystem.
     def on_startup(self, ext_id):
-        print("[tacex_ipc] startup")
+        print("[tacex_uipc] startup")
 
         self._window = omni.ui.Window(
             "Generate Tet Meshes for the IPC simulation:", width=300, height=300, dockPreference=omni.ui.DockPreference.RIGHT_BOTTOM
@@ -277,7 +262,7 @@ class TacexIPCExtension(omni.ext.IExt):
                     label = omni.ui.Label("Select a prim and push a button", alignment=omni.ui.Alignment.LEFT_TOP)
 
                 def compute_tet_mesh():
-                    label.text = _load_mesh(get_selected_prim_path())
+                    label.text = _generate_tet_mesh(get_selected_prim_path())
 
                 omni.ui.Button("Compute Tet Mesh", clicked_fn=compute_tet_mesh, height=0)
 
@@ -298,4 +283,4 @@ class TacexIPCExtension(omni.ext.IExt):
     #     return
     
     def on_shutdown(self):
-        print("[tacex_ipc] shutdown")
+        print("[tacex_uipc] shutdown")

@@ -1,1 +1,1 @@
-from .tet_mesh_gen import TetMeshGenerator, TetMeshCfg
+from .mesh_gen import MeshGenerator, TetMeshCfg, TriMeshCfg
