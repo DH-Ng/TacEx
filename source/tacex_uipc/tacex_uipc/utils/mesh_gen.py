@@ -288,7 +288,7 @@ class MeshGenerator():
         
         # set uv_coor variable
         uv_coor = np.indices((int(triangles.shape[0]*1.5),2)).transpose((1,2,0)).reshape((-1,2))
-        print("uv shape ", uv_coor.shape)
+
         # geom_mesh.GetSTAttr().Set(uv_coor)
         pv_api = UsdGeom.PrimvarsAPI(prim)
         pv = pv_api.GetPrimvar("primvars:st")

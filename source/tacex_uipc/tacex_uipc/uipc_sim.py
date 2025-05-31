@@ -42,7 +42,7 @@ class UipcSim():
         self.cfg = cfg
 
         Timer.enable_all()
-        # Logger.set_level(Logger.Error)
+        Logger.set_level(Logger.Error)
 
         self.engine: Engine = Engine(self.cfg.device)
         self.world: World = World(self.engine)

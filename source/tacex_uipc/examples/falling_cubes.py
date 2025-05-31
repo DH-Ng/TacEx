@@ -139,21 +139,35 @@ def main():
     tet_cube_asset_path = pathlib.Path(__file__).parent.resolve() / "assets" / "cube.usd"
     cube_cfg = UipcObjectCfg(
         prim_path="/World/Objects/Cube0",
-        init_state=AssetBaseCfg.InitialStateCfg(pos=[0.0, 0.0, 1.0], rot=(0.72,-0.3,0.42,-0.45)), #rot=(0.72,-0.3,0.42,-0.45)
+        init_state=AssetBaseCfg.InitialStateCfg(pos=[0, 0, 1.0]), #rot=(0.72,-0.3,0.42,-0.45)
         spawn=sim_utils.UsdFileCfg(
             usd_path=str(tet_cube_asset_path),
             scale=(1.0, 1.0, 1.0)
         ),
-        mesh_cfg=mesh_cfg
+        mesh_cfg=mesh_cfg,
+        constitution_type="StableNeoHookean"
     )
     cube = UipcObject(cube_cfg, uipc_sim)
+
+    # tet_ball_asset_path = pathlib.Path(__file__).parent.resolve() / "assets" / "ball.usd"
+    # ball_cfg = UipcObjectCfg(
+    #     prim_path="/World/Objects/ball",
+    #     init_state=AssetBaseCfg.InitialStateCfg(pos=[0, 0, 1.0]), #rot=(0.72,-0.3,0.42,-0.45)
+    #     spawn=sim_utils.UsdFileCfg(
+    #         usd_path=str(tet_ball_asset_path),
+    #         scale=(1.0, 1.0, 1.0)
+    #     ),
+    #     mesh_cfg=mesh_cfg,
+    #     constitution_type="StableNeoHookean"
+    # )
+    # ball = UipcObject(ball_cfg, uipc_sim)
 
     num_cubes = 30
     cubes = []
     for i in range(num_cubes):
         # might lead to intersections due to random pos
         # pos = (random.uniform(-1.0, 1.0), random.uniform(-1.0, 1.0), random.uniform(2.5, 6.0))
-        pos = (0,0, 2 + 0.3*i)
+        pos = (0,0, 2. + 0.25*i)
         rot = (random.uniform(-1.0, 1.0), random.uniform(-1.0, 1.0), random.uniform(-1.0, 1.0), random.uniform(-1.0, 1.0))
         cube_cfg = UipcObjectCfg(
             prim_path=f"/World/Objects/Cube{i+1}",
@@ -165,6 +179,18 @@ def main():
         )
         cubeX = UipcObject(cube_cfg, uipc_sim)
         cubes.append(cubeX)
+
+    cube_cfg = UipcObjectCfg(
+        prim_path="/World/Objects/CubeTop",
+        init_state=AssetBaseCfg.InitialStateCfg(pos=[0, 0, 2.0 + 0.25*num_cubes + 0.6]), #rot=(0.72,-0.3,0.42,-0.45)
+        spawn=sim_utils.UsdFileCfg(
+            usd_path=str(tet_cube_asset_path),
+            scale=(1.0, 1.0, 1.0)
+        ),
+        mesh_cfg=mesh_cfg,
+        constitution_type="StableNeoHookean"
+    )
+    cube_top = UipcObject(cube_cfg, uipc_sim)
 
     # Play the simulator
     sim.reset()

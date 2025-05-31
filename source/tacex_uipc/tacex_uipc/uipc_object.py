@@ -39,7 +39,7 @@ from uipc import builtin, view
 from uipc.core import Engine, World, Scene, SceneIO
 from uipc import Vector3, Vector2, Transform, Logger, Quaternion, AngleAxis
 from uipc.geometry import tetmesh, label_surface, label_triangle_orient, flip_inward_triangles, extract_surface
-from uipc.constitution import AffineBodyConstitution
+from uipc.constitution import AffineBodyConstitution, ElasticModuli, StableNeoHookean
 from uipc.unit import MPa, GPa
 
 import random
@@ -123,28 +123,6 @@ class UipcObject(AssetBase):
             tf_world = np.array(omni.usd.get_world_transform_matrix(prim))
             tet_points_world = tf_world.T @ np.vstack((tet_points.T, np.ones(tet_points.shape[0])))
             tet_points_world = (tet_points_world[:-1].T)
-            # print("new ")
-            # print(tet_points_world)
-            # draw.draw_points(tet_points_world, [(0,0,255,0.5)]*tet_points_world.shape[0], [30]*tet_points_world.shape[0])
-            # draw the tet mesh
-            color = [(125,0,0,0.5)]
-            # for i in range(0, len(tet_indices), 4):
-            #     tet_points_idx = tet_indices[i:i+4]
-            #     tet_points = [tet_points_world[i] for i in tet_points_idx]
-            #     #draw.draw_points(tet_points, [(255,0,0,1)]*len(all_vertices), [10]*len(all_vertices)) 
-            #     draw.draw_lines([tet_points[0]]*3, tet_points[1:], color*3, [10]*3) # draw from point 0 to every other point (3 times 0, cause line from 0 to the other 3 points)
-            #     draw.draw_lines([tet_points[1]]*2, tet_points[2:], color*2, [10]*2)
-            #     draw.draw_lines([tet_points[2]], [tet_points[3]], color, [10]) # draw line between the other 2 points
-
-            #draw surface mesh
-            # tet_surf_points_world = tf_world.T @ np.vstack((surf_points.T, np.ones(surf_points.shape[0])))
-            # tet_surf_points_world = (tet_surf_points_world[:-1].T)
-            # for i in range(0, len(tet_surf_indices), 3):
-            #     tet_points_idx = tet_surf_indices[i:i+3]
-            #     tet_points = [tet_surf_points_world[i] for i in tet_points_idx]
-            #     draw.draw_points(tet_points, [(255,255,255,1)]*len(tet_points), [40]*len(tet_points)) 
-            #     draw.draw_lines([tet_points[0]]*2, tet_points[1:], color*2, [10]*2) # draw from point 0 to every other point (3 times 0, cause line from 0 to the other 3 points)
-            #     draw.draw_lines([tet_points[1]]*1, tet_points[2:], color*1, [10]*1)
 
             # uipc wants 2D array
             tet_indices = np.array(tet_indices).reshape(-1,4)
@@ -154,43 +132,13 @@ class UipcObject(AssetBase):
             mesh = tetmesh(tet_points_world.copy(), tet_indices.copy())
             # enable the contact by labeling the surface 
             label_surface(mesh)
-            # label_triangle_orient(mesh)
+            # label_triangle_orient(mesh) #-> only needed when we want to export the mesh with uipc
             surf = extract_surface(mesh)
             tet_surf_points_world = surf.positions().view().reshape(-1,3)
             surf = surf.triangles().topo().view().reshape(-1).tolist()
             MeshGenerator.update_surface_mesh(prim=usd_mesh, surf_points=tet_surf_points_world, triangles=surf)
 
-            #color = [(0,125,125,0.5)]
-            # for i in range(0, len(surf), 3):
-            #     tet_points_idx = surf[i:i+3]
-            #     tet_points = [tet_surf_points_world[i] for i in tet_points_idx]
-            #     draw.draw_points(tet_points, [(0,255,255,1)]*len(tet_points), [50]*len(tet_points)) 
-            #     draw.draw_lines([tet_points[0]]*2, tet_points[1:], color*2, [10]*2) # draw from point 0 to every other point (3 times 0, cause line from 0 to the other 3 points)
-            #     draw.draw_lines([tet_points[1]]*1, tet_points[2:], color*1, [10]*1)
-            # surf = np.array(surf).reshape(-1,3)
             self.uipc_meshes.append(mesh)
-
-            mesh = self.uipc_meshes[0]
-
-            # create constitution and contact model
-            abd = AffineBodyConstitution()
-            # friction ratio and contact resistance
-            self._uipc_sim.scene.contact_tabular().default_model(0.5, 1.0 * GPa)
-            default_element = self._uipc_sim.scene.contact_tabular().default_element()
-
-            # apply the constitution and contact model to the base mesh
-            abd.apply_to(mesh, 10 * MPa) # stiffness (hardness) of 100 MPa (= hard-rubber-like material)
-            # apply the default contact model to the base mesh
-            default_element.apply_to(mesh)
-
-            # create objects
-            obj = self._uipc_sim.scene.objects().create(self.cfg.prim_path)
-            obj_geo_slot, _ = obj.geometries().create(mesh)
-            self.objects.append(obj_geo_slot)
-
-            # log information about the rigid body
-            omni.log.info(f"UIPC body initialized at: {self.cfg.prim_path}.")
-            omni.log.info(f"Number of instances: {self.num_instances}")
 
             # setup mesh updates via Fabric
             fabric_prim = self.stage.GetPrimAtPath(usdrt.Sdf.Path(usd_mesh_path))
@@ -492,8 +440,37 @@ class UipcObject(AssetBase):
     """
 
     def _initialize_impl(self):
-        
+        mesh = self.uipc_meshes[0]
 
+        #todo code settings/init of different options for constitutions and contacts properly
+        constitution_types = {
+            "AffineBodyConstitution": AffineBodyConstitution,
+            "StableNeoHookean": StableNeoHookean,
+        }
+        self.constitution = constitution_types[self.cfg.constitution_type]()
+        # create constitution and contact model
+        if type(self.constitution) == StableNeoHookean:
+            moduli = ElasticModuli.youngs_poisson(0.01 * MPa, 0.49)
+            self.constitution.apply_to(mesh, moduli)
+        elif type(self.constitution) == AffineBodyConstitution:
+            # apply the constitution and contact model to the base mesh
+            self.constitution.apply_to(mesh, 10 * MPa) # stiffness (hardness) of 100 MPa (= hard-rubber-like material)
+        
+        # friction ratio and contact resistance
+        self._uipc_sim.scene.contact_tabular().default_model(0.5, 1.0 * GPa)
+        
+        # apply the default contact model to the base mesh
+        default_element = self._uipc_sim.scene.contact_tabular().default_element()
+        default_element.apply_to(mesh)
+
+        # create objects
+        obj = self._uipc_sim.scene.objects().create(self.cfg.prim_path)
+        obj_geo_slot, _ = obj.geometries().create(mesh)
+        self.objects.append(obj_geo_slot)
+
+        # log information about the rigid body
+        omni.log.info(f"UIPC body initialized at: {self.cfg.prim_path}.")
+        omni.log.info(f"Number of instances: {self.num_instances}")
         # create buffers
         # self._create_buffers()
         # process configuration
