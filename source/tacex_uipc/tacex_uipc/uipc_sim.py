@@ -17,7 +17,6 @@ from uipc import Vector3, Transform, Quaternion, AngleAxis
 from uipc import Logger, Timer
 from uipc.core import Engine, World, Scene, SceneIO
 from uipc.geometry import tetmesh, label_surface, label_triangle_orient, flip_inward_triangles, ground
-from uipc.constitution import AffineBodyConstitution
 from uipc.unit import MPa, GPa
 
 import numpy as np
@@ -29,6 +28,69 @@ if TYPE_CHECKING:
 class UipcSimCfg:
     device: str | None = "cuda"
 
+    dt: float = 0.01
+
+    enable_sanity_check: bool = True
+    sanity_check_mode: str = "quiet"
+
+    gravity: tuple = (0.0, 0.0, -9.8)
+    ground_height: float = 0.0
+    ground_normal: tuple = (0.0, 0.0, 1.0)
+
+    @configclass
+    class NewtonSolver:
+        max_iter: int = 1024
+
+        use_adaptive_tol: bool = False
+
+        velocity_tol: float = 0.05
+        """Convergence tolerance
+        max(dx*dt) <= velocity_tol
+        """
+
+        ccd_tol = 1.0
+        """Convergence tolerance
+        ccd_toi >= ccd_tol
+        """
+    newton_solver: NewtonSolver = NewtonSolver()
+
+    @configclass
+    class LinearSystem:
+        tol_rate: float = 1e-3
+
+        solver: str = "linear_pcg"
+        """
+        Options: linear_pcg, 
+        """
+    linear_system: LinearSystem = LinearSystem()
+
+    @configclass
+    class LineSearch:
+        max_iter: int = 8
+
+        report_energy: bool = False
+    line_search: LineSearch = LineSearch()
+
+    @configclass
+    class Contact:
+        enable: bool = True
+
+        enable_friction: bool = True
+
+        constitution: str = "ipc"
+        
+        d_hat: float = 0.01
+
+        eps_velocity: float = 0.01
+        """
+        in [m/s]
+        """
+    contact: Contact = Contact()
+
+    collision_detection_method: str = "linear_bvh"
+    """
+    Options: linear_bvh
+    """
 
 class UipcSim():
     cfg: UipcSimCfg
@@ -44,7 +106,7 @@ class UipcSim():
         Timer.enable_all()
         Logger.set_level(Logger.Error)
 
-        self.engine: Engine = Engine(self.cfg.device)
+        self.engine: Engine = Engine(backend_name=self.cfg.device)
         self.world: World = World(self.engine)
         self.config = Scene.default_config()
 

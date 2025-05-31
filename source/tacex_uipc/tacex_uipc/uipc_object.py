@@ -55,9 +55,26 @@ if TYPE_CHECKING:
 @configclass
 class UipcObjectCfg(AssetBaseCfg):
     mesh_cfg: TetMeshCfg = None
-    constitution_type: str = "AffineBodyConstitution"
-
     # contact_model: 
+
+    mass_density: float = 1e3
+    
+    @configclass
+    class AffineBodyConstitutionCfg:
+        # class_type = AffineBodyConstitution # doesnt work, cause no builtin signature found for AffineBodyConstitution class
+        m_kappa: float = 0.0
+
+    @configclass
+    class StableNeoHookeanCfg:
+        # class_type = StableNeoHookean
+        youngs_modulus: float = 20.0
+        """
+        in [kPA]
+        """
+
+        poisson_ration: float = 0.49
+    
+    constitution_cfg: AffineBodyConstitutionCfg | StableNeoHookeanCfg = None
 
 class UipcObject(AssetBase):
     """A rigid object asset class.
@@ -161,15 +178,6 @@ class UipcObject(AssetBase):
             # update fabric mesh with world coor. points
             fabric_mesh_points_attr = fabric_prim.GetAttribute("points")
             fabric_mesh_points_attr.Set(usdrt.Vt.Vec3fArray(tet_surf_points_world))
-
-            # update topology of fabric mesh
-            # fabric_mesh = usdrt.UsdGeom.Mesh(fabric_prim)
-            # fabric_mesh.CreateFaceVertexCountsAttr()
-            # fabric_mesh.GetFaceVertexCountsAttr()#.Set([3]*tet_surf_indices.shape[0])
-            # print("test", len(fabric_mesh.GetFaceVertexCountsAttr().Get()))
-
-            # fabric_mesh.CreateFaceVertexIndicesAttr()
-            # fabric_mesh.GetFaceVertexIndicesAttr().Set(tet_surf_indices)
 
             # add fabric meshes to uipc sim class for updating the render meshes
             self._uipc_sim._fabric_meshes.append(fabric_prim)
@@ -444,10 +452,11 @@ class UipcObject(AssetBase):
 
         #todo code settings/init of different options for constitutions and contacts properly
         constitution_types = {
-            "AffineBodyConstitution": AffineBodyConstitution,
-            "StableNeoHookean": StableNeoHookean,
+            UipcObjectCfg.AffineBodyConstitutionCfg: AffineBodyConstitution,
+            UipcObjectCfg.StableNeoHookeanCfg: StableNeoHookean,
         }
-        self.constitution = constitution_types[self.cfg.constitution_type]()
+        self.constitution = constitution_types[type(self.cfg.constitution_cfg)]()
+        print("const ", self.constitution)
         # create constitution and contact model
         if type(self.constitution) == StableNeoHookean:
             moduli = ElasticModuli.youngs_poisson(0.01 * MPa, 0.49)

@@ -145,7 +145,7 @@ def main():
             scale=(1.0, 1.0, 1.0)
         ),
         mesh_cfg=mesh_cfg,
-        constitution_type="StableNeoHookean"
+        constitution_cfg=UipcObjectCfg.StableNeoHookeanCfg()
     )
     cube = UipcObject(cube_cfg, uipc_sim)
 
@@ -176,6 +176,7 @@ def main():
                 usd_path=str(tet_cube_asset_path),
                 scale=(0.15, 0.15, 0.15)
             ),
+            constitution_cfg=UipcObjectCfg.AffineBodyConstitutionCfg()
         )
         cubeX = UipcObject(cube_cfg, uipc_sim)
         cubes.append(cubeX)
@@ -188,7 +189,7 @@ def main():
             scale=(1.0, 1.0, 1.0)
         ),
         mesh_cfg=mesh_cfg,
-        constitution_type="StableNeoHookean"
+        constitution_cfg=UipcObjectCfg.StableNeoHookeanCfg()
     )
     cube_top = UipcObject(cube_cfg, uipc_sim)
 
