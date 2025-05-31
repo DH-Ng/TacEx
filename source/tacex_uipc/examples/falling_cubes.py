@@ -137,30 +137,31 @@ def main():
 
     # spawn uipc cube
     tet_cube_asset_path = pathlib.Path(__file__).parent.resolve() / "assets" / "cube.usd"
-    cube_cfg = UipcObjectCfg(
-        prim_path="/World/Objects/Cube0",
+    
+    # cube_cfg = UipcObjectCfg(
+    #     prim_path="/World/Objects/Cube0",
+    #     init_state=AssetBaseCfg.InitialStateCfg(pos=[0, 0, 1.0]), #rot=(0.72,-0.3,0.42,-0.45)
+    #     spawn=sim_utils.UsdFileCfg(
+    #         usd_path=str(tet_cube_asset_path),
+    #         scale=(1.0, 1.0, 1.0)
+    #     ),
+    #     mesh_cfg=mesh_cfg,
+    #     constitution_cfg=UipcObjectCfg.StableNeoHookeanCfg()
+    # )
+    # cube = UipcObject(cube_cfg, uipc_sim)
+
+    tet_ball_asset_path = pathlib.Path(__file__).parent.resolve() / "assets" / "ball.usd"
+    ball_cfg = UipcObjectCfg(
+        prim_path="/World/Objects/ball",
         init_state=AssetBaseCfg.InitialStateCfg(pos=[0, 0, 1.0]), #rot=(0.72,-0.3,0.42,-0.45)
         spawn=sim_utils.UsdFileCfg(
-            usd_path=str(tet_cube_asset_path),
+            usd_path=str(tet_ball_asset_path),
             scale=(1.0, 1.0, 1.0)
         ),
         mesh_cfg=mesh_cfg,
         constitution_cfg=UipcObjectCfg.StableNeoHookeanCfg()
     )
-    cube = UipcObject(cube_cfg, uipc_sim)
-
-    # tet_ball_asset_path = pathlib.Path(__file__).parent.resolve() / "assets" / "ball.usd"
-    # ball_cfg = UipcObjectCfg(
-    #     prim_path="/World/Objects/ball",
-    #     init_state=AssetBaseCfg.InitialStateCfg(pos=[0, 0, 1.0]), #rot=(0.72,-0.3,0.42,-0.45)
-    #     spawn=sim_utils.UsdFileCfg(
-    #         usd_path=str(tet_ball_asset_path),
-    #         scale=(1.0, 1.0, 1.0)
-    #     ),
-    #     mesh_cfg=mesh_cfg,
-    #     constitution_type="StableNeoHookean"
-    # )
-    # ball = UipcObject(ball_cfg, uipc_sim)
+    ball = UipcObject(ball_cfg, uipc_sim)
 
     num_cubes = 30
     cubes = []
@@ -207,12 +208,13 @@ def main():
     step = 1
     start_uipc_test = False
 
+    total_uipc_sim_time = 0.0
+    total_uipc_render_time = 0.0
     # Simulate physics
     while simulation_app.is_running():
 
         # perform step
         sim.step()
-
 
         if start_uipc_test:
             # draw the old points
@@ -223,21 +225,26 @@ def main():
             print("====================================================================================")
             print("====================================================================================")
             print("Step number ", step)
-            ## if you want to replay frames which were saved via world.dump()
+            ## if you want to replay frames which were saved via world.dump()-> tet meshes need to be the same as when the frames were saved!
             # if(uipc_sim.world.recover(uipc_sim.world.frame() + 1)):
-            #     uipc_sim.world.retrieve()
+            #     uipc_sim.replay_frame(uipc_sim.world.frame() + 1)
             # else:
             #     uipc_sim.step()
-            with Timer("[INFO]: Time taken for uipc sim step."):
+            with Timer("[INFO]: Time taken for uipc sim step.", name="uipc_step"):
                 uipc_sim.step()
+                # uipc_sim.save_current_world_state()
             # gipc_sim.render_tet_surface_wireframes(clean_up_first=True)
-            with Timer("[INFO]: Time taken for updating the render meshes."):
+            with Timer("[INFO]: Time taken for updating the render meshes.", name="render_update"):
                 uipc_sim.update_render_meshes()
-            #sim.forward()
-            # sim._update_fabric(0.0, 0.0)
-            # render the updated meshes
-            sim.render()
+                #sim.forward()
+                # sim._update_fabric(0.0, 0.0)
+                # render the updated meshes
+                sim.render()
+            # get time reports
             uipc_sim.get_time_report()
+            total_uipc_sim_time += Timer.get_timer_info("uipc_step")
+            total_uipc_render_time += Timer.get_timer_info("render_update")
+
             step += 1      
         
         # start UIPC sim after pausing and playing the sim
@@ -246,12 +253,22 @@ def main():
             print("Start uipc simulation by pressing Play")
 
         if step % 500 == 0:
+            print("")
+            print("====================================================================================")
+            print("====================================================================================")
             print("Reset simulation")
             if start_uipc_test:
                 uipc_sim.reset()
                 start_uipc_test = False
                 # draw.clear_points()
                 # draw.clear_lines()
+            avg_uipc_step_time = total_uipc_sim_time/step
+            print(f"Sim step for uipc took {avg_uipc_step_time} per frame.")
+            
+            avg_uipc_render_time = total_uipc_render_time/step
+            print(f"Render update for uipc took {avg_uipc_render_time} per frame.")
+            print("====================================================================================")
+
             step = 1
           
 if __name__ == "__main__":

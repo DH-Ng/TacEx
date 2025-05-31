@@ -30,15 +30,19 @@ class UipcSimCfg:
 
     dt: float = 0.01
 
-    enable_sanity_check: bool = True
+    sanity_check_enable: bool = True
     sanity_check_mode: str = "quiet"
+    """
+    Options: "quiet", "normal"
+    "quiet" = do not export mesh
+    """
 
     gravity: tuple = (0.0, 0.0, -9.8)
     ground_height: float = 0.0
     ground_normal: tuple = (0.0, 0.0, 1.0)
 
     @configclass
-    class NewtonSolver:
+    class Newton:
         max_iter: int = 1024
 
         use_adaptive_tol: bool = False
@@ -52,16 +56,16 @@ class UipcSimCfg:
         """Convergence tolerance
         ccd_toi >= ccd_tol
         """
-    newton_solver: NewtonSolver = NewtonSolver()
+    newton: Newton = Newton()
 
     @configclass
     class LinearSystem:
-        tol_rate: float = 1e-3
-
         solver: str = "linear_pcg"
         """
         Options: linear_pcg, 
         """
+
+        tol_rate: float = 1e-3
     linear_system: LinearSystem = LinearSystem()
 
     @configclass
@@ -74,9 +78,15 @@ class UipcSimCfg:
     @configclass
     class Contact:
         enable: bool = True
-
+        
         enable_friction: bool = True
 
+        default_friction_rate: float = 0.5
+
+        default_resistance: float = 10.0
+        """
+        in [GPa]
+        """
         constitution: str = "ipc"
         
         d_hat: float = 0.01
@@ -91,6 +101,8 @@ class UipcSimCfg:
     """
     Options: linear_bvh
     """
+
+    diff_sim: bool = False
 
 class UipcSim():
     cfg: UipcSimCfg
@@ -108,26 +120,63 @@ class UipcSim():
 
         self.engine: Engine = Engine(backend_name=self.cfg.device)
         self.world: World = World(self.engine)
-        self.config = Scene.default_config()
 
-        dt = 0.02
-        self.config["dt"] = dt
-        self.config["sanity_check"] = {
-            "enable": True,
-            "mode": "quiet" # do not export mesh
+        # update uipc default config with our config
+        uipc_config = Scene.default_config()
+        uipc_config["dt"] = self.cfg.dt
+        uipc_config["sanity_check"] = {
+            "enable": self.cfg.sanity_check_enable,
+            "mode": self.cfg.sanity_check_mode 
+        }
+        uipc_config["gravity"] = [[self.cfg.gravity[0]], [self.cfg.gravity[1]], [self.cfg.gravity[2]]]
+        uipc_config["collision_detection"]["method"] = self.cfg.collision_detection_method
+        uipc_config["contact"] = {
+            "enable": self.cfg.contact.enable,
+            "constitution": self.cfg.contact.constitution,
+            "d_hat": self.cfg.contact.d_hat,
+            "eps_velocity": self.cfg.contact.eps_velocity,
+            "friction": {
+                "enable": self.cfg.contact.enable_friction
+            }
+        }
+        uipc_config["diff_sim"] = {
+            "enable": self.cfg.diff_sim,
+        }
+        uipc_config["line_search"] = {
+            "max_iter": self.cfg.line_search.max_iter,
+            "report_energy": self.cfg.line_search.report_energy,
+        }
+        uipc_config["linear_system"] = {
+            "solver": self.cfg.linear_system.solver,
+            "tol_rate": self.cfg.linear_system.tol_rate,
+        }
+        uipc_config["newton"] = {
+            "ccd_tol": self.cfg.newton.ccd_tol,
+            "max_iter": self.cfg.newton.max_iter,
+            "use_adaptive_tol": self.cfg.newton.use_adaptive_tol,
+            "velocity_tol": self.cfg.newton.velocity_tol
         }
 
-        self.config["gravity"] = [[0.0], [0.0], [-9.8]]
-        self.scene = Scene(self.config)
 
-        self._fabric_meshes = []
-        self._last_point_index = [0]
-
+        self.scene = Scene(uipc_config)
+        
         # create ground
         ground_obj = self.scene.objects().create("ground")
-        g = ground(0.0, [0.0, 0.0, 1.0])
+        g = ground(self.cfg.ground_height, self.cfg.ground_normal)
         ground_obj.geometries().create(g)
 
+        # set default friction ratio and contact resistance
+        self.scene.contact_tabular().default_model(
+            friction_rate=self.cfg.contact.default_friction_rate, 
+            resistance=self.cfg.contact.default_resistance * GPa,
+            enable=self.cfg.contact.enable
+        )
+
+
+        # for rendering: used to extract which points belong to which mesh
+        self._last_point_index = [0]
+        
+        self._fabric_meshes = []
 
     def setup_scene(self):
         self.world.init(self.scene)
@@ -161,8 +210,30 @@ class UipcSim():
 
     def simple_update_render_meshes(self):
         pass
-
-    def get_time_report(self):
+    
+    def get_time_report(self, as_json: bool = False):
         # self.world.dump() # -> creates files which describe state of the world at this time step [needed if you want to use world.recover()]
-        Timer.report()
-        # report = Timer.report_as_json()
+        if as_json:
+            report = Timer.report_as_json()
+        else:
+            Timer.report()
+        # 
+
+    def save_current_world_state(self):
+        """Saves the current frame into multiple files, which can be retrieved to replay the animation later.
+
+        For replaying use the method `replay_frames`        
+        """
+        self.world.dump()
+
+    # for replaying already computed uipc simulation results
+    def replay_frame(self, frame_num):
+        """
+        
+        Won't work if the loaded tet meshes are different!
+        """
+        # frame_num = self.world.frame() + 1
+        if(self.world.recover(frame_num)):
+            self.world.retrieve()
+        else:
+            print(f"No data for frame {frame_num}.")      

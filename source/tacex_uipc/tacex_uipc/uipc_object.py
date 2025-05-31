@@ -62,17 +62,26 @@ class UipcObjectCfg(AssetBaseCfg):
     @configclass
     class AffineBodyConstitutionCfg:
         # class_type = AffineBodyConstitution # doesnt work, cause no builtin signature found for AffineBodyConstitution class
-        m_kappa: float = 0.0
+        m_kappa: float = 100.0
+        """Stiffness (hardness) of the object
+        in [MPa]
 
+        E.g. 100.0 MPa = hard-rubber-like material
+        """
+    
     @configclass
     class StableNeoHookeanCfg:
         # class_type = StableNeoHookean
-        youngs_modulus: float = 20.0
+        youngs_modulus: float = 0.01
         """
-        in [kPA]
+        in [MPa]
         """
 
-        poisson_ration: float = 0.49
+        poisson_rate: float = 0.49
+        """ Poission Rate
+        
+        Has to be < 0.5.
+        """
     
     constitution_cfg: AffineBodyConstitutionCfg | StableNeoHookeanCfg = None
 
@@ -448,26 +457,25 @@ class UipcObject(AssetBase):
     """
 
     def _initialize_impl(self):
-        mesh = self.uipc_meshes[0]
+        mesh = self.uipc_meshes[0] #todo code properly for instances
 
-        #todo code settings/init of different options for constitutions and contacts properly
+        # create constitution    
         constitution_types = {
             UipcObjectCfg.AffineBodyConstitutionCfg: AffineBodyConstitution,
             UipcObjectCfg.StableNeoHookeanCfg: StableNeoHookean,
         }
         self.constitution = constitution_types[type(self.cfg.constitution_cfg)]()
-        print("const ", self.constitution)
-        # create constitution and contact model
+
         if type(self.constitution) == StableNeoHookean:
-            moduli = ElasticModuli.youngs_poisson(0.01 * MPa, 0.49)
-            self.constitution.apply_to(mesh, moduli)
+            youngs = self.cfg.constitution_cfg.youngs_modulus
+            poisson = self.cfg.constitution_cfg.poisson_rate
+            moduli = ElasticModuli.youngs_poisson(youngs * MPa, poisson)
+            self.constitution.apply_to(mesh, moduli, mass_density=self.cfg.mass_density)
         elif type(self.constitution) == AffineBodyConstitution:
             # apply the constitution and contact model to the base mesh
-            self.constitution.apply_to(mesh, 10 * MPa) # stiffness (hardness) of 100 MPa (= hard-rubber-like material)
-        
-        # friction ratio and contact resistance
-        self._uipc_sim.scene.contact_tabular().default_model(0.5, 1.0 * GPa)
-        
+            stiffness = self.cfg.constitution_cfg.m_kappa
+            self.constitution.apply_to(mesh, stiffness * MPa, mass_density=self.cfg.mass_density) 
+                
         # apply the default contact model to the base mesh
         default_element = self._uipc_sim.scene.contact_tabular().default_element()
         default_element.apply_to(mesh)
