@@ -484,7 +484,8 @@ class UipcObject(AssetBase):
         obj = self._uipc_sim.scene.objects().create(self.cfg.prim_path)
         obj_geo_slot, _ = obj.geometries().create(mesh)
         self.objects.append(obj_geo_slot)
-
+        obj_id = obj_geo_slot.id()
+        print(f"obj id of {self.cfg.prim_path}: {obj_id} ")
         # log information about the rigid body
         omni.log.info(f"UIPC body initialized at: {self.cfg.prim_path}.")
         omni.log.info(f"Number of instances: {self.num_instances}")

@@ -283,7 +283,7 @@ class MeshGenerator():
         # prim.GetSubdivisionSchemeAttr().Set("catmullClark") #none
 
         # set color with per face interpolation  
-        colors = [(random.uniform(0.0, 0.75), random.uniform(0.0, 0.75), random.uniform(0.0, 0.75)) for _ in range(triangles.shape[0]*3)] 
+        colors = [(random.uniform(0.0, 0.0), random.uniform(0.0, 0.75), random.uniform(0.0, 0.75)) for _ in range(triangles.shape[0]*3)] 
         prim.CreateDisplayColorPrimvar(UsdGeom.Tokens.faceVarying).Set(colors) # num_surf_tri * 3
         
         # set uv_coor variable

@@ -13,6 +13,7 @@ except:
     draw = None
 
 import uipc
+from uipc import view
 from uipc import Vector3, Transform, Quaternion, AngleAxis
 from uipc import Logger, Timer
 from uipc.core import Engine, World, Scene, SceneIO
@@ -36,6 +37,7 @@ class UipcSimCfg:
     Options: "quiet", "normal"
     "quiet" = do not export mesh
     """
+    logger_level: str = "Error"
 
     gravity: tuple = (0.0, 0.0, -9.8)
     ground_height: float = 0.0
@@ -182,6 +184,15 @@ class UipcSim():
         self.world.init(self.scene)
         self.world.retrieve()
 
+        # dump first frame for reset
+        self.world.dump()
+        geom = self.scene.geometries()
+        geo_slot, _ = geom.find(1)
+        self.init_pos = geo_slot.geometry().positions().view().copy()
+        print("init_pos ", self.init_pos.reshape(-1,3))
+
+        # trans = geo_slot.geometry().transforms().view()
+        # print("init trans ", trans)
         # for updating render meshes
         self.sio = SceneIO(self.scene)
 
@@ -190,7 +201,17 @@ class UipcSim():
         self.world.retrieve()
 
     def reset(self):
-        self.world.recover(1) # go back to frame 1
+        self.world.recover(0) # go back to frame 0
+        # geom = self.scene.geometries()
+        # geo_slot, _ = geom.find(1)
+        # test = view(geo_slot.geometry().positions())
+        # test = self.init_pos
+        # self.world.advance()
+        
+        # new_test = view(geo_slot.geometry().positions())
+
+        # short_cut_trans = geo_slot.geometry().transforms().view()
+        
         self.world.retrieve()
         self.update_render_meshes()
 

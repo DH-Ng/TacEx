@@ -138,32 +138,32 @@ def main():
     # spawn uipc cube
     tet_cube_asset_path = pathlib.Path(__file__).parent.resolve() / "assets" / "cube.usd"
     
-    # cube_cfg = UipcObjectCfg(
-    #     prim_path="/World/Objects/Cube0",
+    cube_cfg = UipcObjectCfg(
+        prim_path="/World/Objects/Cube0",
+        init_state=AssetBaseCfg.InitialStateCfg(pos=[0, 0, 1.0]), #rot=(0.72,-0.3,0.42,-0.45)
+        spawn=sim_utils.UsdFileCfg(
+            usd_path=str(tet_cube_asset_path),
+            scale=(1.0, 1.0, 1.0)
+        ),
+        # mesh_cfg=mesh_cfg,
+        constitution_cfg=UipcObjectCfg.StableNeoHookeanCfg()
+    )
+    cube = UipcObject(cube_cfg, uipc_sim)
+
+    # tet_ball_asset_path = pathlib.Path(__file__).parent.resolve() / "assets" / "ball.usd"
+    # ball_cfg = UipcObjectCfg(
+    #     prim_path="/World/Objects/ball",
     #     init_state=AssetBaseCfg.InitialStateCfg(pos=[0, 0, 1.0]), #rot=(0.72,-0.3,0.42,-0.45)
     #     spawn=sim_utils.UsdFileCfg(
-    #         usd_path=str(tet_cube_asset_path),
+    #         usd_path=str(tet_ball_asset_path),
     #         scale=(1.0, 1.0, 1.0)
     #     ),
     #     mesh_cfg=mesh_cfg,
     #     constitution_cfg=UipcObjectCfg.StableNeoHookeanCfg()
     # )
-    # cube = UipcObject(cube_cfg, uipc_sim)
+    # ball = UipcObject(ball_cfg, uipc_sim)
 
-    tet_ball_asset_path = pathlib.Path(__file__).parent.resolve() / "assets" / "ball.usd"
-    ball_cfg = UipcObjectCfg(
-        prim_path="/World/Objects/ball",
-        init_state=AssetBaseCfg.InitialStateCfg(pos=[0, 0, 1.0]), #rot=(0.72,-0.3,0.42,-0.45)
-        spawn=sim_utils.UsdFileCfg(
-            usd_path=str(tet_ball_asset_path),
-            scale=(1.0, 1.0, 1.0)
-        ),
-        mesh_cfg=mesh_cfg,
-        constitution_cfg=UipcObjectCfg.StableNeoHookeanCfg()
-    )
-    ball = UipcObject(ball_cfg, uipc_sim)
-
-    num_cubes = 30
+    num_cubes = 0 #5 #30
     cubes = []
     for i in range(num_cubes):
         # might lead to intersections due to random pos
@@ -178,6 +178,7 @@ def main():
                 scale=(0.15, 0.15, 0.15)
             ),
             constitution_cfg=UipcObjectCfg.AffineBodyConstitutionCfg()
+            # constitution_cfg=UipcObjectCfg.StableNeoHookeanCfg()
         )
         cubeX = UipcObject(cube_cfg, uipc_sim)
         cubes.append(cubeX)
@@ -241,7 +242,7 @@ def main():
                 # render the updated meshes
                 sim.render()
             # get time reports
-            uipc_sim.get_time_report()
+            # uipc_sim.get_time_report()
             total_uipc_sim_time += Timer.get_timer_info("uipc_step")
             total_uipc_render_time += Timer.get_timer_info("render_update")
 
@@ -252,7 +253,7 @@ def main():
             start_uipc_test = True
             print("Start uipc simulation by pressing Play")
 
-        if step % 500 == 0:
+        if step % 250 == 0: #500
             print("")
             print("====================================================================================")
             print("====================================================================================")
@@ -262,6 +263,7 @@ def main():
                 start_uipc_test = False
                 # draw.clear_points()
                 # draw.clear_lines()
+                sim.render()
             avg_uipc_step_time = total_uipc_sim_time/step
             print(f"Sim step for uipc took {avg_uipc_step_time} per frame.")
             
