@@ -163,7 +163,7 @@ def main():
     # )
     # ball = UipcObject(ball_cfg, uipc_sim)
 
-    num_cubes = 0 #5 #30
+    num_cubes = 0#1 #5 #30
     cubes = []
     for i in range(num_cubes):
         # might lead to intersections due to random pos
@@ -190,7 +190,7 @@ def main():
             usd_path=str(tet_cube_asset_path),
             scale=(1.0, 1.0, 1.0)
         ),
-        mesh_cfg=mesh_cfg,
+        # mesh_cfg=mesh_cfg,
         constitution_cfg=UipcObjectCfg.StableNeoHookeanCfg()
     )
     cube_top = UipcObject(cube_cfg, uipc_sim)
@@ -265,10 +265,10 @@ def main():
                 # draw.clear_lines()
                 sim.render()
             avg_uipc_step_time = total_uipc_sim_time/step
-            print(f"Sim step for uipc took {avg_uipc_step_time} per frame.")
+            print(f"Sim step for uipc took in avg {avg_uipc_step_time} per frame.")
             
             avg_uipc_render_time = total_uipc_render_time/step
-            print(f"Render update for uipc took {avg_uipc_render_time} per frame.")
+            print(f"Render update for uipc took in avg {avg_uipc_render_time} per frame.")
             print("====================================================================================")
 
             step = 1

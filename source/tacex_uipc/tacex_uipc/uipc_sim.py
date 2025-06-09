@@ -188,8 +188,16 @@ class UipcSim():
         self.world.dump()
         geom = self.scene.geometries()
         geo_slot, _ = geom.find(1)
-        self.init_pos = geo_slot.geometry().positions().view().copy()
-        print("init_pos ", self.init_pos.reshape(-1,3))
+        self.init_pos = geo_slot.geometry().positions().view().copy().reshape(-1,3)
+
+        # geo_slot_1, _ = geom.find(2)
+        # init_geo_slot_pos = geo_slot_1.geometry().positions().view().copy().reshape(-1,3)
+        # print("rigid init pos ", init_geo_slot_pos)
+        # self.init_pos = np.vstack((self.init_pos, init_geo_slot_pos))
+
+        geo_slot_2, _ = geom.find(2)
+        init_pos_2 = geo_slot_2.geometry().positions().view().copy().reshape(-1,3)
+        self.init_pos = np.vstack((self.init_pos, init_pos_2))
 
         # trans = geo_slot.geometry().transforms().view()
         # print("init trans ", trans)
@@ -201,7 +209,7 @@ class UipcSim():
         self.world.retrieve()
 
     def reset(self):
-        self.world.recover(0) # go back to frame 0
+        # self.world.recover(0) # go back to frame 0
         # geom = self.scene.geometries()
         # geo_slot, _ = geom.find(1)
         # test = view(geo_slot.geometry().positions())
@@ -211,7 +219,7 @@ class UipcSim():
         # new_test = view(geo_slot.geometry().positions())
 
         # short_cut_trans = geo_slot.geometry().transforms().view()
-        
+        self.world.write_vertex_pos_to_sim(self.init_pos, np.array([1,2]))
         self.world.retrieve()
         self.update_render_meshes()
 

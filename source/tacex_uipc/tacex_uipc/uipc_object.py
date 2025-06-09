@@ -190,7 +190,8 @@ class UipcObject(AssetBase):
 
             # add fabric meshes to uipc sim class for updating the render meshes
             self._uipc_sim._fabric_meshes.append(fabric_prim)
-            # for later finding corresponding points of the meshes
+            
+            # save indices to later find corresponding points of the meshes for rendering
             num_surf_points = tet_surf_points_world.shape[0] #np.unique(tet_surf_indices)
             self._uipc_sim._last_point_index.append(
                 self._uipc_sim._last_point_index[-1] + num_surf_points
