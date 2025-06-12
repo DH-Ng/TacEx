@@ -205,15 +205,16 @@ class UipcSim():
         # self._system_vertex_offsets["uipc::backend::cuda::GlobalVertexManager"].append(
         #     self._system_vertex_offsets["uipc::backend::cuda::GlobalVertexManager"][-1]+fem_system
         # )
-        self._system_vertex_offsets["uipc::backend::cuda::GlobalVertexManager"] += self._system_vertex_offsets["uipc::backend::cuda::FiniteElementMethod"][1:] # append without 0
+        self._system_vertex_offsets["uipc::backend::cuda::GlobalVertexManager"] += fem_system[1:] # append without 0
         print("after fem ", self._system_vertex_offsets["uipc::backend::cuda::GlobalVertexManager"])        
         
-        # self._system_vertex_offsets["uipc::backend::cuda::GlobalVertexManager"].append(
-        #     self._system_vertex_offsets["uipc::backend::cuda::GlobalVertexManager"][-1]+abd_system
-        # )
-        self._system_vertex_offsets["uipc::backend::cuda::GlobalVertexManager"] += (
-            [idx+self._system_vertex_offsets["uipc::backend::cuda::GlobalVertexManager"][-1] for idx in self._system_vertex_offsets["uipc::backend::cuda::FiniteElementMethod"][1:]]
-        )
+        # # +1 for total count, like uipc does
+        self._system_vertex_offsets["uipc::backend::cuda::GlobalVertexManager"].append(self._system_vertex_offsets["uipc::backend::cuda::GlobalVertexManager"][-1] + 1)
+
+        # add offset from previous system (FEM system)
+        global_abd_system = [idx+self._system_vertex_offsets["uipc::backend::cuda::GlobalVertexManager"][-1] for idx in abd_system[1:]]
+        self._system_vertex_offsets["uipc::backend::cuda::GlobalVertexManager"] += global_abd_system
+        
         print("after abd ", self._system_vertex_offsets["uipc::backend::cuda::GlobalVertexManager"])
 
     def step(self):

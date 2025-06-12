@@ -505,13 +505,22 @@ class UipcObject(AssetBase):
         print("")
         print(f"Write vertex pos for {self.cfg.prim_path} with id {self.obj_id}")
         
-        global_vertex_offset = self._uipc_sim._system_vertex_offsets["uipc::backend::cuda::GlobalVertexManager"][self.local_system_id-1]
+        global_vertex_id = self.obj_id - 1
+        if self.__system_name == "uipc::backend::cuda::AffineBodyDynamics":
+            global_vertex_id += 1 # cause at the end of the FEM system, we add an additional index, so ABD indices of the offsets are shifted by one
+            
+        global_vertex_offset = self._uipc_sim._system_vertex_offsets["uipc::backend::cuda::GlobalVertexManager"][global_vertex_id]
+
         local_vertex_offset = self._uipc_sim._system_vertex_offsets[self.__system_name][self.local_system_id-1]
+        print("local sys id ", self.local_system_id)
         print("global idx ", global_vertex_offset)
         print("local idx ", local_vertex_offset)
         print("vertex count ", self._vertex_count)
         print("")
-        self.uipc_sim.world.write_vertex_pos_to_sim(vertex_positions.cpu().numpy(), global_vertex_offset, local_vertex_offset, self._vertex_count, self.__system_name)
+        if self.__system_name == "uipc::backend::cuda::AffineBodyDynamics":
+            self.uipc_sim.world.write_vertex_pos_to_sim(vertex_positions.cpu().numpy(), global_vertex_offset, self.local_system_id-1, self._vertex_count, self.__system_name)
+        else:
+            self.uipc_sim.world.write_vertex_pos_to_sim(vertex_positions.cpu().numpy(), global_vertex_offset, local_vertex_offset, self._vertex_count, self.__system_name)
     
     """
     Internal helper.
@@ -545,6 +554,7 @@ class UipcObject(AssetBase):
             self._uipc_sim._system_vertex_offsets[self.__system_name][-1] + self._vertex_count
         )
         self.local_system_id = len(self._uipc_sim._system_vertex_offsets[self.__system_name])-1
+        print("local id ", self.local_system_id)
 
         # apply the default contact model to the base mesh
         default_element = self._uipc_sim.scene.contact_tabular().default_element()

@@ -135,7 +135,7 @@ def main():
     )
     print("Mesh cfg ", mesh_cfg)
 
-    # spawn uipc cube
+    # # spawn uipc cube
     tet_cube_asset_path = pathlib.Path(__file__).parent.resolve() / "assets" / "cube.usd"
     
     cube_cfg = UipcObjectCfg(
@@ -143,7 +143,7 @@ def main():
         init_state=AssetBaseCfg.InitialStateCfg(pos=[0, 0, 1.0]), #rot=(0.72,-0.3,0.42,-0.45)
         spawn=sim_utils.UsdFileCfg(
             usd_path=str(tet_cube_asset_path),
-            scale=(1.0, 1.0, 1.0)
+            scale=(0.75, 0.75, 0.75)
         ),
         # mesh_cfg=mesh_cfg,
         constitution_cfg=UipcObjectCfg.StableNeoHookeanCfg()
@@ -163,12 +163,12 @@ def main():
     # )
     # ball = UipcObject(ball_cfg, uipc_sim)
 
-    num_cubes = 1 #5 #30
+    num_cubes = 5 #30
     cubes = []
     for i in range(num_cubes):
         # might lead to intersections due to random pos
         # pos = (random.uniform(-1.0, 1.0), random.uniform(-1.0, 1.0), random.uniform(2.5, 6.0))
-        pos = (0,0, 2. + 0.25*i)
+        pos = (0, 0, 2.0 + 0.3*i)
         rot = (random.uniform(-1.0, 1.0), random.uniform(-1.0, 1.0), random.uniform(-1.0, 1.0), random.uniform(-1.0, 1.0))
         cube_cfg = UipcObjectCfg(
             prim_path=f"/World/Objects/Cube{i+1}",
@@ -183,15 +183,16 @@ def main():
         cubeX = UipcObject(cube_cfg, uipc_sim)
         cubes.append(cubeX)
 
+    rot = (random.uniform(-1.0, 1.0), random.uniform(-1.0, 1.0), random.uniform(-1.0, 1.0), random.uniform(-1.0, 1.0))
     cube_cfg = UipcObjectCfg(
         prim_path="/World/Objects/CubeTop",
-        init_state=AssetBaseCfg.InitialStateCfg(pos=[0, 0, 2.0 + 0.25*num_cubes + 0.6]), #rot=(0.72,-0.3,0.42,-0.45)
+        init_state=AssetBaseCfg.InitialStateCfg(pos=[0, 0, 2.65 + 0.3*num_cubes],rot=rot),
         spawn=sim_utils.UsdFileCfg(
             usd_path=str(tet_cube_asset_path),
             scale=(1.0, 1.0, 1.0)
         ),
         # mesh_cfg=mesh_cfg,
-        constitution_cfg=UipcObjectCfg.StableNeoHookeanCfg()
+        constitution_cfg=UipcObjectCfg.AffineBodyConstitutionCfg()#UipcObjectCfg.StableNeoHookeanCfg()
     )
     cube_top = UipcObject(cube_cfg, uipc_sim)
 
@@ -259,10 +260,8 @@ def main():
             print("====================================================================================")
             print("Reset simulation")
             if start_uipc_test:
-                for global_offset in uipc_sim._system_vertex_offsets["uipc::backend::cuda::GlobalVertexManager"]:
-                    print("global_offset ", global_offset)
-
-                # cube.write_vertex_positions_to_sim(vertex_positions=cube.init_vertex_pos)
+                print("systems offsets ", uipc_sim._system_vertex_offsets)
+                cube.write_vertex_positions_to_sim(vertex_positions=cube.init_vertex_pos)
                 cube_top.write_vertex_positions_to_sim(vertex_positions=cube_top.init_vertex_pos)
 
                 uipc_sim.reset()
