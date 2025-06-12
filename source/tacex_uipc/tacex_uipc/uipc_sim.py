@@ -186,6 +186,7 @@ class UipcSim():
         self._surf_vertex_offsets = [0]
         
         self._fabric_meshes = []
+        self.uipc_objects: List[UipcObject] = []
 
     def setup_scene(self):
         self.world.init(self.scene)
@@ -216,6 +217,14 @@ class UipcSim():
         self._system_vertex_offsets["uipc::backend::cuda::GlobalVertexManager"] += global_abd_system
         
         print("after abd ", self._system_vertex_offsets["uipc::backend::cuda::GlobalVertexManager"])
+
+        # for each obj, compute the global_system_id
+        for uipc_obj in self.uipc_objects:
+            global_id = uipc_obj.local_system_id
+            if uipc_obj._system_name == "uipc::backend::cuda::AffineBodyDynamics":
+                global_id += len(fem_system) # cause at the end of the FEM system, we add an additional index, so ABD indices of the offsets are shifted by amount of FEM indices -1
+            print("global id ", global_id)
+            uipc_obj.global_system_id = global_id
 
     def step(self):
         self.world.advance()

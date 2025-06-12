@@ -140,7 +140,7 @@ def main():
     
     cube_cfg = UipcObjectCfg(
         prim_path="/World/Objects/Cube0",
-        init_state=AssetBaseCfg.InitialStateCfg(pos=[0, 0, 1.0]), #rot=(0.72,-0.3,0.42,-0.45)
+        init_state=AssetBaseCfg.InitialStateCfg(pos=[0, 0, 1.25]), #rot=(0.72,-0.3,0.42,-0.45)
         spawn=sim_utils.UsdFileCfg(
             usd_path=str(tet_cube_asset_path),
             scale=(0.75, 0.75, 0.75)
@@ -163,9 +163,13 @@ def main():
     # )
     # ball = UipcObject(ball_cfg, uipc_sim)
 
-    num_cubes = 5 #30
+    num_cubes = 4 #30
     cubes = []
     for i in range(num_cubes):
+        if i % 2 == 0:
+            constitution_type = UipcObjectCfg.AffineBodyConstitutionCfg()
+        else:
+            constitution_type = UipcObjectCfg.StableNeoHookeanCfg()
         # might lead to intersections due to random pos
         # pos = (random.uniform(-1.0, 1.0), random.uniform(-1.0, 1.0), random.uniform(2.5, 6.0))
         pos = (0, 0, 2.0 + 0.3*i)
@@ -177,8 +181,7 @@ def main():
                 usd_path=str(tet_cube_asset_path),
                 scale=(0.15, 0.15, 0.15)
             ),
-            constitution_cfg=UipcObjectCfg.AffineBodyConstitutionCfg()
-            # constitution_cfg=UipcObjectCfg.StableNeoHookeanCfg()
+            constitution_cfg=constitution_type
         )
         cubeX = UipcObject(cube_cfg, uipc_sim)
         cubes.append(cubeX)
@@ -263,6 +266,9 @@ def main():
                 print("systems offsets ", uipc_sim._system_vertex_offsets)
                 cube.write_vertex_positions_to_sim(vertex_positions=cube.init_vertex_pos)
                 cube_top.write_vertex_positions_to_sim(vertex_positions=cube_top.init_vertex_pos)
+
+                small_cube_id = random.randint(0, num_cubes-1)
+                cubes[small_cube_id].write_vertex_positions_to_sim(vertex_positions=cubes[small_cube_id].init_vertex_pos)
 
                 uipc_sim.reset()
                 # start_uipc_test = False

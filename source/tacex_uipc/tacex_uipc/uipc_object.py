@@ -205,9 +205,11 @@ class UipcObject(AssetBase):
                 self._uipc_sim._surf_vertex_offsets[-1] + num_surf_points
             )
 
-            self.__system_name = ""
+            self._system_name = ""
 
             self.local_system_id = 0
+
+            self.global_system_id = 0
             
 
     """
@@ -505,22 +507,18 @@ class UipcObject(AssetBase):
         print("")
         print(f"Write vertex pos for {self.cfg.prim_path} with id {self.obj_id}")
         
-        global_vertex_id = self.obj_id - 1
-        if self.__system_name == "uipc::backend::cuda::AffineBodyDynamics":
-            global_vertex_id += 1 # cause at the end of the FEM system, we add an additional index, so ABD indices of the offsets are shifted by one
-            
-        global_vertex_offset = self._uipc_sim._system_vertex_offsets["uipc::backend::cuda::GlobalVertexManager"][global_vertex_id]
-
-        local_vertex_offset = self._uipc_sim._system_vertex_offsets[self.__system_name][self.local_system_id-1]
+        global_vertex_offset = self._uipc_sim._system_vertex_offsets["uipc::backend::cuda::GlobalVertexManager"][self.global_system_id-1]
+        local_vertex_offset = self._uipc_sim._system_vertex_offsets[self._system_name][self.local_system_id-1]
+        print("system ", self._system_name)
         print("local sys id ", self.local_system_id)
         print("global idx ", global_vertex_offset)
         print("local idx ", local_vertex_offset)
         print("vertex count ", self._vertex_count)
         print("")
-        if self.__system_name == "uipc::backend::cuda::AffineBodyDynamics":
-            self.uipc_sim.world.write_vertex_pos_to_sim(vertex_positions.cpu().numpy(), global_vertex_offset, self.local_system_id-1, self._vertex_count, self.__system_name)
+        if self._system_name == "uipc::backend::cuda::AffineBodyDynamics":
+            self.uipc_sim.world.write_vertex_pos_to_sim(vertex_positions.cpu().numpy(), global_vertex_offset, self.local_system_id-1, self._vertex_count, self._system_name)
         else:
-            self.uipc_sim.world.write_vertex_pos_to_sim(vertex_positions.cpu().numpy(), global_vertex_offset, local_vertex_offset, self._vertex_count, self.__system_name)
+            self.uipc_sim.world.write_vertex_pos_to_sim(vertex_positions.cpu().numpy(), global_vertex_offset, local_vertex_offset, self._vertex_count, self._system_name)
     
     """
     Internal helper.
@@ -543,17 +541,17 @@ class UipcObject(AssetBase):
             # apply the constitution and contact model to the base mesh
             self.constitution.apply_to(mesh, moduli, mass_density=self.cfg.mass_density)
             #needed for writing vertex position to sim
-            self.__system_name = "uipc::backend::cuda::FiniteElementMethod"
+            self._system_name = "uipc::backend::cuda::FiniteElementMethod"
         elif type(self.constitution) == AffineBodyConstitution:
             stiffness = self.cfg.constitution_cfg.m_kappa
             self.constitution.apply_to(mesh, stiffness * MPa, mass_density=self.cfg.mass_density) 
-            self.__system_name = "uipc::backend::cuda::AffineBodyDynamics"
+            self._system_name = "uipc::backend::cuda::AffineBodyDynamics"
 
         # update local vertex offset of the subsystem
-        self._uipc_sim._system_vertex_offsets[self.__system_name].append(
-            self._uipc_sim._system_vertex_offsets[self.__system_name][-1] + self._vertex_count
+        self._uipc_sim._system_vertex_offsets[self._system_name].append(
+            self._uipc_sim._system_vertex_offsets[self._system_name][-1] + self._vertex_count
         )
-        self.local_system_id = len(self._uipc_sim._system_vertex_offsets[self.__system_name])-1
+        self.local_system_id = len(self._uipc_sim._system_vertex_offsets[self._system_name])-1
         print("local id ", self.local_system_id)
 
         # apply the default contact model to the base mesh
@@ -582,7 +580,9 @@ class UipcObject(AssetBase):
         self._process_cfg()
         # update the rigid body data
         self.update(0.0)
-
+        
+        # add this object to the list of all uipc objects in the world
+        self._uipc_sim.uipc_objects.append(self)
 
     def _create_buffers(self):
         """Create buffers for storing data."""
