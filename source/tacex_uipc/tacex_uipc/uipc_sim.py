@@ -175,8 +175,15 @@ class UipcSim():
         )
 
 
-        # for rendering: used to extract which points belong to which mesh
-        self._last_point_index = [0]
+        # vertex offsets of the subsystems
+        self._system_vertex_offsets = {
+            "uipc::backend::cuda::GlobalVertexManager": [0], # global vertex offset
+            "uipc::backend::cuda::FiniteElementMethod": [0],
+            "uipc::backend::cuda::AffineBodyDynamics": [0],
+        }
+
+        # for rendering: used to extract which points belong to which surface mesh
+        self._surf_vertex_offsets = [0]
         
         self._fabric_meshes = []
 
@@ -184,25 +191,30 @@ class UipcSim():
         self.world.init(self.scene)
         self.world.retrieve()
 
-        # dump first frame for reset
-        self.world.dump()
-        geom = self.scene.geometries()
-        geo_slot, _ = geom.find(1)
-        self.init_pos = geo_slot.geometry().positions().view().copy().reshape(-1,3)
-
-        # geo_slot_1, _ = geom.find(2)
-        # init_geo_slot_pos = geo_slot_1.geometry().positions().view().copy().reshape(-1,3)
-        # print("rigid init pos ", init_geo_slot_pos)
-        # self.init_pos = np.vstack((self.init_pos, init_geo_slot_pos))
-
-        geo_slot_2, _ = geom.find(2)
-        init_pos_2 = geo_slot_2.geometry().positions().view().copy().reshape(-1,3)
-        self.init_pos = np.vstack((self.init_pos, init_pos_2))
-
         # trans = geo_slot.geometry().transforms().view()
         # print("init trans ", trans)
         # for updating render meshes
         self.sio = SceneIO(self.scene)
+
+        # compute the global vertex offset accross the systems
+        fem_system = self._system_vertex_offsets["uipc::backend::cuda::FiniteElementMethod"]
+        abd_system = self._system_vertex_offsets["uipc::backend::cuda::AffineBodyDynamics"]
+        
+        #todo figure out how we always get the correct order -> for now we just assume FEM first, then abd
+        #? another idea might be to use the coindices mapping from global_vertex_manager and use it to create mapping for local -> global
+        # self._system_vertex_offsets["uipc::backend::cuda::GlobalVertexManager"].append(
+        #     self._system_vertex_offsets["uipc::backend::cuda::GlobalVertexManager"][-1]+fem_system
+        # )
+        self._system_vertex_offsets["uipc::backend::cuda::GlobalVertexManager"] += self._system_vertex_offsets["uipc::backend::cuda::FiniteElementMethod"][1:] # append without 0
+        print("after fem ", self._system_vertex_offsets["uipc::backend::cuda::GlobalVertexManager"])        
+        
+        # self._system_vertex_offsets["uipc::backend::cuda::GlobalVertexManager"].append(
+        #     self._system_vertex_offsets["uipc::backend::cuda::GlobalVertexManager"][-1]+abd_system
+        # )
+        self._system_vertex_offsets["uipc::backend::cuda::GlobalVertexManager"] += (
+            [idx+self._system_vertex_offsets["uipc::backend::cuda::GlobalVertexManager"][-1] for idx in self._system_vertex_offsets["uipc::backend::cuda::FiniteElementMethod"][1:]]
+        )
+        print("after abd ", self._system_vertex_offsets["uipc::backend::cuda::GlobalVertexManager"])
 
     def step(self):
         self.world.advance()
@@ -219,7 +231,6 @@ class UipcSim():
         # new_test = view(geo_slot.geometry().positions())
 
         # short_cut_trans = geo_slot.geometry().transforms().view()
-        self.world.write_vertex_pos_to_sim(self.init_pos, np.array([1,2]))
         self.world.retrieve()
         self.update_render_meshes()
 
@@ -227,7 +238,7 @@ class UipcSim():
         all_trimesh_points = self.sio.simplicial_surface(2).positions().view().reshape(-1,3)
         #triangles = self.sio.simplicial_surface(2).triangles().topo().view()
         for i, fabric_prim in enumerate(self._fabric_meshes):
-            trimesh_points = all_trimesh_points[self._last_point_index[i]:self._last_point_index[i+1]]
+            trimesh_points = all_trimesh_points[self._surf_vertex_offsets[i]:self._surf_vertex_offsets[i+1]]
             #draw.draw_points(trimesh_points, [(0,0,255,0.5)]*trimesh_points.shape[0], [30]*trimesh_points.shape[0])
             
             fabric_mesh_points = fabric_prim.GetAttribute("points")

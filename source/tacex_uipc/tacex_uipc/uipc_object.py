@@ -191,11 +191,23 @@ class UipcObject(AssetBase):
             # add fabric meshes to uipc sim class for updating the render meshes
             self._uipc_sim._fabric_meshes.append(fabric_prim)
             
+            # required for writing vertex positions to sim
+            num_vertex_points = mesh.positions().view().shape[0]
+            self._vertex_count = num_vertex_points
+
+            # self._uipc_sim._system_vertex_offsets["uipc::backend::cuda::GlobalVertexManager"].append(
+            #     self._uipc_sim._system_vertex_offsets["uipc::backend::cuda::GlobalVertexManager"][-2] + num_vertex_points
+            # )
+            
             # save indices to later find corresponding points of the meshes for rendering
             num_surf_points = tet_surf_points_world.shape[0] #np.unique(tet_surf_indices)
-            self._uipc_sim._last_point_index.append(
-                self._uipc_sim._last_point_index[-1] + num_surf_points
+            self._uipc_sim._surf_vertex_offsets.append(
+                self._uipc_sim._surf_vertex_offsets[-1] + num_surf_points
             )
+
+            self.__system_name = ""
+
+            self.local_system_id = 0
             
 
     """
@@ -288,20 +300,20 @@ class UipcObject(AssetBase):
     Operations - Write to simulation.
     """
 
-    def write_root_state_to_sim(self, root_state: torch.Tensor, env_ids: Sequence[int] | None = None):
-        """Set the root state over selected environment indices into the simulation.
+    # def write_root_state_to_sim(self, root_state: torch.Tensor, env_ids: Sequence[int] | None = None):
+    #     """Set the root state over selected environment indices into the simulation.
 
-        The root state comprises of the cartesian position, quaternion orientation in (w, x, y, z), and linear
-        and angular velocity. All the quantities are in the simulation frame.
+    #     The root state comprises of the cartesian position, quaternion orientation in (w, x, y, z), and linear
+    #     and angular velocity. All the quantities are in the simulation frame.
 
-        Args:
-            root_state: Root state in simulation frame. Shape is (len(env_ids), 13).
-            env_ids: Environment indices. If None, then all indices are used.
-        """
+    #     Args:
+    #         root_state: Root state in simulation frame. Shape is (len(env_ids), 13).
+    #         env_ids: Environment indices. If None, then all indices are used.
+    #     """
 
-        # set into simulation
-        self.write_root_pose_to_sim(root_state[:, :7], env_ids=env_ids)
-        self.write_root_velocity_to_sim(root_state[:, 7:], env_ids=env_ids)
+    #     # set into simulation
+    #     self.write_root_pose_to_sim(root_state[:, :7], env_ids=env_ids)
+    #     self.write_root_velocity_to_sim(root_state[:, 7:], env_ids=env_ids)
 
     def write_root_com_state_to_sim(self, root_state: torch.Tensor, env_ids: Sequence[int] | None = None):
         """Set the root center of mass state over selected environment indices into the simulation.
@@ -331,28 +343,28 @@ class UipcObject(AssetBase):
         self.write_root_link_pose_to_sim(root_state[:, :7], env_ids=env_ids)
         self.write_root_link_velocity_to_sim(root_state[:, 7:], env_ids=env_ids)
 
-    def write_root_pose_to_sim(self, root_pose: torch.Tensor, env_ids: Sequence[int] | None = None):
-        """Set the root pose over selected environment indices into the simulation.
+    # def write_root_pose_to_sim(self, root_pose: torch.Tensor, env_ids: Sequence[int] | None = None):
+    #     """Set the root pose over selected environment indices into the simulation.
 
-        The root pose comprises of the cartesian position and quaternion orientation in (w, x, y, z).
+    #     The root pose comprises of the cartesian position and quaternion orientation in (w, x, y, z).
 
-        Args:
-            root_pose: Root poses in simulation frame. Shape is (len(env_ids), 7).
-            env_ids: Environment indices. If None, then all indices are used.
-        """
-        # resolve all indices
-        physx_env_ids = env_ids
-        if env_ids is None:
-            env_ids = slice(None)
-            physx_env_ids = self._ALL_INDICES
-        # note: we need to do this here since tensors are not set into simulation until step.
-        # set into internal buffers
-        self._data.root_state_w[env_ids, :7] = root_pose.clone()
-        # convert root quaternion from wxyz to xyzw
-        root_poses_xyzw = self._data.root_state_w[:, :7].clone()
-        root_poses_xyzw[:, 3:] = math_utils.convert_quat(root_poses_xyzw[:, 3:], to="xyzw")
-        # set into simulation
-        self.root_physx_view.set_transforms(root_poses_xyzw, indices=physx_env_ids)
+    #     Args:
+    #         root_pose: Root poses in simulation frame. Shape is (len(env_ids), 7).
+    #         env_ids: Environment indices. If None, then all indices are used.
+    #     """
+    #     # resolve all indices
+    #     physx_env_ids = env_ids
+    #     if env_ids is None:
+    #         env_ids = slice(None)
+    #         physx_env_ids = self._ALL_INDICES
+    #     # note: we need to do this here since tensors are not set into simulation until step.
+    #     # set into internal buffers
+    #     self._data.root_state_w[env_ids, :7] = root_pose.clone()
+    #     # convert root quaternion from wxyz to xyzw
+    #     root_poses_xyzw = self._data.root_state_w[:, :7].clone()
+    #     root_poses_xyzw[:, 3:] = math_utils.convert_quat(root_poses_xyzw[:, 3:], to="xyzw")
+    #     # set into simulation
+    #     self.root_physx_view.set_transforms(root_poses_xyzw, indices=physx_env_ids)
 
     def write_root_link_pose_to_sim(self, root_pose: torch.Tensor, env_ids: Sequence[int] | None = None):
         """Set the root link pose over selected environment indices into the simulation.
@@ -453,6 +465,54 @@ class UipcObject(AssetBase):
         # set into simulation
         self.root_physx_view.set_velocities(self._data.root_com_state_w[:, 7:], indices=physx_env_ids)
 
+    def write_root_state_to_sim(self, root_state: torch.Tensor, env_ids: Sequence[int] | None = None):
+        """Set the root state over selected environment indices into the simulation.
+
+        The root state comprises of the cartesian position, quaternion orientation in (w, x, y, z), and linear
+        and angular velocity. All the quantities are in the simulation frame.
+
+        Args:
+            root_state: Root state in simulation frame. Shape is (len(env_ids), 13).
+            env_ids: Environment indices. If None, then all indices are used.
+        """
+
+        # set into simulation
+        self.write_root_pose_to_sim(root_state[:, :7], env_ids=env_ids)
+        self.write_root_velocity_to_sim(root_state[:, 7:], env_ids=env_ids)
+
+    def write_vertex_positions_to_sim(self, vertex_positions: torch.Tensor, env_ids: Sequence[int] | None = None):
+        """Set the root pose over selected environment indices into the simulation.
+
+        The root pose comprises of the cartesian position and quaternion orientation in (w, x, y, z).
+
+        Args:
+            root_pose: Root poses in simulation frame. Shape is (len(env_ids), 7).
+            env_ids: Environment indices. If None, then all indices are used.
+        """
+        # resolve all indices
+        physx_env_ids = env_ids
+        if env_ids is None:
+            env_ids = slice(None)
+            physx_env_ids = self._ALL_INDICES
+        # # note: we need to do this here since tensors are not set into simulation until step.
+        # # set into internal buffers
+        # self._data.root_state_w[env_ids, :7] = root_pose.clone()
+        # # convert root quaternion from wxyz to xyzw
+        # root_poses_xyzw = self._data.root_state_w[:, :7].clone()
+        # root_poses_xyzw[:, 3:] = math_utils.convert_quat(root_poses_xyzw[:, 3:], to="xyzw")
+        # # set into simulation
+        # self.root_physx_view.set_transforms(root_poses_xyzw, indices=physx_env_ids)
+        print("")
+        print(f"Write vertex pos for {self.cfg.prim_path} with id {self.obj_id}")
+        
+        global_vertex_offset = self._uipc_sim._system_vertex_offsets["uipc::backend::cuda::GlobalVertexManager"][self.local_system_id-1]
+        local_vertex_offset = self._uipc_sim._system_vertex_offsets[self.__system_name][self.local_system_id-1]
+        print("global idx ", global_vertex_offset)
+        print("local idx ", local_vertex_offset)
+        print("vertex count ", self._vertex_count)
+        print("")
+        self.uipc_sim.world.write_vertex_pos_to_sim(vertex_positions.cpu().numpy(), global_vertex_offset, local_vertex_offset, self._vertex_count, self.__system_name)
+    
     """
     Internal helper.
     """
@@ -471,12 +531,21 @@ class UipcObject(AssetBase):
             youngs = self.cfg.constitution_cfg.youngs_modulus
             poisson = self.cfg.constitution_cfg.poisson_rate
             moduli = ElasticModuli.youngs_poisson(youngs * MPa, poisson)
-            self.constitution.apply_to(mesh, moduli, mass_density=self.cfg.mass_density)
-        elif type(self.constitution) == AffineBodyConstitution:
             # apply the constitution and contact model to the base mesh
+            self.constitution.apply_to(mesh, moduli, mass_density=self.cfg.mass_density)
+            #needed for writing vertex position to sim
+            self.__system_name = "uipc::backend::cuda::FiniteElementMethod"
+        elif type(self.constitution) == AffineBodyConstitution:
             stiffness = self.cfg.constitution_cfg.m_kappa
             self.constitution.apply_to(mesh, stiffness * MPa, mass_density=self.cfg.mass_density) 
-                
+            self.__system_name = "uipc::backend::cuda::AffineBodyDynamics"
+
+        # update local vertex offset of the subsystem
+        self._uipc_sim._system_vertex_offsets[self.__system_name].append(
+            self._uipc_sim._system_vertex_offsets[self.__system_name][-1] + self._vertex_count
+        )
+        self.local_system_id = len(self._uipc_sim._system_vertex_offsets[self.__system_name])-1
+
         # apply the default contact model to the base mesh
         default_element = self._uipc_sim.scene.contact_tabular().default_element()
         default_element.apply_to(mesh)
@@ -485,23 +554,30 @@ class UipcObject(AssetBase):
         obj = self._uipc_sim.scene.objects().create(self.cfg.prim_path)
         obj_geo_slot, _ = obj.geometries().create(mesh)
         self.objects.append(obj_geo_slot)
-        obj_id = obj_geo_slot.id()
-        print(f"obj id of {self.cfg.prim_path}: {obj_id} ")
-        # log information about the rigid body
+        self.obj_id = obj_geo_slot.id()
+        print(f"obj id of {self.cfg.prim_path}: {self.obj_id} ")
+
+        # save initial world vertex positions        
+        geom = self._uipc_sim.scene.geometries()
+        geo_slot, geo_slot_rest = geom.find(self.obj_id)
+        self.init_vertex_pos = torch.tensor(geo_slot.geometry().positions().view().copy().reshape(-1,3), device=self.device)
+
+        # log information the uipc body
         omni.log.info(f"UIPC body initialized at: {self.cfg.prim_path}.")
         omni.log.info(f"Number of instances: {self.num_instances}")
+
         # create buffers
-        # self._create_buffers()
+        self._create_buffers()
         # process configuration
-        # self._process_cfg()
+        self._process_cfg()
         # update the rigid body data
         self.update(0.0)
 
 
-    # def _create_buffers(self):
-    #     """Create buffers for storing data."""
-    #     # constants
-    #     self._ALL_INDICES = torch.arange(self.num_instances, dtype=torch.long, device=self.device)
+    def _create_buffers(self):
+        """Create buffers for storing data."""
+        # constants
+        self._ALL_INDICES = torch.arange(self.num_instances, dtype=torch.long, device=self.device)
 
     #     # external forces and torques
     #     self.has_external_wrench = False
@@ -513,62 +589,20 @@ class UipcObject(AssetBase):
     #     self._data.default_mass = self.root_physx_view.get_masses().clone()
     #     self._data.default_inertia = self.root_physx_view.get_inertias().clone()
 
-    # def _process_cfg(self):
-    #     """Post processing of configuration parameters."""
-    #     # default state
-    #     # -- root state
-    #     # note: we cast to tuple to avoid torch/numpy type mismatch.
-    #     default_root_state = (
-    #         tuple(self.cfg.init_state.pos)
-    #         + tuple(self.cfg.init_state.rot)
-    #         + tuple(self.cfg.init_state.lin_vel)
-    #         + tuple(self.cfg.init_state.ang_vel)
-    #     )
-    #     default_root_state = torch.tensor(default_root_state, dtype=torch.float, device=self.device)
-    #     self._data.default_root_state = default_root_state.repeat(self.num_instances, 1)
+    def _process_cfg(self):
+        """Post processing of configuration parameters."""
+        # default state
+        # -- root state
+        # note: we cast to tuple to avoid torch/numpy type mismatch.
+        default_root_state = (
+            tuple(self.cfg.init_state.pos)
+            + tuple(self.cfg.init_state.rot)
+            # + tuple(self.cfg.init_state.lin_vel)
+            # + tuple(self.cfg.init_state.ang_vel)
+        )
+        default_root_state = torch.tensor(default_root_state, dtype=torch.float, device=self.device)
+        #self._data.default_root_state = default_root_state.repeat(self.num_instances, 1)
 
-    # def _update_meshes(self):
-    #     for i, prim_path in enumerate(self._prim_view.prim_paths):
-    #         #uipc_points = self.objects[i].geometry().positions().view()[:,:,0] #todo check how it can be optimized -> how can we use third dim effectively?
-    #         test = self.sio.simplicial_surface(2)
-    #         print(test)
-    #         trimesh_points = self.sio.simplicial_surface(2).positions().view().reshape(-1,3)
-    #         print("Updated points ", trimesh_points)
-
-            # tf_view = view(self.objects[i].geometry().transforms())[0]
-            # print("Transformation matrix ")
-            # print(tf_view)
-
-
-            # extract world transform
-            # update Transform
-            # fabric_id = self.stage.GetFabricId()
-            # hier = usdrt.hierarchy.IFabricHierarchy().get_fabric_hierarchy(fabric_id, omni.usd.get_context().get_stage_id())
-            # hier.update_world_xforms()
-            # world_xform = hier.get_world_xform(usdrt.Sdf.Path(prim_path))
-            # print("world xform ", np.array(world_xform))
-            # print("local xform ", hier.get_local_xform(usdrt.Sdf.Path(prim_path)))
-
-            # # update Transform
-            # fabric_id = self.stage.GetFabricId()
-            # hier = usdrt.hierarchy.IFabricHierarchy().get_fabric_hierarchy(fabric_id, omni.usd.get_context().get_stage_id())
-            # local_xform = hier.get_local_xform(usdrt.Sdf.Path(prim_path))
-            # print("local xform ", local_xform)
-            # print("new xform: ", usdrt.Gf.Matrix4d(tf_view))
-            # hier.set_local_xform(usdrt.Sdf.Path(prim_path), usdrt.Gf.Matrix4d(tf_view))
-            # # hier.set_world_xform(path, Gf.Matrix4d(1))
-            # hier.update_world_xforms()
-
-            # rtxformable = usdrt.Rt.Xformable(fabric_prim)
-            # # Generate a random orientation quaternion
-            # import random, math
-            # angle = random.random()*math.pi*2
-            # axis = usdrt.Gf.Vec3f(random.random(), random.random(), random.random()).GetNormalized()
-            # halfangle = angle/2.0
-            # shalfangle = math.sin(halfangle)
-            # rotation = usdrt.Gf.Quatf(math.cos(halfangle), axis[0]*shalfangle, axis[1]*shalfangle, axis[2]*shalfangle)
-
-            # rtxformable.GetWorldOrientationAttr().Set(rotation)
 
     """
     Internal simulation callbacks.

@@ -163,7 +163,7 @@ def main():
     # )
     # ball = UipcObject(ball_cfg, uipc_sim)
 
-    num_cubes = 0#1 #5 #30
+    num_cubes = 1 #5 #30
     cubes = []
     for i in range(num_cubes):
         # might lead to intersections due to random pos
@@ -259,8 +259,14 @@ def main():
             print("====================================================================================")
             print("Reset simulation")
             if start_uipc_test:
+                for global_offset in uipc_sim._system_vertex_offsets["uipc::backend::cuda::GlobalVertexManager"]:
+                    print("global_offset ", global_offset)
+
+                # cube.write_vertex_positions_to_sim(vertex_positions=cube.init_vertex_pos)
+                cube_top.write_vertex_positions_to_sim(vertex_positions=cube_top.init_vertex_pos)
+
                 uipc_sim.reset()
-                start_uipc_test = False
+                # start_uipc_test = False
                 # draw.clear_points()
                 # draw.clear_lines()
                 sim.render()
