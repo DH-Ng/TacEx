@@ -133,6 +133,7 @@ class UipcObject(AssetBase):
             prim_children = prim.GetChildren()
             usd_mesh = UsdGeom.Mesh(prim_children[0])
             usd_mesh_path = str(usd_mesh.GetPath())
+            print("usd_mesh_path ", usd_mesh_path)
             
             if self.cfg.mesh_cfg is None:
                 # Load precomputed mesh data from USD file.
@@ -181,7 +182,7 @@ class UipcObject(AssetBase):
             # tf_matrix = omni.usd.get_local_transform_matrix(prim)
             rtxformable = usdrt.Rt.Xformable(fabric_prim)
             rtxformable.CreateFabricHierarchyWorldMatrixAttr()
-            # set world matrix to identity matrix -> uipc already gives us world vertices 
+            # set world matrix to identity matrix -> uipc already gives us vertices in world frame
             rtxformable.GetFabricHierarchyWorldMatrixAttr().Set(usdrt.Gf.Matrix4d())
 
             # update fabric mesh with world coor. points
@@ -525,7 +526,7 @@ class UipcObject(AssetBase):
     """
 
     def _initialize_impl(self):
-        mesh = self.uipc_meshes[0] #todo code properly for instances
+        mesh = self.uipc_meshes[0] #todo code properly cloned envs (i.e. for instanced objects?)
 
         # create constitution    
         constitution_types = {

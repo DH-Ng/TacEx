@@ -217,15 +217,15 @@ class MeshGenerator():
         # update the usd mesh
         #self.update_surface_mesh(prim, surf_points=surf_points, triangles=surf_indices)
         
-        # # draw the tet mesh
-        # color = [(0,0,0,1)]
-        # for i in range(0, len(tet_indices), 4):
-        #     tet_points_idx = tet_indices[i:i+4]
-        #     tet_points = [tet_mesh_points[i] for i in tet_points_idx]
-        #     #draw.draw_points(tet_points, [(255,0,0,1)]*len(all_vertices), [10]*len(all_vertices)) 
-        #     draw.draw_lines([tet_points[0]]*3, tet_points[1:], color*3, [10]*3) # draw from point 0 to every other point (3 times 0, cause line from 0 to the other 3 points)
-        #     draw.draw_lines([tet_points[1]]*2, tet_points[2:], color*2, [10]*2)
-        #     draw.draw_lines([tet_points[2]], [tet_points[3]], color, [10]) # draw line between the other 2 points
+        # draw the tet mesh
+        color = [(0,0,0,1)]
+        for i in range(0, len(tet_indices), 4):
+            tet_points_idx = tet_indices[i:i+4]
+            tet_points = [tet_mesh_points[i] for i in tet_points_idx]
+            #draw.draw_points(tet_points, [(255,0,0,1)]*len(all_vertices), [10]*len(all_vertices)) 
+            draw.draw_lines([tet_points[0]]*3, tet_points[1:], color*3, [10]*3) # draw from point 0 to every other point (3 times 0, cause line from 0 to the other 3 points)
+            draw.draw_lines([tet_points[1]]*2, tet_points[2:], color*2, [10]*2)
+            draw.draw_lines([tet_points[2]], [tet_points[3]], color, [10]) # draw line between the other 2 points
 
 
         return tet_mesh_points, tet_indices, surf_points, surf_indices
@@ -289,9 +289,10 @@ class MeshGenerator():
         # set uv_coor variable
         uv_coor = np.indices((int(triangles.shape[0]*1.5),2)).transpose((1,2,0)).reshape((-1,2))
 
-        # geom_mesh.GetSTAttr().Set(uv_coor)
-        pv_api = UsdGeom.PrimvarsAPI(prim)
-        pv = pv_api.GetPrimvar("primvars:st")
-        pv.Set(uv_coor)
-        pv.SetInterpolation(UsdGeom.Tokens.faceVarying)
-        
+        try:
+            pv_api = UsdGeom.PrimvarsAPI(prim)
+            pv = pv_api.GetPrimvar("primvars:st")
+            pv.SetInterpolation(UsdGeom.Tokens.faceVarying)
+            pv.Set(uv_coor)
+        except:
+            print("During update of the surface mesh: No `primvars:st` attribute found.")

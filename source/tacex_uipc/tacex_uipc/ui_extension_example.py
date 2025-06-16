@@ -32,6 +32,7 @@ import numpy as np
 import wildmeshing as wm
 
 from tacex_uipc.utils import MeshGenerator, TetMeshCfg
+from tacex_uipc import UipcIsaacAttachments 
 
 try:
     wp = None
@@ -63,6 +64,13 @@ def get_selected_prim_path():
 
     return None if not paths else paths[0]
 
+def get_selected_prim_paths():
+    """Return the paths of the selected prims"""
+    context = omni.usd.get_context()
+    selection = context.get_selection()
+    paths = selection.get_selected_prim_paths()
+
+    return paths
 
 def get_stage_id():
     """Return the stage Id of the current stage"""
@@ -154,15 +162,19 @@ def _generate_tet_mesh(path, tet_cfg=None):
     geom_mesh = UsdGeom.Mesh.Get(stage, path)
     tet_points, tet_indices, surf_points, tet_surf_indices = mesh_gen.generate_tet_mesh_for_prim(geom_mesh)
 
-    # Dont transform ->  we want to save the local points. Transformations happens during loading of the obj
-    # tf_world = np.array(omni.usd.get_world_transform_matrix(geom_mesh))
-    # tet_points = tf_world.T @ np.vstack((tet_points.T, np.ones(tet_points.shape[0])))
-    # tet_points = (tet_points[:-1].T)
+    tf_world = np.array(omni.usd.get_world_transform_matrix(geom_mesh))
+    world_tet_points = tf_world.T @ np.vstack((tet_points.T, np.ones(tet_points.shape[0])))
+    world_tet_points = (world_tet_points[:-1].T)
 
+    world_tet_surf_points = tf_world.T @ np.vstack((surf_points.T, np.ones(surf_points.shape[0])))
+    world_tet_surf_points = (world_tet_surf_points[:-1].T)
+
+    draw.clear_points()
     draw.clear_lines()
-    _draw_tets(tet_points, tet_indices)
-    _draw_surface_trimesh(surf_points, tet_surf_indices)
+    _draw_tets(world_tet_points, tet_indices)
+    _draw_surface_trimesh(world_tet_surf_points, tet_surf_indices)
 
+    # Dont save the transformed points ->  we want to save the local points. Transformations happens during scene creation
     _create_tet_data_attributes(path, tet_points=tet_points, tet_indices=tet_indices, tet_surf_points=surf_points, tet_surf_indices=tet_surf_indices)
     return f"Amount of tet points {len(tet_points)},\nAmount of tetrahedra: {int(len(tet_indices)/4)},\nAmount of surface points: {int(len(tet_surf_indices)/3)}"
 
@@ -179,8 +191,8 @@ def _transform_points(points, transformation_matrix):
     return transformed_points
 
 def _draw_tets(all_vertices, tet_indices):
-
     draw.clear_lines()
+
     # first draw the tet mesh nodes
     # draw.draw_points(all_vertices, [(255,0,0,1)]*len(all_vertices), [10]*len(all_vertices))
     
@@ -251,6 +263,44 @@ def _update_surf_mesh(path):
     MeshGenerator.update_surface_mesh(UsdGeom.Mesh(prim), surf_points=surf_points, triangles=triangles)
     print("Updated Surface Mesh of ", path)
 
+def _create_attachment(paths):
+    print("paths are ", paths)
+
+    isaac_mesh_path = paths[0]
+    tet_mesh_path = paths[1]
+
+    # extract data of tet mesh 
+    stage = omni.usd.get_context().get_stage()
+    tet_prim = stage.GetPrimAtPath(pxr.Sdf.Path(tet_mesh_path))
+    tet_points = np.array(tet_prim.GetAttribute("tet_points").Get())
+    tet_indices = tet_prim.GetAttribute("tet_indices").Get()
+
+    # convert to world coordinates
+    tf_world = np.array(omni.usd.get_world_transform_matrix(tet_prim))
+    print("tf world ", tf_world)
+    world_tet_points = tf_world.T @ np.vstack((tet_points.T, np.ones(tet_points.shape[0])))
+    world_tet_points = (world_tet_points[:-1].T)
+
+    attachment_offsets, idx = UipcIsaacAttachments.compute_attachment_data(isaac_mesh_path, world_tet_points, tet_indices)
+    _create_attachment_data_attributes(tet_mesh_path, attachment_offsets, idx)
+
+def _create_attachment_data_attributes(path, attachment_offsets, attachment_indices):
+    stage = omni.usd.get_context().get_stage()
+    prim = stage.GetPrimAtPath(path)
+
+    attr_tet_points = prim.CreateAttribute("attachment_offsets", pxr.Sdf.ValueTypeNames.Vector3fArray)
+    attr_tet_points.Set(attachment_offsets)
+
+    attr_attachment_indices = prim.CreateAttribute("attachment_indices", pxr.Sdf.ValueTypeNames.UIntArray)
+    attr_attachment_indices.Set(attachment_indices)
+
+    print("*"*40)
+    print("Created tet data: ")
+    print(f"attachment_offsets (num {attachment_offsets.shape[0]})")
+    print(f"attachment_indices (num {len(attachment_indices)})")
+    print("*"*40)
+
+
 # Any class derived from `omni.ext.IExt` in top level module (defined in `python.modules` of `extension.toml`) will be
 # instantiated when extension gets enabled and `on_startup(ext_id)` will be called. Later when extension gets disabled
 # on_shutdown() is called.
@@ -279,9 +329,13 @@ class TacexIPCExtension(omni.ext.IExt):
 
                 def update_surf_mesh():
                     _update_surf_mesh(get_selected_prim_path())
+
+                def create_attachment():
+                    _create_attachment(get_selected_prim_paths())
                     
                 omni.ui.Button("Compute Tet Mesh", clicked_fn=compute_tet_mesh, height=0)
                 omni.ui.Button("Update Surface Mesh", clicked_fn=update_surf_mesh, height=0)
+                omni.ui.Button("Create Attachment \n(Select rigid body, then tet mesh, then press button)", clicked_fn=create_attachment, height=0)
 
     # def init_on_update(self):
     #     @carb.profiler.profile(zone_name="omni.example.python.usdrt.on_update")

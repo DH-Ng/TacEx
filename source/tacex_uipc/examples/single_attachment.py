@@ -73,6 +73,9 @@ from pathlib import Path
 import json
 import platform
 
+from tacex_uipc import UipcSim, UipcSimCfg, UipcObject, UipcObjectCfg
+from tacex_uipc.utils import TetMeshCfg
+
 class CustomEnvWindow(BaseEnvWindow):
     """Window manager for the RL environment."""
 
@@ -204,6 +207,19 @@ class BallRollingEnvCfg(DirectRLEnvCfg):
         #     # },
         # ),
     )
+    # simulate the gelpad as uipc mesh
+    mesh_cfg = TetMeshCfg(
+        stop_quality=8,
+        max_its=100,
+        edge_length_r=1/5,
+        # epsilon_r=0.01
+    )
+    gelpad_cfg = UipcObjectCfg(
+        prim_path="/World/envs/env_.*/Robot/gelsight_mini_gelpad",
+        mesh_cfg=mesh_cfg,
+        constitution_cfg=UipcObjectCfg.StableNeoHookeanCfg()
+    )
+    
     gsmini = GelSightMiniCfg(
         prim_path="/World/envs/env_.*/Robot/gelsight_mini_case",
         sensor_camera_cfg = GelSightMiniCfg.SensorCameraCfg(
@@ -248,12 +264,16 @@ class BallRollingEnvCfg(DirectRLEnvCfg):
     observation_space = 0 
     state_space = 0
 
+    uipc_cfg = UipcSimCfg()
+
 class BallRollingEnv(DirectRLEnv):
     cfg: BallRollingEnvCfg
 
     def __init__(self, cfg: BallRollingEnvCfg, render_mode: str | None = None, **kwargs):
+        # init uipc simulation manually (since we dont have the api yet lol)
+        self.uipc_sim = UipcSim(cfg.uipc_cfg)
         super().__init__(cfg, render_mode, **kwargs)
-
+               
         #### Stuff for IK ##################################################
         # create the differential IK controller
         self._ik_controller = DifferentialIKController(
@@ -285,6 +305,7 @@ class BallRollingEnv(DirectRLEnv):
 
         # add handle for debug visualization (this is set to a valid handle inside set_debug_vis)
         self.set_debug_vis(self.cfg.debug_vis)
+        
         
     def _setup_scene(self):
         self._robot = Articulation(self.cfg.robot)
@@ -343,6 +364,9 @@ class BallRollingEnv(DirectRLEnv):
         # add lights
         light_cfg = sim_utils.DomeLightCfg(intensity=2000.0, color=(0.75, 0.75, 0.75))
         light_cfg.func("/World/Light", light_cfg)
+
+        # gelpad simulated via uipc
+        self._uipc_gelpad = UipcObject(self.cfg.gelpad_cfg, self.uipc_sim)
 
     #MARK: pre-physics step calls
         
@@ -538,6 +562,7 @@ def run_simulator(env: BallRollingEnv):
     total_sim_time = time.time()
 
     env.reset()
+    env.uipc_sim.setup_scene()
 
     env.frame_prim_view = XFormPrim(prim_paths_expr=env.cfg.frame.prim_path, name=f"{env.cfg.frame.prim_path}", usd=True)
         
@@ -550,6 +575,7 @@ def run_simulator(env: BallRollingEnv):
         env._apply_action()
         env.scene.write_data_to_sim()
         env.sim.step(render=False)
+        env.uipc_sim.step()
         physics_end = time.time()
         ###
 
@@ -558,7 +584,9 @@ def run_simulator(env: BallRollingEnv):
         env.ik_commands[:, 3:] = orientations
 
         # update isaac buffers() -> also updates sensors
+        env.uipc_sim.update_render_meshes()
         env.scene.update(dt=env.physics_dt)
+        # env.uipc_sim.update_render_meshes() #! or update the meshes here?
         # render scene for cameras (used by sensor)
         env.sim.render()
 
