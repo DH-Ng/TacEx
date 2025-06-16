@@ -68,47 +68,6 @@ def design_scene():
 
     # create a new xform prim for all objects to be spawned under
     prims_utils.define_prim("/World/Objects", "Xform")
-    
-
-def change_mat_color(stage, shader_prim_path, color):
-    # source: https://forums.developer.nvidia.com/t/randomize-materials-and-textures-based-on-a-probability-extract-path-to-material-and-texture-from-usd/270188/4
-    shader_prim = stage.GetPrimAtPath(shader_prim_path)
-    if not shader_prim.GetAttribute("inputs:diffuse_color_constant").IsValid():
-        shader_prim.CreateAttribute("inputs:diffuse_color_constant", Sdf.ValueTypeNames.Color3f, custom=True).Set((0.0, 0.0, 0.0))
-
-    if not shader_prim.GetAttribute("inputs:diffuse_tint").IsValid():
-        shader_prim.CreateAttribute("inputs:diffuse_tint", Sdf.ValueTypeNames.Color3f, custom=True).Set((0.0, 0.0, 0.0))
-
-    # Set the diffuse color to the input color
-    shader_prim.GetAttribute('inputs:diffuse_color_constant').Set(color)
-    shader_prim.GetAttribute('inputs:diffuse_tint').Set(color)
-     
-def _usd_set_xform(xform, pos: tuple, rot: tuple, scale: tuple):
-    from pxr import UsdGeom, Gf
-
-    xform = UsdGeom.Xform(xform)
-
-    xform_ops = xform.GetOrderedXformOps()
-
-    if pos is not None:
-        xform_ops[0].Set(Gf.Vec3d(float(pos[0]), float(pos[1]), float(pos[2])))
-    if rot is not None:
-        xform_ops[1].Set(Gf.Quatd(float(rot[3]), float(rot[0]), float(rot[1]), float(rot[2])))
-    if scale is not None:
-        xform_ops[2].Set(Gf.Vec3d(float(scale[0]), float(scale[1]), float(scale[2])))
-
-# Probably useful when we need to update multiple bodies -> look into the warp render code
-# def update_body_transforms(self, body_q):
-#     from pxr import UsdGeom, Sdf
-#     if isinstance(body_q, wp.array):
-#         body_q = body_q.numpy()
-#     with Sdf.ChangeBlock():
-#         for b in range(self.model.body_count):
-#             node_name = self.body_names[b]
-#             node = UsdGeom.Xform(self.stage.GetPrimAtPath(self.root.GetPath().AppendChild(node_name)))
-#             # unpack rigid transform
-#             X_sb = wp.transform_expand(body_q[b])
-#             _usd_set_xform(node, X_sb.p, X_sb.q, (1.0, 1.0, 1.0), self.time)
        
 def main():
     """Main function."""
@@ -127,16 +86,9 @@ def main():
     uipc_cfg = UipcSimCfg()
     uipc_sim = UipcSim(uipc_cfg)
 
-    mesh_cfg = TetMeshCfg(
-        stop_quality=8,
-        max_its=100,
-        edge_length_r=1/5,
-        # epsilon_r=0.01
-    )
-    print("Mesh cfg ", mesh_cfg)
-
-    # # spawn uipc cube
-    tet_cube_asset_path = pathlib.Path(__file__).parent.resolve() / "assets" / "cube.usd"
+    # spawn uipc objects
+    bolt_asset_path = pathlib.Path(__file__).parent.resolve() / "assets" / "nut_and_bolt" /"m20_bolt_wt.usd"
+    nut_asset_path = pathlib.Path(__file__).parent.resolve() / "assets" / "nut_and_bolt" /"m20_nut_wt.usd"
     
     cube_cfg = UipcObjectCfg(
         prim_path="/World/Objects/Cube0",
@@ -145,46 +97,10 @@ def main():
             usd_path=str(tet_cube_asset_path),
             scale=(0.75, 0.75, 0.75)
         ),
-        mesh_cfg=mesh_cfg,
+        # mesh_cfg=mesh_cfg,
         constitution_cfg=UipcObjectCfg.StableNeoHookeanCfg()
     )
     cube = UipcObject(cube_cfg, uipc_sim)
-
-    # tet_ball_asset_path = pathlib.Path(__file__).parent.resolve() / "assets" / "ball.usd"
-    # ball_cfg = UipcObjectCfg(
-    #     prim_path="/World/Objects/ball",
-    #     init_state=AssetBaseCfg.InitialStateCfg(pos=[0, 0, 1.0]), #rot=(0.72,-0.3,0.42,-0.45)
-    #     spawn=sim_utils.UsdFileCfg(
-    #         usd_path=str(tet_ball_asset_path),
-    #         scale=(1.0, 1.0, 1.0)
-    #     ),
-    #     mesh_cfg=mesh_cfg,
-    #     constitution_cfg=UipcObjectCfg.StableNeoHookeanCfg()
-    # )
-    # ball = UipcObject(ball_cfg, uipc_sim)
-
-    num_cubes = 4 #30
-    cubes = []
-    for i in range(num_cubes):
-        if i % 2 == 0:
-            constitution_type = UipcObjectCfg.AffineBodyConstitutionCfg()
-        else:
-            constitution_type = UipcObjectCfg.StableNeoHookeanCfg()
-        # might lead to intersections due to random pos
-        # pos = (random.uniform(-1.0, 1.0), random.uniform(-1.0, 1.0), random.uniform(2.5, 6.0))
-        pos = (0, 0, 2.0 + 0.3*i)
-        rot = (random.uniform(-1.0, 1.0), random.uniform(-1.0, 1.0), random.uniform(-1.0, 1.0), random.uniform(-1.0, 1.0))
-        cube_cfg = UipcObjectCfg(
-            prim_path=f"/World/Objects/Cube{i+1}",
-            init_state=AssetBaseCfg.InitialStateCfg(pos=pos, rot=rot), #rot=(0.72,-0.3,0.42,-0.45)
-            spawn=sim_utils.UsdFileCfg(
-                usd_path=str(tet_cube_asset_path),
-                scale=(0.15, 0.15, 0.15)
-            ),
-            constitution_cfg=constitution_type
-        )
-        cubeX = UipcObject(cube_cfg, uipc_sim)
-        cubes.append(cubeX)
 
     rot = (random.uniform(-1.0, 1.0), random.uniform(-1.0, 1.0), random.uniform(-1.0, 1.0), random.uniform(-1.0, 1.0))
     cube_cfg = UipcObjectCfg(
@@ -202,7 +118,7 @@ def main():
     # Play the simulator
     sim.reset()
     
-    # only after Isaac Sim got resetted (= objects init), otherwise wold init is false
+    # only after Isaac Sim got resetted (= objects init), otherwise world init is false
     # because _initialize_impl() of the object is called in the sim.reset() method
     # and setup_scene() relies on objects being _intialized_impl()
     uipc_sim.setup_scene()

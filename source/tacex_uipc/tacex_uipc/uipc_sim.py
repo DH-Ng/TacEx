@@ -203,9 +203,6 @@ class UipcSim():
         
         #todo figure out how we always get the correct order -> for now we just assume FEM first, then abd
         #? another idea might be to use the coindices mapping from global_vertex_manager and use it to create mapping for local -> global
-        # self._system_vertex_offsets["uipc::backend::cuda::GlobalVertexManager"].append(
-        #     self._system_vertex_offsets["uipc::backend::cuda::GlobalVertexManager"][-1]+fem_system
-        # )
         self._system_vertex_offsets["uipc::backend::cuda::GlobalVertexManager"] += fem_system[1:] # append without 0
         print("after fem ", self._system_vertex_offsets["uipc::backend::cuda::GlobalVertexManager"])        
         
@@ -262,12 +259,11 @@ class UipcSim():
         pass
     
     def get_time_report(self, as_json: bool = False):
-        # self.world.dump() # -> creates files which describe state of the world at this time step [needed if you want to use world.recover()]
         if as_json:
             report = Timer.report_as_json()
         else:
             Timer.report()
-        # 
+    
 
     def save_current_world_state(self):
         """Saves the current frame into multiple files, which can be retrieved to replay the animation later.

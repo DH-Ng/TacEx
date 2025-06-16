@@ -68,48 +68,7 @@ def design_scene():
 
     # create a new xform prim for all objects to be spawned under
     prims_utils.define_prim("/World/Objects", "Xform")
-    
 
-def change_mat_color(stage, shader_prim_path, color):
-    # source: https://forums.developer.nvidia.com/t/randomize-materials-and-textures-based-on-a-probability-extract-path-to-material-and-texture-from-usd/270188/4
-    shader_prim = stage.GetPrimAtPath(shader_prim_path)
-    if not shader_prim.GetAttribute("inputs:diffuse_color_constant").IsValid():
-        shader_prim.CreateAttribute("inputs:diffuse_color_constant", Sdf.ValueTypeNames.Color3f, custom=True).Set((0.0, 0.0, 0.0))
-
-    if not shader_prim.GetAttribute("inputs:diffuse_tint").IsValid():
-        shader_prim.CreateAttribute("inputs:diffuse_tint", Sdf.ValueTypeNames.Color3f, custom=True).Set((0.0, 0.0, 0.0))
-
-    # Set the diffuse color to the input color
-    shader_prim.GetAttribute('inputs:diffuse_color_constant').Set(color)
-    shader_prim.GetAttribute('inputs:diffuse_tint').Set(color)
-     
-def _usd_set_xform(xform, pos: tuple, rot: tuple, scale: tuple):
-    from pxr import UsdGeom, Gf
-
-    xform = UsdGeom.Xform(xform)
-
-    xform_ops = xform.GetOrderedXformOps()
-
-    if pos is not None:
-        xform_ops[0].Set(Gf.Vec3d(float(pos[0]), float(pos[1]), float(pos[2])))
-    if rot is not None:
-        xform_ops[1].Set(Gf.Quatd(float(rot[3]), float(rot[0]), float(rot[1]), float(rot[2])))
-    if scale is not None:
-        xform_ops[2].Set(Gf.Vec3d(float(scale[0]), float(scale[1]), float(scale[2])))
-
-# Probably useful when we need to update multiple bodies -> look into the warp render code
-# def update_body_transforms(self, body_q):
-#     from pxr import UsdGeom, Sdf
-#     if isinstance(body_q, wp.array):
-#         body_q = body_q.numpy()
-#     with Sdf.ChangeBlock():
-#         for b in range(self.model.body_count):
-#             node_name = self.body_names[b]
-#             node = UsdGeom.Xform(self.stage.GetPrimAtPath(self.root.GetPath().AppendChild(node_name)))
-#             # unpack rigid transform
-#             X_sb = wp.transform_expand(body_q[b])
-#             _usd_set_xform(node, X_sb.p, X_sb.q, (1.0, 1.0, 1.0), self.time)
-       
 def main():
     """Main function."""
 
@@ -135,7 +94,7 @@ def main():
     )
     print("Mesh cfg ", mesh_cfg)
 
-    # # spawn uipc cube
+    # spawn uipc objects
     tet_cube_asset_path = pathlib.Path(__file__).parent.resolve() / "assets" / "cube.usd"
     
     cube_cfg = UipcObjectCfg(
@@ -145,7 +104,7 @@ def main():
             usd_path=str(tet_cube_asset_path),
             scale=(0.75, 0.75, 0.75)
         ),
-        mesh_cfg=mesh_cfg,
+        # mesh_cfg=mesh_cfg,
         constitution_cfg=UipcObjectCfg.StableNeoHookeanCfg()
     )
     cube = UipcObject(cube_cfg, uipc_sim)
