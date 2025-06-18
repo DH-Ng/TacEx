@@ -126,7 +126,7 @@ class UipcIsaacAttachments():
         return self.gipc_vertex_idx, self.attachment_points_init_positions #TODO fix this messed up command here lol, we want a flat list
      
     @staticmethod
-    def compute_attachment_data(isaac_mesh_path, tet_points, tet_indices, sphere_radius=1e-4, max_dist=1e-5): # really small distances to prevent intersection with unwanted geometries
+    def compute_attachment_data(isaac_mesh_path, tet_points, tet_indices, sphere_radius=5e-4, max_dist=1e-5): # really small distances to prevent intersection with unwanted geometries
         """
         Computes the attachment data and sets it as attribute values of the corresponding usd meshs.
 
@@ -141,7 +141,7 @@ class UipcIsaacAttachments():
             attachment_points_positions (list[np.array]): List of positions (x,y,z) for the attachment points. 
         """
         print("Creating Uipc x Isaac attachments for ", isaac_mesh_path)
-        # # force Physx to cook everything in the scene so it get cached
+        # force Physx to cook everything in the scene so it get cached
         get_physx_interface().force_load_physics_from_usd()
         stage = omni.usd.get_context().get_stage()
         init_prim = stage.GetPrimAtPath(isaac_mesh_path)
@@ -173,13 +173,13 @@ class UipcIsaacAttachments():
 
         vertex_positions = tet_points
         indices = tet_indices
-
+        
         for i, v in enumerate(vertex_positions):
             # print("raycast ", i)
             ray_dir = [0,0,1] # unit direction of the sphere ray cast -> doesnt really matter here, cause we only use a super short ray. 
             hitInfo = get_physx_scene_query_interface().sweep_sphere_closest(radius=sphere_radius, origin=v, dir=ray_dir, distance=max_dist, bothSides=True)
             if hitInfo["hit"]:
-                # print("hiiiit, ", hitInfo["collision"])
+                print("hiiiit, ", hitInfo["collision"])
                 if isaac_mesh_path in hitInfo["collision"] : # prevent attaching to unrelated geometry
                     attachment_points_positions.append(v)
                     # idx.append(i+min_vertex_idx) unlike the gipc simulation, we use the object specific idx here
@@ -192,7 +192,7 @@ class UipcIsaacAttachments():
                     offset = offset.cpu().numpy()
                     attachment_offsets.append(offset)
 
-        #get_physx_interface().release_physics_objects()
+        get_physx_interface().release_physics_objects()
         
         # print(f"Number of attachment points per obj '{self.objects_gipc.name}': {self.num_attachment_points_per_obj}")
 

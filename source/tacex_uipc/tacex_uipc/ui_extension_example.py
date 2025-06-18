@@ -25,7 +25,7 @@ draw = _debug_draw.acquire_debug_draw_interface()
 from omni.physx.scripts import deformableUtils
 
 from usdrt import Gf, Rt, Sdf, Usd, Vt
-from pxr import UsdGeom, Gf
+from pxr import UsdGeom, Gf, UsdPhysics
 import pxr
 
 import numpy as np
@@ -274,12 +274,19 @@ def _create_attachment(paths):
     tet_prim = stage.GetPrimAtPath(pxr.Sdf.Path(tet_mesh_path))
     tet_points = np.array(tet_prim.GetAttribute("tet_points").Get())
     tet_indices = tet_prim.GetAttribute("tet_indices").Get()
-
+            
     # convert to world coordinates
     tf_world = np.array(omni.usd.get_world_transform_matrix(tet_prim))
     print("tf world ", tf_world)
     world_tet_points = tf_world.T @ np.vstack((tet_points.T, np.ones(tet_points.shape[0])))
     world_tet_points = (world_tet_points[:-1].T)
+
+    # disable collision of the mesh that should be simulated by uipc -> otherwise raycasts are only detecting the tet mesh
+    try:
+        collision_enabled = tet_prim.GetAttribute("physics:collisionEnabled")	
+        collision_enabled.Set(False)
+    except:
+        pass
 
     attachment_offsets, idx = UipcIsaacAttachments.compute_attachment_data(isaac_mesh_path, world_tet_points, tet_indices)
     _create_attachment_data_attributes(tet_mesh_path, attachment_offsets, idx)
