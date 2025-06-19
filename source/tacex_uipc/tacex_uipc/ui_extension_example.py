@@ -210,11 +210,11 @@ def _draw_surface_trimesh(all_vertices, tet_surf_indices):
     color = [(0,0,125,0.5)]
     #draw surface mesh
     for i in range(0, len(tet_surf_indices), 3):
-        tet_points_idx = tet_surf_indices[i:i+3]
-        tet_points = [all_vertices[i] for i in tet_points_idx]
-        draw.draw_points(tet_points, [(255,255,255,1)]*len(tet_points), [40]*len(tet_points)) 
-        draw.draw_lines([tet_points[0]]*2, tet_points[1:], color*2, [10]*2) # draw from point 0 to every other point (3 times 0, cause line from 0 to the other 3 points)
-        draw.draw_lines([tet_points[1]]*1, tet_points[2:], color*1, [10]*1)
+        tri_points_idx = tet_surf_indices[i:i+3]
+        tri_points = [all_vertices[j] for j in tri_points_idx]
+        draw.draw_points(tri_points, [(255,255,255,1)]*len(tri_points), [40]*len(tri_points)) 
+        draw.draw_lines([tri_points[0]]*2, tri_points[1:], color*2, [10]*2) # draw from point 0 to every other point (3 times 0, cause line from 0 to the other 3 points)
+        draw.draw_lines([tri_points[1]]*1, tri_points[2:], color*1, [10]*1)
 
 
 def _create_tet_data_attributes(path, tet_points, tet_indices, tet_surf_points, tet_surf_indices):

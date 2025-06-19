@@ -29,6 +29,23 @@
         },
         {
             "deps": [
+                "uipc::backend::cuda::GlobalLinearSystem",
+                "uipc::backend::cuda::GlobalLinearSystem",
+                "uipc::backend::cuda::ABDFEMContactReceiver",
+                "uipc::backend::cuda::FEMABDContactReceiver",
+                "uipc::backend::cuda::ABDLinearSubsystem",
+                "uipc::backend::cuda::FEMLinearSubsystem",
+                "uipc::backend::cuda::AffineBodyDynamics",
+                "uipc::backend::cuda::FiniteElementMethod",
+                "uipc::backend::cuda::AffineBodyVertexReporter",
+                "uipc::backend::cuda::FiniteElementVertexReporter"
+            ],
+            "engine_aware": false,
+            "name": "uipc::backend::cuda::ABDFEMLinearSubsystem",
+            "valid": true
+        },
+        {
+            "deps": [
                 "uipc::backend::cuda::GlobalVertexManager",
                 "uipc::backend::cuda::FiniteElementMethod"
             ],
@@ -66,6 +83,24 @@
         },
         {
             "deps": [
+                "uipc::backend::cuda::GlobalContactManager",
+                "uipc::backend::cuda::FiniteElementVertexReporter"
+            ],
+            "engine_aware": false,
+            "name": "uipc::backend::cuda::FEMContactReceiver",
+            "valid": true
+        },
+        {
+            "deps": [
+                "uipc::backend::cuda::GlobalContactManager",
+                "uipc::backend::cuda::AffineBodyVertexReporter"
+            ],
+            "engine_aware": false,
+            "name": "uipc::backend::cuda::ABDContactReceiver",
+            "valid": true
+        },
+        {
+            "deps": [
                 "uipc::backend::cuda::GlobalVertexManager",
                 "uipc::backend::cuda::GlobalSimpicialSurfaceManager",
                 "uipc::backend::cuda::GlobalContactManager",
@@ -95,10 +130,30 @@
         },
         {
             "deps": [
+                "uipc::backend::cuda::AffineBodyDynamics",
+                "uipc::backend::cuda::AffineBodyAnimator",
+                "uipc::backend::cuda::GradientHessianComputer"
+            ],
+            "engine_aware": false,
+            "name": "uipc::backend::cuda::ABDGradientHessianComputer",
+            "valid": true
+        },
+        {
+            "deps": [
                 "uipc::backend::cuda::GlobalContactManager"
             ],
             "engine_aware": true,
             "name": "uipc::backend::cuda::GlobalTrajectoryFilter",
+            "valid": true
+        },
+        {
+            "deps": [
+                "uipc::backend::cuda::LineSearcher",
+                "uipc::backend::cuda::AffineBodyDynamics",
+                "uipc::backend::cuda::AffineBodyAnimator"
+            ],
+            "engine_aware": false,
+            "name": "uipc::backend::cuda::ABDLineSearchReporter",
             "valid": true
         },
         {
@@ -108,6 +163,14 @@
             ],
             "engine_aware": true,
             "name": "uipc::backend::cuda::GlobalContactManager",
+            "valid": true
+        },
+        {
+            "deps": [
+                "uipc::backend::cuda::AffineBodyDynamics"
+            ],
+            "engine_aware": false,
+            "name": "uipc::backend::cuda::OrthoPotential",
             "valid": true
         },
         {
@@ -125,6 +188,14 @@
             ],
             "engine_aware": false,
             "name": "uipc::backend::cuda::IPCVertexHalfPlaneFrictionalContact",
+            "valid": true
+        },
+        {
+            "deps": [
+                "uipc::backend::cuda::DofPredictor"
+            ],
+            "engine_aware": true,
+            "name": "uipc::backend::cuda::AffineBodyDynamics",
             "valid": true
         },
         {
@@ -217,9 +288,32 @@
             "valid": true
         },
         {
+            "deps": [
+                "uipc::backend::cuda::GlobalLinearSystem",
+                "uipc::backend::cuda::GlobalLinearSystem",
+                "uipc::backend::cuda::ABDLinearSubsystem",
+                "uipc::backend::cuda::AffineBodyDynamics"
+            ],
+            "engine_aware": false,
+            "name": "uipc::backend::cuda::ABDDiagPreconditioner",
+            "valid": true
+        },
+        {
             "deps": [],
             "engine_aware": true,
             "name": "uipc::backend::cuda::LineSearcher",
+            "valid": true
+        },
+        {
+            "deps": [
+                "uipc::backend::cuda::GlobalLinearSystem",
+                "uipc::backend::cuda::AffineBodyDynamics",
+                "uipc::backend::cuda::AffineBodyVertexReporter",
+                "uipc::backend::cuda::AffineBodyAnimator",
+                "uipc::backend::cuda::ABDContactReceiver"
+            ],
+            "engine_aware": false,
+            "name": "uipc::backend::cuda::ABDLinearSubsystem",
             "valid": true
         },
         {
@@ -237,6 +331,17 @@
         },
         {
             "deps": [
+                "uipc::backend::cuda::AffineBodyDynamics",
+                "uipc::backend::cuda::GlobalSimpicialSurfaceManager",
+                "uipc::backend::cuda::GlobalVertexManager",
+                "uipc::backend::cuda::AffineBodyVertexReporter"
+            ],
+            "engine_aware": false,
+            "name": "uipc::backend::cuda::AffinebodySurfaceReporter",
+            "valid": true
+        },
+        {
+            "deps": [
                 "uipc::backend::cuda::GlobalLinearSystem",
                 "uipc::backend::cuda::FiniteElementMethod",
                 "uipc::backend::cuda::GlobalLinearSystem",
@@ -245,6 +350,15 @@
             ],
             "engine_aware": false,
             "name": "uipc::backend::cuda::FEMDiagPreconditioner",
+            "valid": true
+        },
+        {
+            "deps": [
+                "uipc::backend::cuda::GlobalVertexManager",
+                "uipc::backend::cuda::AffineBodyDynamics"
+            ],
+            "engine_aware": false,
+            "name": "uipc::backend::cuda::AffineBodyVertexReporter",
             "valid": true
         },
         {
@@ -262,15 +376,6 @@
             ],
             "engine_aware": false,
             "name": "uipc::backend::cuda::HalfPlane",
-            "valid": true
-        },
-        {
-            "deps": [
-                "uipc::backend::cuda::GlobalContactManager",
-                "uipc::backend::cuda::FiniteElementVertexReporter"
-            ],
-            "engine_aware": false,
-            "name": "uipc::backend::cuda::FEMContactReceiver",
             "valid": true
         }
     ]

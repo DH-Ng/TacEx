@@ -147,7 +147,7 @@ class UipcObject(AssetBase):
                     tet_points, tet_indices, surf_points, tet_surf_indices = mesh_gen.generate_tet_mesh_for_prim(usd_mesh)
 
             # transform local tet points to world coor
-            tf_world = np.array(omni.usd.get_world_transform_matrix(prim))
+            tf_world = np.array(omni.usd.get_world_transform_matrix(usd_mesh))
             tet_points_world = tf_world.T @ np.vstack((tet_points.T, np.ones(tet_points.shape[0])))
             tet_points_world = (tet_points_world[:-1].T)
 

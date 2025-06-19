@@ -91,7 +91,7 @@ class UipcSimCfg:
         """
         constitution: str = "ipc"
         
-        d_hat: float = 0.01
+        d_hat: float = 0.001
 
         eps_velocity: float = 0.01
         """
@@ -118,7 +118,10 @@ class UipcSim():
         self.cfg = cfg
 
         Timer.enable_all()
-        Logger.set_level(Logger.Error)
+        if self.cfg.logger_level == "Error":
+            Logger.set_level(Logger.Error)
+        elif self.cfg.logger_level == "Info":
+            Logger.set_level(Logger.Info)
 
         self.engine: Engine = Engine(backend_name=self.cfg.device)
         self.world: World = World(self.engine)
@@ -251,9 +254,9 @@ class UipcSim():
             fabric_mesh_points = fabric_prim.GetAttribute("points")
             fabric_mesh_points.Set(usdrt.Vt.Vec3fArray(trimesh_points))
 
-        # draw.clear_points()
-        # points = np.array(all_trimesh_points)
-        # draw.draw_points(points, [(255,0,255,0.5)]*points.shape[0], [30]*points.shape[0])
+        draw.clear_points()
+        points = np.array(all_trimesh_points)
+        draw.draw_points(points, [(255,0,255,0.5)]*points.shape[0], [30]*points.shape[0])
 
     def simple_update_render_meshes(self):
         pass

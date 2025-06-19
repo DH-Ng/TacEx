@@ -124,7 +124,12 @@ def main():
     design_scene()
 
     # Initialize uipc sim
-    uipc_cfg = UipcSimCfg()
+    uipc_cfg = UipcSimCfg(
+        # logger_level="Info"
+        contact=UipcSimCfg.Contact(
+            d_hat=0.01
+        )
+    )
     uipc_sim = UipcSim(uipc_cfg)
 
     mesh_cfg = TetMeshCfg(
