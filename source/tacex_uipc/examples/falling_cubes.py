@@ -125,9 +125,10 @@ def main():
 
     # Initialize uipc sim
     uipc_cfg = UipcSimCfg(
-        # logger_level="Info"
+        # logger_level="Info",
         contact=UipcSimCfg.Contact(
-            d_hat=0.01
+            # enable=False,
+            d_hat=0.01,
         )
     )
     uipc_sim = UipcSim(uipc_cfg)
@@ -135,23 +136,23 @@ def main():
     mesh_cfg = TetMeshCfg(
         stop_quality=8,
         max_its=100,
-        edge_length_r=1/5,
+        edge_length_r=0.05,
         # epsilon_r=0.01
     )
     print("Mesh cfg ", mesh_cfg)
 
-    # # spawn uipc cube
+    # spawn uipc cube
+    #tet_cube_asset_path = "/workspace/tacex/source/tacex_assets/tacex_assets/data/Sensors/GelSight_Mini/Gelpad_low_res.usd"
     tet_cube_asset_path = pathlib.Path(__file__).parent.resolve() / "assets" / "cube.usd"
-    
     cube_cfg = UipcObjectCfg(
         prim_path="/World/Objects/Cube0",
-        init_state=AssetBaseCfg.InitialStateCfg(pos=[0, 0, 1.25]), #rot=(0.72,-0.3,0.42,-0.45)
+        init_state=AssetBaseCfg.InitialStateCfg(pos=[0, 0, 2.25]), #rot=(0.72,-0.3,0.42,-0.45)
         spawn=sim_utils.UsdFileCfg(
             usd_path=str(tet_cube_asset_path),
-            scale=(0.75, 0.75, 0.75)
+            # scale=(0.1, 0.1, 0.1)
         ),
-        mesh_cfg=mesh_cfg,
-        constitution_cfg=UipcObjectCfg.StableNeoHookeanCfg()
+        # mesh_cfg=mesh_cfg,
+        constitution_cfg=UipcObjectCfg.StableNeoHookeanCfg() #UipcObjectCfg.AffineBodyConstitutionCfg() #
     )
     cube = UipcObject(cube_cfg, uipc_sim)
 
@@ -168,6 +169,8 @@ def main():
     # )
     # ball = UipcObject(ball_cfg, uipc_sim)
 
+    tet_cube_asset_path = pathlib.Path(__file__).parent.resolve() / "assets" / "cube.usd"
+
     num_cubes = 4 #30
     cubes = []
     for i in range(num_cubes):
@@ -177,7 +180,7 @@ def main():
             constitution_type = UipcObjectCfg.StableNeoHookeanCfg()
         # might lead to intersections due to random pos
         # pos = (random.uniform(-1.0, 1.0), random.uniform(-1.0, 1.0), random.uniform(2.5, 6.0))
-        pos = (0, 0, 2.0 + 0.3*i)
+        pos = (0, 0, 3.0 + 0.3*i)
         rot = (random.uniform(-1.0, 1.0), random.uniform(-1.0, 1.0), random.uniform(-1.0, 1.0), random.uniform(-1.0, 1.0))
         cube_cfg = UipcObjectCfg(
             prim_path=f"/World/Objects/Cube{i+1}",
@@ -194,7 +197,7 @@ def main():
     rot = (random.uniform(-1.0, 1.0), random.uniform(-1.0, 1.0), random.uniform(-1.0, 1.0), random.uniform(-1.0, 1.0))
     cube_cfg = UipcObjectCfg(
         prim_path="/World/Objects/CubeTop",
-        init_state=AssetBaseCfg.InitialStateCfg(pos=[0, 0, 2.65 + 0.3*num_cubes],rot=rot),
+        init_state=AssetBaseCfg.InitialStateCfg(pos=[0, 0, 3.65 + 0.3*num_cubes],rot=rot),
         spawn=sim_utils.UsdFileCfg(
             usd_path=str(tet_cube_asset_path),
             scale=(1.0, 1.0, 1.0)

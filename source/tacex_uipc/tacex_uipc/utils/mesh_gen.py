@@ -261,7 +261,7 @@ class MeshGenerator():
         tet_points, tet_indices, _ = self.tetrahedralizer.get_tet_mesh(
             correct_surface_orientation=True,
             manifold_surface=True,
-            # use_input_for_wn=True,
+            use_input_for_wn=False,
         )
         tet_indices = np.array(tet_indices).flatten().tolist()
 

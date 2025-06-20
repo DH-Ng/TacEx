@@ -233,7 +233,7 @@ class BallRollingEnvCfg(DirectRLEnvCfg):
     )
     gelpad_cfg = UipcObjectCfg(
         prim_path="/World/envs/env_.*/Robot/gelsight_mini_gelpad",
-        mesh_cfg=mesh_cfg,
+        # mesh_cfg=mesh_cfg,
         constitution_cfg=UipcObjectCfg.StableNeoHookeanCfg()
     )
     
@@ -284,7 +284,7 @@ class BallRollingEnvCfg(DirectRLEnvCfg):
     uipc_sim = UipcSimCfg(
         # logger_level="Info"
         contact=UipcSimCfg.Contact(
-            d_hat=0.0005
+            d_hat=0.0001
         )
     )
 

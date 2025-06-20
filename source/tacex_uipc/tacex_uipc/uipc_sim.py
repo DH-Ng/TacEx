@@ -49,14 +49,22 @@ class UipcSimCfg:
 
         use_adaptive_tol: bool = False
 
+        # convergence tolerances
         velocity_tol: float = 0.05
-        """Convergence tolerance
+        """Convergence tolerance 1)
         max(dx*dt) <= velocity_tol
         """
 
-        ccd_tol = 1.0
-        """Convergence tolerance
+        ccd_tol: float = 1.0
+        """Convergence tolerance 2)
         ccd_toi >= ccd_tol
+        """
+
+        transrate_tol: float = 0.1 / 1.0
+        """Convergence tolerance 3)
+        max dF <=  dF <= transform_tol * dt
+        
+        e.g. 0.1/1.0 = 10%/s change in transform
         """
     newton: Newton = Newton()
 
@@ -101,7 +109,7 @@ class UipcSimCfg:
 
     collision_detection_method: str = "linear_bvh"
     """
-    Options: linear_bvh
+    Options: linear_bvh, informative_linear_bvh
     """
 
     diff_sim: bool = False
@@ -159,12 +167,13 @@ class UipcSim():
             "ccd_tol": self.cfg.newton.ccd_tol,
             "max_iter": self.cfg.newton.max_iter,
             "use_adaptive_tol": self.cfg.newton.use_adaptive_tol,
-            "velocity_tol": self.cfg.newton.velocity_tol
+            "velocity_tol": self.cfg.newton.velocity_tol,
+            "transrate_tol": self.cfg.newton.transrate_tol
         }
 
 
         self.scene = Scene(uipc_config)
-        
+
         # create ground
         ground_obj = self.scene.objects().create("ground")
         g = ground(self.cfg.ground_height, self.cfg.ground_normal)
@@ -204,26 +213,55 @@ class UipcSim():
         fem_system = self._system_vertex_offsets["uipc::backend::cuda::FiniteElementMethod"]
         abd_system = self._system_vertex_offsets["uipc::backend::cuda::AffineBodyDynamics"]
         
-        #todo figure out how we always get the correct order -> for now we just assume FEM first, then abd
-        #? another idea might be to use the coindices mapping from global_vertex_manager and use it to create mapping for local -> global
-        self._system_vertex_offsets["uipc::backend::cuda::GlobalVertexManager"] += fem_system[1:] # append without 0
-        print("after fem ", self._system_vertex_offsets["uipc::backend::cuda::GlobalVertexManager"])        
+        # #todo figure out how we always get the correct order -> for now we just assume FEM first, then abd
+        # #? another idea might be to use the coindices mapping from global_vertex_manager and use it to create mapping for local -> global
+        # self._system_vertex_offsets["uipc::backend::cuda::GlobalVertexManager"] += fem_system[1:] # append without 0
+        # print("after fem ", self._system_vertex_offsets["uipc::backend::cuda::GlobalVertexManager"])        
         
-        # # +1 for total count, like uipc does
-        self._system_vertex_offsets["uipc::backend::cuda::GlobalVertexManager"].append(self._system_vertex_offsets["uipc::backend::cuda::GlobalVertexManager"][-1] + 1)
+        # # # +1 for total count, like uipc does
+        # self._system_vertex_offsets["uipc::backend::cuda::GlobalVertexManager"].append(self._system_vertex_offsets["uipc::backend::cuda::GlobalVertexManager"][-1] + 1)
 
-        # add offset from previous system (FEM system)
+        # # add offset from previous system (FEM system)
+        # global_abd_system = [idx+self._system_vertex_offsets["uipc::backend::cuda::GlobalVertexManager"][-1] for idx in abd_system[1:]]
+        # self._system_vertex_offsets["uipc::backend::cuda::GlobalVertexManager"] += global_abd_system
+        
+        # print("after abd ", self._system_vertex_offsets["uipc::backend::cuda::GlobalVertexManager"])
+
+        # # for each obj, compute the global_system_id
+        # for uipc_obj in self.uipc_objects:
+        #     global_id = uipc_obj.local_system_id
+        #     if uipc_obj._system_name == "uipc::backend::cuda::AffineBodyDynamics":
+        #         global_id += len(fem_system) # cause at the end of the FEM system, we add an additional index, so ABD indices of the offsets are shifted by amount of FEM indices -1
+        #     print("global id ", global_id)
+        #     uipc_obj.global_system_id = global_id
+
+        #todo figure out how we always get the correct order -> for now we just assume something(ground?) first, then ABD and then FEM system
+        #? another idea might be to use the coindices mapping from global_vertex_manager and use it to create mapping for local -> global
+        # +1 for total count, like uipc does -> first system is the interABD system I suppose? #todo check if really the case, once docs are updated
+        #? or is it just due to the ground?
+        self._system_vertex_offsets["uipc::backend::cuda::GlobalVertexManager"].append(1)
+
+        # second system is the abd system
         global_abd_system = [idx+self._system_vertex_offsets["uipc::backend::cuda::GlobalVertexManager"][-1] for idx in abd_system[1:]]
         self._system_vertex_offsets["uipc::backend::cuda::GlobalVertexManager"] += global_abd_system
+        print("after abd ", self._system_vertex_offsets["uipc::backend::cuda::GlobalVertexManager"])        
         
-        print("after abd ", self._system_vertex_offsets["uipc::backend::cuda::GlobalVertexManager"])
+        # add offset from previous system (ABD) to the next system (FEM)
+        global_fem_system = [idx+self._system_vertex_offsets["uipc::backend::cuda::GlobalVertexManager"][-1] for idx in fem_system[1:]]
+        self._system_vertex_offsets["uipc::backend::cuda::GlobalVertexManager"] += global_fem_system
+        
+        print("after fem ", self._system_vertex_offsets["uipc::backend::cuda::GlobalVertexManager"])
 
-        # for each obj, compute the global_system_id
+        #! ehh, pretty complicated/convoluted I would say, can we simplify this?
+        # for each obj, compute the global_system_id -> used to infer the objects vertex_offset in the global system
         for uipc_obj in self.uipc_objects:
-            global_id = uipc_obj.local_system_id
             if uipc_obj._system_name == "uipc::backend::cuda::AffineBodyDynamics":
-                global_id += len(fem_system) # cause at the end of the FEM system, we add an additional index, so ABD indices of the offsets are shifted by amount of FEM indices -1
-            print("global id ", global_id)
+                global_id = uipc_obj.local_system_id + 1 # +1, cause uipc global offsets start with 0,1, and comes ABD-sys, FEM-sys offsets #todo adjust, once we find out why it starts with 0,1
+            
+            if uipc_obj._system_name == "uipc::backend::cuda::FiniteElementMethod":# since FEM system comes after ABD syste,
+                global_id = uipc_obj.local_system_id + len(abd_system) # fem system offsets are behind the number of objects in the abd system in the global system
+            
+            print(f"{uipc_obj.cfg.prim_path} has global id {global_id}")
             uipc_obj.global_system_id = global_id
 
     def step(self):

@@ -141,6 +141,9 @@ class UipcObject(AssetBase):
                 tet_indices = prim_children[0].GetAttribute("tet_indices").Get()
                 surf_points = np.array(prim_children[0].GetAttribute("tet_surf_points").Get())
                 tet_surf_indices = prim_children[0].GetAttribute("tet_surf_indices").Get()
+
+                if tet_indices is None:
+                    raise Exception(f"No precomputed tet mesh data found for prim at {usd_mesh_path}")
             else:
                 mesh_gen = MeshGenerator(config=self.cfg.mesh_cfg)
                 if type(self.cfg.mesh_cfg) == TetMeshCfg:
@@ -150,7 +153,8 @@ class UipcObject(AssetBase):
             tf_world = np.array(omni.usd.get_world_transform_matrix(usd_mesh))
             tet_points_world = tf_world.T @ np.vstack((tet_points.T, np.ones(tet_points.shape[0])))
             tet_points_world = (tet_points_world[:-1].T)
-
+            print("tetpoints ", tet_points_world[:2])
+            
             # uipc wants 2D array
             tet_indices = np.array(tet_indices).reshape(-1,4)
             tet_surf_indices = np.array(tet_surf_indices).reshape(-1,3)
@@ -512,8 +516,8 @@ class UipcObject(AssetBase):
         local_vertex_offset = self._uipc_sim._system_vertex_offsets[self._system_name][self.local_system_id-1]
         print("system ", self._system_name)
         print("local sys id ", self.local_system_id)
-        print("global idx ", global_vertex_offset)
-        print("local idx ", local_vertex_offset)
+        print("global vertex offset ", global_vertex_offset)
+        print("local vertex offset ", local_vertex_offset)
         print("vertex count ", self._vertex_count)
         print("")
         if self._system_name == "uipc::backend::cuda::AffineBodyDynamics":
