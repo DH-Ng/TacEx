@@ -136,7 +136,7 @@ def main():
     mesh_cfg = TetMeshCfg(
         stop_quality=8,
         max_its=100,
-        edge_length_r=0.05,
+        edge_length_r=0.1,
         # epsilon_r=0.01
     )
     print("Mesh cfg ", mesh_cfg)

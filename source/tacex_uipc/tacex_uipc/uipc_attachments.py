@@ -7,8 +7,10 @@ from pxr import UsdGeom, Usd, Sdf, PhysxSchema, UsdPhysics, Gf, UsdShade, Vt
 
 import numpy as np
 import torch
+import re
+from typing import TYPE_CHECKING
 
-
+import isaaclab.sim as sim_utils
 
 from isaaclab.utils.math import transform_points
 import isaaclab.utils.math as math_utils
@@ -19,11 +21,12 @@ try:
 except:
     draw = None
 
-from tacex_uipc import UipcObject
+if TYPE_CHECKING:
+    from tacex_uipc.uipc_attachments import UipcObject
 
 class UipcIsaacAttachments():
-
-    def __init__(self, isaac_rigid_object, uipc_object: UipcObject) -> None: 
+    #todo fix init properly
+    def __init__(self, isaac_rigid_object=None, uipc_object=None) -> None: 
         self.isaac_rigid_object = isaac_rigid_object
         self.uipc_object: UipcObject = uipc_object
         
@@ -140,14 +143,26 @@ class UipcIsaacAttachments():
             idx (list): List of vertex indices in GIPC for the attachment points
             attachment_points_positions (list[np.array]): List of positions (x,y,z) for the attachment points. 
         """
-        print("Creating Uipc x Isaac attachments for ", isaac_mesh_path)
+        print(f"Creating Uipc x Isaac attachments for {isaac_mesh_path}")
         # force Physx to cook everything in the scene so it get cached
         get_physx_interface().force_load_physics_from_usd()
-        stage = omni.usd.get_context().get_stage()
-        init_prim = stage.GetPrimAtPath(isaac_mesh_path)
+        # stage = omni.usd.get_context().get_stage()
+        # init_prim = stage.GetPrimAtPath(isaac_mesh_path)
         #print("init prim ",init_prim)
-        pose = omni.usd.get_world_transform_matrix(init_prim) #omni.usd.utils.get_world_transform_matrix(init_prim)
 
+        # check if base asset path is valid
+        # note: currently the spawner does not work if there is a regex pattern in the leaf
+        #   For example, if the prim path is "/World/Robot_[1,2]" since the spawner will not
+        #   know which prim to spawn. This is a limitation of the spawner and not the asset.
+        asset_path = isaac_mesh_path.split("/")[-1]
+        asset_path_is_regex = re.match(r"^[a-zA-Z0-9/_]+$", asset_path) is None
+        # check that spawn was successful
+        matching_prims = sim_utils.find_matching_prims(isaac_mesh_path)
+        if len(matching_prims) == 0:
+            raise RuntimeError(f"Could not find prim with path {isaac_mesh_path}.")
+        init_prim = matching_prims[0]
+
+        pose = omni.usd.get_world_transform_matrix(init_prim) #omni.usd.utils.get_world_transform_matrix(init_prim)
         obj_position = pose.ExtractTranslation()
         obj_position = np.array([obj_position])
 
@@ -180,7 +195,7 @@ class UipcIsaacAttachments():
             hitInfo = get_physx_scene_query_interface().sweep_sphere_closest(radius=sphere_radius, origin=v, dir=ray_dir, distance=max_dist, bothSides=True)
             if hitInfo["hit"]:
                 print("hiiiit, ", hitInfo["collision"])
-                if isaac_mesh_path in hitInfo["collision"] : # prevent attaching to unrelated geometry
+                if str(init_prim.GetPath()) in hitInfo["collision"] : # prevent attaching to unrelated geometry
                     attachment_points_positions.append(v)
                     # idx.append(i+min_vertex_idx) unlike the gipc simulation, we use the object specific idx here
                     idx.append(i)
@@ -192,7 +207,7 @@ class UipcIsaacAttachments():
                     offset = offset.cpu().numpy()
                     attachment_offsets.append(offset)
 
-        get_physx_interface().release_physics_objects()
+        #get_physx_interface().release_physics_objects() #! using this in standalone script, breaks sim
         
         # print(f"Number of attachment points per obj '{self.objects_gipc.name}': {self.num_attachment_points_per_obj}")
 

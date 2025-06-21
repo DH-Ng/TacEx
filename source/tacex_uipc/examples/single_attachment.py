@@ -26,7 +26,9 @@ import numpy as np
 from isaacsim.core.utils.stage import get_current_stage
 from isaacsim.core.utils.torch.transformations import tf_combine, tf_inverse, tf_vector
 from isaacsim.core.prims import XFormPrim
-from pxr import UsdGeom
+from pxr import UsdGeom, Usd
+import pxr
+import omni.usd
 
 import isaaclab.sim as sim_utils
 from isaaclab.actuators.actuator_cfg import ImplicitActuatorCfg
@@ -58,7 +60,7 @@ from isaaclab.controllers.differential_ik_cfg import DifferentialIKControllerCfg
 from isaaclab.controllers.differential_ik import DifferentialIKController
 import isaaclab.utils.math as math_utils
 
-from tacex_assets.robots.franka.franka_gsmini_single_adapter_rigid import FRANKA_PANDA_ARM_GSMINI_SINGLE_ADAPTER_HIGH_PD_CFG
+from tacex_assets.robots.franka.franka_gsmini_single_adapter_uipc import FRANKA_PANDA_ARM_GSMINI_SINGLE_ADAPTER_HIGH_PD_CFG
 from tacex_assets import TACEX_ASSETS_DATA_DIR
 from tacex_assets.sensors.gelsight_mini.gelsight_mini_cfg import GelSightMiniCfg
 
@@ -73,7 +75,7 @@ from pathlib import Path
 import json
 import platform
 
-from tacex_uipc import UipcSim, UipcSimCfg, UipcObject, UipcObjectCfg, UipcRLEnv
+from tacex_uipc import UipcSim, UipcSimCfg, UipcObject, UipcObjectCfg, UipcRLEnv, UipcIsaacAttachments
 from tacex_uipc.utils import TetMeshCfg
 
 class CustomEnvWindow(BaseEnvWindow):
@@ -127,6 +129,14 @@ class BallRollingEnvCfg(DirectRLEnvCfg):
             dynamic_friction=5.0,
             restitution=0.0,
         ),
+    )
+    
+    uipc_sim = UipcSimCfg(
+        # logger_level="Info"
+        ground_height=0.0025,
+        contact=UipcSimCfg.Contact(
+            d_hat=0.0001
+        )
     )
 
     # scene
@@ -203,23 +213,12 @@ class BallRollingEnvCfg(DirectRLEnvCfg):
         prim_path="/World/envs/env_.*/ball",
         init_state=AssetBaseCfg.InitialStateCfg(pos=[0.5, 0, 0.15]), #rot=(0.72,-0.3,0.42,-0.45)
         spawn=sim_utils.UsdFileCfg(
-            # usd_path="/workspace/tacex/source/tacex_uipc/examples/assets/ball.usd",
-            usd_path=f"{TACEX_ASSETS_DATA_DIR}/Props/ball_wood.usd",
+            usd_path="/workspace/tacex/source/tacex_assets/tacex_assets/data/Sensors/GelSight_Mini/Gelpad_low_res.usd",
+            # usd_path=f"{TACEX_ASSETS_DATA_DIR}/Props/ball_wood.usd",
         ),
         mesh_cfg=mesh_cfg,
         constitution_cfg=UipcObjectCfg.StableNeoHookeanCfg()
     )
-    # tet_cube_asset_path = "/workspace/tacex/source/tacex_uipc/examples/assets/cube.usd"
-    # ball = UipcObjectCfg(
-    #     prim_path="/World/envs/env_.*/ball",
-    #     init_state=AssetBaseCfg.InitialStateCfg(pos=[0.5, 0, 1.25]), #rot=(0.72,-0.3,0.42,-0.45)
-    #     spawn=sim_utils.UsdFileCfg(
-    #         usd_path=str(tet_cube_asset_path),
-    #         scale=(1.05, 1.05, 1.05)
-    #     ),
-    #     mesh_cfg=mesh_cfg,
-    #     constitution_cfg=UipcObjectCfg.StableNeoHookeanCfg()
-    # )
 
     robot: ArticulationCfg = FRANKA_PANDA_ARM_GSMINI_SINGLE_ADAPTER_HIGH_PD_CFG.replace(
         prim_path="/World/envs/env_.*/Robot",
@@ -234,7 +233,10 @@ class BallRollingEnvCfg(DirectRLEnvCfg):
     gelpad_cfg = UipcObjectCfg(
         prim_path="/World/envs/env_.*/Robot/gelsight_mini_gelpad",
         # mesh_cfg=mesh_cfg,
-        constitution_cfg=UipcObjectCfg.StableNeoHookeanCfg()
+        constitution_cfg=UipcObjectCfg.StableNeoHookeanCfg(),
+        attachment_cfg=UipcObjectCfg.AttachmentCfg(
+            rigid_prim_path="/World/envs/env_.*/Robot/gelsight_mini_case"
+        )
     )
     
     gsmini = GelSightMiniCfg(
@@ -261,7 +263,7 @@ class BallRollingEnvCfg(DirectRLEnvCfg):
 
     # # frame for setting goal position
     # frame = AssetBaseCfg(
-    #     prim_path="/World/envs/env_.*/goal_frame",
+    #     prim_path="/World/envs/env_.*/goal",
     #     init_state=AssetBaseCfg.InitialStateCfg(pos=[0.5, 0, 0.15], rot=[0, 1, 0, 0]),
     #     spawn=sim_utils.UsdFileCfg(
     #         usd_path=f"{ISAAC_NUCLEUS_DIR}/Props/UIElements/frame_prim.usd",
@@ -280,13 +282,6 @@ class BallRollingEnvCfg(DirectRLEnvCfg):
     action_space = 0 
     observation_space = 0 
     state_space = 0
-
-    uipc_sim = UipcSimCfg(
-        # logger_level="Info"
-        contact=UipcSimCfg.Contact(
-            d_hat=0.0001
-        )
-    )
 
 class BallRollingEnv(UipcRLEnv):
     cfg: BallRollingEnvCfg
@@ -388,7 +383,7 @@ class BallRollingEnv(UipcRLEnv):
             visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(1.0, 0.0, 0.0)),
         )
         goal_cfg.func(
-            "/World/envs/env_.*/goal_frame",
+            "/World/envs/env_.*/goal",
             goal_cfg,
             translation=[0.5, 0, 0.15],
             orientation=[0, 1, 0, 0] #! needs to have this orientation to match the ee_offset -> tried to set it directly in _offset_rot, but ik didnt work then
@@ -398,9 +393,39 @@ class BallRollingEnv(UipcRLEnv):
         light_cfg = sim_utils.DomeLightCfg(intensity=2000.0, color=(0.75, 0.75, 0.75))
         light_cfg.func("/World/Light", light_cfg)
 
-        # # gelpad simulated via uipc
+        ### UIPC simulation setup
+
+        # gelpad simulated via uipc
         self._uipc_gelpad = UipcObject(self.cfg.gelpad_cfg, self.uipc_sim)
+        
         self.ball = UipcObject(self.cfg.ball, self.uipc_sim)
+
+        # # compute attachment between sensor case and gelpad
+        # isaac_mesh_path = "/World/envs/env_0/Robot/gelsight_mini_case"
+        # tet_mesh_path = "/World/envs/env_0/Robot/gelsight_mini_gelpad/mesh"
+
+        # # extract data of tet mesh 
+        # stage = omni.usd.get_context().get_stage()
+        # tet_prim = stage.GetPrimAtPath(pxr.Sdf.Path(tet_mesh_path))
+        # tet_points = np.array(tet_prim.GetAttribute("tet_points").Get())
+        # tet_indices = tet_prim.GetAttribute("tet_indices").Get()
+
+        # # convert to world coordinates
+        # tf_world = np.array(omni.usd.get_world_transform_matrix(tet_prim))
+        # print("tf world ", tf_world)
+        # world_tet_points = tf_world.T @ np.vstack((tet_points.T, np.ones(tet_points.shape[0])))
+        # world_tet_points = (world_tet_points[:-1].T)
+
+        # # disable collision of the mesh that should be simulated by uipc -> otherwise raycasts are only detecting the tet mesh
+        # try:
+        #     collision_enabled = tet_prim.GetAttribute("physics:collisionEnabled")	
+        #     collision_enabled.Set(False)
+        # except:
+        #     pass
+
+        # attachment_offsets, idx = UipcIsaacAttachments.compute_attachment_data(isaac_mesh_path, world_tet_points, tet_indices)
+
+
 
     #MARK: pre-physics step calls
         
@@ -408,6 +433,7 @@ class BallRollingEnv(UipcRLEnv):
         self._ik_controller.set_command(self.ik_commands)
 
     def _apply_action(self):
+        return
         # obtain quantities from simulation
         ee_pos_curr_b, ee_quat_curr_b = self._compute_frame_pose()
         joint_pos = self._robot.data.joint_pos[:, :]
@@ -593,7 +619,7 @@ def run_simulator(env: BallRollingEnv):
 
     env.reset()
 
-    env.goal_prim_view = XFormPrim(prim_paths_expr="/World/envs/env_.*/goal_frame", name="goal_frames", usd=True)
+    env.goal_prim_view = XFormPrim(prim_paths_expr="/World/envs/env_.*/goal", name="goals", usd=True)
         
     # Simulation loop
     while simulation_app.is_running():

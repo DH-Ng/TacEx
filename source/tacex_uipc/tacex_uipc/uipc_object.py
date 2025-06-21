@@ -8,6 +8,7 @@ from __future__ import annotations
 import torch
 from collections.abc import Sequence
 from typing import TYPE_CHECKING
+import re
 
 import omni.log
 import omni.physics.tensors.impl.api as physx
@@ -48,6 +49,7 @@ import warp as wp
 wp.init()
 
 from tacex_uipc.utils import TetMeshCfg, MeshGenerator
+from tacex_uipc.uipc_attachments import UipcIsaacAttachments
 
 if TYPE_CHECKING:
     from tacex_uipc import UipcSim
@@ -84,6 +86,15 @@ class UipcObjectCfg(AssetBaseCfg):
         """
     
     constitution_cfg: AffineBodyConstitutionCfg | StableNeoHookeanCfg = None
+
+    @configclass
+    class AttachmentCfg:
+        rigid_prim_path: str = ""
+
+        attachment_points_radius: float = 5e-4
+
+    attachment_cfg: AttachmentCfg = None
+
 
 class UipcObject(AssetBase):
     """A rigid object asset class.
@@ -143,6 +154,7 @@ class UipcObject(AssetBase):
                 tet_surf_indices = prim_children[0].GetAttribute("tet_surf_indices").Get()
 
                 if tet_indices is None:
+                    # cannot use default config, since we dont know what type of mesh it is (tet or tri mesh?) #todo should we create different object classes? One for tet meshes, one for cloth etc.
                     raise Exception(f"No precomputed tet mesh data found for prim at {usd_mesh_path}")
             else:
                 mesh_gen = MeshGenerator(config=self.cfg.mesh_cfg)
@@ -153,7 +165,6 @@ class UipcObject(AssetBase):
             tf_world = np.array(omni.usd.get_world_transform_matrix(usd_mesh))
             tet_points_world = tf_world.T @ np.vstack((tet_points.T, np.ones(tet_points.shape[0])))
             tet_points_world = (tet_points_world[:-1].T)
-            print("tetpoints ", tet_points_world[:2])
             
             # uipc wants 2D array
             tet_indices = np.array(tet_indices).reshape(-1,4)
@@ -211,11 +222,18 @@ class UipcObject(AssetBase):
             )
 
             self._system_name = ""
-
             self.local_system_id = 0
-
             self.global_system_id = 0
             
+            print("Test, ", self.cfg.attachment_cfg)
+            if self.cfg.attachment_cfg is not None:
+                print("Computing Attachment with ", self.cfg.attachment_cfg.rigid_prim_path)
+                self.attachment = UipcIsaacAttachments()
+                tet_points = tet_points_world
+                tet_indices = tet_indices
+                attachment_offsets, idx = self.attachment.compute_attachment_data(self.cfg.attachment_cfg.rigid_prim_path, tet_points, tet_indices, self.cfg.attachment_cfg.attachment_points_radius)
+            else:
+                self.attachment = None
 
     """
     Properties
@@ -250,7 +268,7 @@ class UipcObject(AssetBase):
 
         """
         return self._uipc_sim
-
+     
     """
     Operations.
     """
@@ -530,6 +548,7 @@ class UipcObject(AssetBase):
     """
 
     def _initialize_impl(self):
+        # enable contact for uipc meshes etc.
         mesh = self.uipc_meshes[0] #todo code properly cloned envs (i.e. for instanced objects?)
 
         # create constitution    
@@ -574,7 +593,7 @@ class UipcObject(AssetBase):
         geom = self._uipc_sim.scene.geometries()
         geo_slot, geo_slot_rest = geom.find(self.obj_id)
         self.init_vertex_pos = torch.tensor(geo_slot.geometry().positions().view().copy().reshape(-1,3), device=self.device)
-
+            
         # log information the uipc body
         omni.log.info(f"UIPC body initialized at: {self.cfg.prim_path}.")
         omni.log.info(f"Number of instances: {self.num_instances}")
@@ -588,7 +607,7 @@ class UipcObject(AssetBase):
         
         # add this object to the list of all uipc objects in the world
         self._uipc_sim.uipc_objects.append(self)
-
+            
     def _create_buffers(self):
         """Create buffers for storing data."""
         # constants
@@ -617,7 +636,6 @@ class UipcObject(AssetBase):
         )
         default_root_state = torch.tensor(default_root_state, dtype=torch.float, device=self.device)
         #self._data.default_root_state = default_root_state.repeat(self.num_instances, 1)
-
 
     """
     Internal simulation callbacks.

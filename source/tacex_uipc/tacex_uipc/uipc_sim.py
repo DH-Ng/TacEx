@@ -213,28 +213,6 @@ class UipcSim():
         fem_system = self._system_vertex_offsets["uipc::backend::cuda::FiniteElementMethod"]
         abd_system = self._system_vertex_offsets["uipc::backend::cuda::AffineBodyDynamics"]
         
-        # #todo figure out how we always get the correct order -> for now we just assume FEM first, then abd
-        # #? another idea might be to use the coindices mapping from global_vertex_manager and use it to create mapping for local -> global
-        # self._system_vertex_offsets["uipc::backend::cuda::GlobalVertexManager"] += fem_system[1:] # append without 0
-        # print("after fem ", self._system_vertex_offsets["uipc::backend::cuda::GlobalVertexManager"])        
-        
-        # # # +1 for total count, like uipc does
-        # self._system_vertex_offsets["uipc::backend::cuda::GlobalVertexManager"].append(self._system_vertex_offsets["uipc::backend::cuda::GlobalVertexManager"][-1] + 1)
-
-        # # add offset from previous system (FEM system)
-        # global_abd_system = [idx+self._system_vertex_offsets["uipc::backend::cuda::GlobalVertexManager"][-1] for idx in abd_system[1:]]
-        # self._system_vertex_offsets["uipc::backend::cuda::GlobalVertexManager"] += global_abd_system
-        
-        # print("after abd ", self._system_vertex_offsets["uipc::backend::cuda::GlobalVertexManager"])
-
-        # # for each obj, compute the global_system_id
-        # for uipc_obj in self.uipc_objects:
-        #     global_id = uipc_obj.local_system_id
-        #     if uipc_obj._system_name == "uipc::backend::cuda::AffineBodyDynamics":
-        #         global_id += len(fem_system) # cause at the end of the FEM system, we add an additional index, so ABD indices of the offsets are shifted by amount of FEM indices -1
-        #     print("global id ", global_id)
-        #     uipc_obj.global_system_id = global_id
-
         #todo figure out how we always get the correct order -> for now we just assume something(ground?) first, then ABD and then FEM system
         #? another idea might be to use the coindices mapping from global_vertex_manager and use it to create mapping for local -> global
         # +1 for total count, like uipc does -> first system is the interABD system I suppose? #todo check if really the case, once docs are updated
