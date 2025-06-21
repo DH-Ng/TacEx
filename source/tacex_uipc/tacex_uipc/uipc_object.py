@@ -49,7 +49,7 @@ import warp as wp
 wp.init()
 
 from tacex_uipc.utils import TetMeshCfg, MeshGenerator
-from tacex_uipc.uipc_attachments import UipcIsaacAttachments
+from tacex_uipc.uipc_attachments import UipcIsaacAttachments, UipcIsaacAttachmentsCfg
 
 if TYPE_CHECKING:
     from tacex_uipc import UipcSim
@@ -87,13 +87,7 @@ class UipcObjectCfg(AssetBaseCfg):
     
     constitution_cfg: AffineBodyConstitutionCfg | StableNeoHookeanCfg = None
 
-    @configclass
-    class AttachmentCfg:
-        rigid_prim_path: str = ""
-
-        attachment_points_radius: float = 5e-4
-
-    attachment_cfg: AttachmentCfg = None
+    attachment_cfg: UipcIsaacAttachmentsCfg = None
 
 
 class UipcObject(AssetBase):
@@ -222,18 +216,53 @@ class UipcObject(AssetBase):
                 self._uipc_sim._surf_vertex_offsets[-1] + num_surf_points
             )
 
-            self._system_name = ""
-            self.local_system_id = 0
-            self.global_system_id = 0
+            # enable contact for uipc meshes etc.
+            mesh = self.uipc_meshes[0] #todo code properly cloned envs (i.e. for instanced objects?)
+
+            # create constitution    
+            constitution_types = {
+                UipcObjectCfg.AffineBodyConstitutionCfg: AffineBodyConstitution,
+                UipcObjectCfg.StableNeoHookeanCfg: StableNeoHookean,
+            }
+            self.constitution = constitution_types[type(self.cfg.constitution_cfg)]()
+
+            if type(self.constitution) == StableNeoHookean:
+                youngs = self.cfg.constitution_cfg.youngs_modulus
+                poisson = self.cfg.constitution_cfg.poisson_rate
+                moduli = ElasticModuli.youngs_poisson(youngs * MPa, poisson)
+                # apply the constitution and contact model to the base mesh
+                self.constitution.apply_to(mesh, moduli, mass_density=self.cfg.mass_density)
+                #needed for writing vertex position to sim
+                self._system_name = "uipc::backend::cuda::FiniteElementMethod"
+            elif type(self.constitution) == AffineBodyConstitution:
+                stiffness = self.cfg.constitution_cfg.m_kappa
+                self.constitution.apply_to(mesh, stiffness * MPa, mass_density=self.cfg.mass_density) 
+                self._system_name = "uipc::backend::cuda::AffineBodyDynamics"
+
+            # update local vertex offset of the subsystem
+            self._uipc_sim._system_vertex_offsets[self._system_name].append(
+                self._uipc_sim._system_vertex_offsets[self._system_name][-1] + self._vertex_count
+            )
+            self.local_system_id = len(self._uipc_sim._system_vertex_offsets[self._system_name])-1
+            print("local id ", self.local_system_id)
+
+            # apply the default contact model to the base mesh
+            default_element = self._uipc_sim.scene.contact_tabular().default_element()
+            default_element.apply_to(mesh)
 
             if self.cfg.attachment_cfg is not None:
                 print("Computing Attachment with ", self.cfg.attachment_cfg.rigid_prim_path)
-                self.attachment = UipcIsaacAttachments()
+                self.attachment = UipcIsaacAttachments(self.cfg.attachment_cfg)
                 tet_points = tet_points_world
                 tet_indices = tet_indices
                 attachment_offsets, idx = self.attachment.compute_attachment_data(self.cfg.attachment_cfg.rigid_prim_path, tet_points, tet_indices, self.cfg.attachment_cfg.attachment_points_radius)
+
+                self.attachment._apply_soft_position_constraint(self)
             else:
                 self.attachment = None
+
+            # will be updated once _uipc_sim.setup_sim() is called
+            self.global_system_id = 0
 
     """
     Properties
@@ -548,47 +577,20 @@ class UipcObject(AssetBase):
     """
 
     def _initialize_impl(self):
-        # enable contact for uipc meshes etc.
-        mesh = self.uipc_meshes[0] #todo code properly cloned envs (i.e. for instanced objects?)
 
-        # create constitution    
-        constitution_types = {
-            UipcObjectCfg.AffineBodyConstitutionCfg: AffineBodyConstitution,
-            UipcObjectCfg.StableNeoHookeanCfg: StableNeoHookean,
-        }
-        self.constitution = constitution_types[type(self.cfg.constitution_cfg)]()
+        # create objects in the uipc scene for the meshes
+        mesh = self.uipc_meshes[0]
 
-        if type(self.constitution) == StableNeoHookean:
-            youngs = self.cfg.constitution_cfg.youngs_modulus
-            poisson = self.cfg.constitution_cfg.poisson_rate
-            moduli = ElasticModuli.youngs_poisson(youngs * MPa, poisson)
-            # apply the constitution and contact model to the base mesh
-            self.constitution.apply_to(mesh, moduli, mass_density=self.cfg.mass_density)
-            #needed for writing vertex position to sim
-            self._system_name = "uipc::backend::cuda::FiniteElementMethod"
-        elif type(self.constitution) == AffineBodyConstitution:
-            stiffness = self.cfg.constitution_cfg.m_kappa
-            self.constitution.apply_to(mesh, stiffness * MPa, mass_density=self.cfg.mass_density) 
-            self._system_name = "uipc::backend::cuda::AffineBodyDynamics"
-
-        # update local vertex offset of the subsystem
-        self._uipc_sim._system_vertex_offsets[self._system_name].append(
-            self._uipc_sim._system_vertex_offsets[self._system_name][-1] + self._vertex_count
-        )
-        self.local_system_id = len(self._uipc_sim._system_vertex_offsets[self._system_name])-1
-        print("local id ", self.local_system_id)
-
-        # apply the default contact model to the base mesh
-        default_element = self._uipc_sim.scene.contact_tabular().default_element()
-        default_element.apply_to(mesh)
-
-        # create objects
         obj = self._uipc_sim.scene.objects().create(self.cfg.prim_path)
         self.uipc_scene_objects.append(obj)
 
         obj_geo_slot, _ = obj.geometries().create(mesh)
         self.obj_id = obj_geo_slot.id()
         print(f"obj id of {self.cfg.prim_path}: {self.obj_id} ")
+
+        # After objects in uipc_scene were created for the mesh: Create the animation 
+        if self.cfg.attachment_cfg is not None:
+            self.attachment._create_animation(self)
 
         # save initial world vertex positions        
         geom = self._uipc_sim.scene.geometries()
@@ -608,6 +610,7 @@ class UipcObject(AssetBase):
         
         # add this object to the list of all uipc objects in the world
         self._uipc_sim.uipc_objects.append(self)
+                
             
     def _create_buffers(self):
         """Create buffers for storing data."""

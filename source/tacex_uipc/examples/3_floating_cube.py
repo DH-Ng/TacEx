@@ -103,6 +103,8 @@ def main():
 
     # For Animation
     spc = SoftPositionConstraint()
+    # `apply` has to happen **before** the uipc_scene_object is created! 
+    # i.e. before UipcObject._initialize_impl() is called
     spc.apply_to(cube.uipc_meshes[0], 100) # constraint strength ratio
 
     # tet_ball_asset_path = pathlib.Path(__file__).parent.resolve() / "assets" / "ball.usd"
@@ -121,11 +123,13 @@ def main():
     # Play the simulator
     sim.reset()
 
-    # Create Animation
+    # Create Animation -> has to happen after the objects were created in the
+    # uipc scene, i.e. after UipcObject._initialize_impl() is called.
+    # This is the case after sim.reset().
     animator = uipc_sim.scene.animator()
     def animate_tet(info: Animation.UpdateInfo): # animation function
         geo_slots:list[GeometrySlot] = info.geo_slots()
-        geo: SimplicialComplex = geo_slots[0].geometry() # geo_slot[0] is the ground
+        geo: SimplicialComplex = geo_slots[0].geometry()
         rest_geo_slots:list[GeometrySlot] = info.rest_geo_slots()
         rest_geo:SimplicialComplex = rest_geo_slots[0].geometry()
 
@@ -147,8 +151,8 @@ def main():
 
     # only after Isaac Sim got resetted (= objects init), otherwise world init is false
     # because _initialize_impl() of the object is called in the sim.reset() method
-    # and setup_scene() relies on objects being _intialized_impl()
-    uipc_sim.setup_scene()
+    # and setup_scene() relies on objects being _initialize_impl()
+    uipc_sim.setup_sim()
 
 
     # Now we are ready!

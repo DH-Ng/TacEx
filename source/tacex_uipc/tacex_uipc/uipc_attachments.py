@@ -1,3 +1,4 @@
+from __future__ import annotations
 
 import omni
 from omni.physx import get_physx_cooking_interface, get_physx_interface, get_physx_scene_query_interface
@@ -12,6 +13,7 @@ from typing import TYPE_CHECKING
 
 import isaaclab.sim as sim_utils
 
+from isaaclab.utils import configclass
 from isaaclab.utils.math import transform_points
 import isaaclab.utils.math as math_utils
 
@@ -21,16 +23,32 @@ try:
 except:
     draw = None
 
-from uipc.constitution import SoftTransformConstraint
+from uipc.constitution import SoftPositionConstraint
+from uipc import view
+from uipc import builtin
+from uipc import Animation, Vector3
+from uipc.geometry import GeometrySlot, SimplicialComplex
 
 if TYPE_CHECKING:
     from tacex_uipc.uipc_attachments import UipcObject
 
+@configclass
+class UipcIsaacAttachmentsCfg:
+    rigid_prim_path: str = ""
+
+    attachment_points_radius: float = 5e-4
+
+    constraint_strength_ratio: float = 100
+
 class UipcIsaacAttachments():
+    cfg: UipcIsaacAttachmentsCfg
+
     #todo fix init properly
-    def __init__(self, isaac_rigid_object=None, uipc_object=None) -> None: 
-        self.isaac_rigid_object = isaac_rigid_object
-        self.uipc_object: UipcObject = uipc_object
+    def __init__(self, cfg: UipcIsaacAttachmentsCfg) -> None: 
+        self.cfg = cfg
+
+        self.isaac_rigid_object = None
+        self.uipc_object: UipcObject = None
         
         self.uipc_object_vertex_indices = []
         self.attachment_points_init_positions = []
@@ -71,9 +89,35 @@ class UipcIsaacAttachments():
             for j in range(i, self.objects_gipc.num_objects*self.num_attachment_points_per_obj):
                 draw.draw_lines([obj_center[i].cpu().numpy()], [self.new_pos[j]], [(255,255,0,0.5)], [10])
 
-    # def create(self):
-    #     soft_position_constraint = 
-    
+    def _apply_soft_position_constraint(self, uipc_object: UipcObject):
+        soft_position_constraint = SoftPositionConstraint()
+        #todo handle multiple meshes properly (currently just single mesh)
+        soft_position_constraint.apply_to(uipc_object.uipc_meshes[0], self.cfg.constraint_strength_ratio) 
+
+    def _create_animation(self, uipc_object: UipcObject):
+        animator = uipc_object._uipc_sim.scene.animator()
+        def animate_tet(info: Animation.UpdateInfo): # animation function
+            geo_slots:list[GeometrySlot] = info.geo_slots()
+            geo: SimplicialComplex = geo_slots[0].geometry()
+            rest_geo_slots:list[GeometrySlot] = info.rest_geo_slots()
+            rest_geo:SimplicialComplex = rest_geo_slots[0].geometry()
+
+            is_constrained = geo.vertices().find(builtin.is_constrained)
+            is_constrained_view = view(is_constrained)
+            aim_position = geo.vertices().find(builtin.aim_position)
+            aim_position_view = view(aim_position)
+            rest_position_view = rest_geo.positions().view()
+
+            is_constrained_view[0] = 1
+
+            t = info.dt() * info.frame()
+            theta = np.pi * t
+            z = -np.sin(theta)
+
+            aim_position_view[0] = rest_position_view[0] + Vector3.UnitZ() * z
+
+        animator.insert(uipc_object.uipc_scene_objects[0], animate_tet)
+
     def create_attachment(self, mesh_path=None, all_gipc_vertices=None):
         """_summary_
 
@@ -212,10 +256,7 @@ class UipcIsaacAttachments():
                     offset = offset.cpu().numpy()
                     attachment_offsets.append(offset)
 
-        #get_physx_interface().release_physics_objects() #! using this in standalone script, breaks sim
-        
         # print(f"Number of attachment points per obj '{self.objects_gipc.name}': {self.num_attachment_points_per_obj}")
-
         attachment_points_positions = np.array(attachment_points_positions).reshape(-1,3)
 
         # offset to later compute the `should-be` positions of the attachment point

@@ -15,6 +15,7 @@ import carb
 import carb.events
 import omni.ext
 # import omni.usd
+from omni.physx import get_physx_cooking_interface, get_physx_interface
 
 import isaacsim.core.utils.xforms as xform_utils
 from isaacsim.core.prims import XFormPrim
@@ -290,6 +291,8 @@ def _create_attachment(paths):
 
     attachment_offsets, idx = UipcIsaacAttachments.compute_attachment_data(isaac_mesh_path, world_tet_points, tet_indices)
     _create_attachment_data_attributes(tet_mesh_path, attachment_offsets, idx)
+
+    get_physx_interface().release_physics_objects()
 
 def _create_attachment_data_attributes(path, attachment_offsets, attachment_indices):
     stage = omni.usd.get_context().get_stage()

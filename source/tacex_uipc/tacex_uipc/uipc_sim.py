@@ -200,7 +200,7 @@ class UipcSim():
         self._fabric_meshes = []
         self.uipc_objects: List[UipcObject] = []
 
-    def setup_scene(self):
+    def setup_sim(self):
         self.world.init(self.scene)
         self.world.retrieve()
 

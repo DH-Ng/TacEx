@@ -121,7 +121,7 @@ def main():
     # only after Isaac Sim got resetted (= objects init), otherwise world init is false
     # because _initialize_impl() of the object is called in the sim.reset() method
     # and setup_scene() relies on objects being _intialized_impl()
-    uipc_sim.setup_scene()
+    uipc_sim.setup_sim()
 
     # Now we are ready!
     print("[INFO]: Setup complete...")

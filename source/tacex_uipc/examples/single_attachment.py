@@ -75,7 +75,7 @@ from pathlib import Path
 import json
 import platform
 
-from tacex_uipc import UipcSim, UipcSimCfg, UipcObject, UipcObjectCfg, UipcRLEnv, UipcIsaacAttachments
+from tacex_uipc import UipcSim, UipcSimCfg, UipcObject, UipcObjectCfg, UipcRLEnv, UipcIsaacAttachments, UipcIsaacAttachmentsCfg
 from tacex_uipc.utils import TetMeshCfg
 
 class CustomEnvWindow(BaseEnvWindow):
@@ -234,7 +234,7 @@ class BallRollingEnvCfg(DirectRLEnvCfg):
         prim_path="/World/envs/env_.*/Robot/gelsight_mini_gelpad",
         # mesh_cfg=mesh_cfg,
         constitution_cfg=UipcObjectCfg.StableNeoHookeanCfg(),
-        attachment_cfg=UipcObjectCfg.AttachmentCfg(
+        attachment_cfg=UipcIsaacAttachmentsCfg(
             rigid_prim_path="/World/envs/env_.*/Robot/gelsight_mini_case"
         )
     )
@@ -433,7 +433,7 @@ class BallRollingEnv(UipcRLEnv):
         self._ik_controller.set_command(self.ik_commands)
 
     def _apply_action(self):
-        return
+
         # obtain quantities from simulation
         ee_pos_curr_b, ee_quat_curr_b = self._compute_frame_pose()
         joint_pos = self._robot.data.joint_pos[:, :]

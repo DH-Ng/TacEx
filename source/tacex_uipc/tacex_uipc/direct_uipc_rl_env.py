@@ -116,7 +116,7 @@ class UipcRLEnv(DirectRLEnv):
                 # this shouldn't cause an issue since later on, users do a reset over all the environments so the lazy buffers would be reset.
                 self.scene.update(dt=self.physics_dt)
         
-        self.uipc_sim.setup_scene()
+        self.uipc_sim.setup_sim()
 
         # -- event manager used for randomization
         if self.cfg.events:
