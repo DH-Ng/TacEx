@@ -21,6 +21,8 @@ try:
 except:
     draw = None
 
+from uipc.constitution import SoftTransformConstraint
+
 if TYPE_CHECKING:
     from tacex_uipc.uipc_attachments import UipcObject
 
@@ -69,6 +71,9 @@ class UipcIsaacAttachments():
             for j in range(i, self.objects_gipc.num_objects*self.num_attachment_points_per_obj):
                 draw.draw_lines([obj_center[i].cpu().numpy()], [self.new_pos[j]], [(255,255,0,0.5)], [10])
 
+    # def create(self):
+    #     soft_position_constraint = 
+    
     def create_attachment(self, mesh_path=None, all_gipc_vertices=None):
         """_summary_
 

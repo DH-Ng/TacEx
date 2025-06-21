@@ -136,8 +136,9 @@ class UipcObject(AssetBase):
 
         self.stage = usdrt.Usd.Stage.Attach(omni.usd.get_context().get_stage_id())
         
+        self.uipc_scene_objects = []
+
         self.uipc_meshes = []
-        self.objects = []
         # setup tet meshes for uipc
         for prim in self._prim_view.prims: # todo dont loop over all prims of the view -> just take one base prim. Rather loop over the prim children?
             # need to access the mesh data of the usd prim
@@ -224,8 +225,7 @@ class UipcObject(AssetBase):
             self._system_name = ""
             self.local_system_id = 0
             self.global_system_id = 0
-            
-            print("Test, ", self.cfg.attachment_cfg)
+
             if self.cfg.attachment_cfg is not None:
                 print("Computing Attachment with ", self.cfg.attachment_cfg.rigid_prim_path)
                 self.attachment = UipcIsaacAttachments()
@@ -584,8 +584,9 @@ class UipcObject(AssetBase):
 
         # create objects
         obj = self._uipc_sim.scene.objects().create(self.cfg.prim_path)
+        self.uipc_scene_objects.append(obj)
+
         obj_geo_slot, _ = obj.geometries().create(mesh)
-        self.objects.append(obj_geo_slot)
         self.obj_id = obj_geo_slot.id()
         print(f"obj id of {self.cfg.prim_path}: {self.obj_id} ")
 

@@ -27,6 +27,22 @@
         },
         {
             "engine_aware": true,
+            "name": "uipc::backend::cuda::GlobalAnimator",
+            "strong_deps": [],
+            "valid": true,
+            "weak_deps": []
+        },
+        {
+            "engine_aware": false,
+            "name": "uipc::backend::cuda::SoftPositionConstraint",
+            "strong_deps": [
+                "uipc::backend::cuda::FiniteElementAnimator"
+            ],
+            "valid": true,
+            "weak_deps": []
+        },
+        {
+            "engine_aware": true,
             "name": "uipc::backend::cuda::GradientHessianComputer",
             "strong_deps": [],
             "valid": true,
@@ -223,6 +239,17 @@
                 "uipc::backend::cuda::GlobalVertexManager",
                 "uipc::backend::cuda::HalfPlane",
                 "uipc::backend::cuda::HalfPlaneBodyReporter"
+            ],
+            "valid": true,
+            "weak_deps": []
+        },
+        {
+            "engine_aware": false,
+            "name": "uipc::backend::cuda::FiniteElementAnimator",
+            "strong_deps": [
+                "uipc::backend::cuda::GlobalAnimator",
+                "uipc::backend::cuda::FiniteElementMethod",
+                "uipc::backend::cuda::GlobalAnimator"
             ],
             "valid": true,
             "weak_deps": []
