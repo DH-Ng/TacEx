@@ -177,7 +177,8 @@ class UipcObject(AssetBase):
             label_triangle_orient(mesh) #-> only needed when we want to export the mesh with uipc
             # flip the triangles inward for better rendering 
             mesh = flip_inward_triangles(mesh) #todo idk if this makes a difference for us
-            
+            self.uipc_meshes.append(mesh)
+              
             surf = extract_surface(mesh)
             tet_surf_points_world = surf.positions().view().reshape(-1,3)
             surf = surf.triangles().topo().view().reshape(-1).tolist()
@@ -215,19 +216,6 @@ class UipcObject(AssetBase):
             default_element = self._uipc_sim.scene.contact_tabular().default_element()
             default_element.apply_to(mesh)
 
-            if self.cfg.attachment_cfg is not None:
-                print("Computing Attachment with ", self.cfg.attachment_cfg.rigid_prim_path)
-                self.attachment = UipcIsaacAttachments(self.cfg.attachment_cfg)
-                tet_points = tet_points_world
-                tet_indices = tet_indices
-                attachment_offsets, idx = self.attachment.compute_attachment_data(self.cfg.attachment_cfg.rigid_prim_path, tet_points, tet_indices, self.cfg.attachment_cfg.attachment_points_radius)
-
-                self.attachment._apply_soft_position_constraint(self)
-            else:
-                self.attachment = None
-
-            self.uipc_meshes.append(mesh)
-
             # setup mesh updates via Fabric
             fabric_prim = self.stage.GetPrimAtPath(usdrt.Sdf.Path(usd_mesh_path))
             if not fabric_prim:
@@ -256,10 +244,6 @@ class UipcObject(AssetBase):
             # required for writing vertex positions to sim
             num_vertex_points = mesh.positions().view().shape[0]
             self._vertex_count = num_vertex_points
-
-            # self._uipc_sim._system_vertex_offsets["uipc::backend::cuda::GlobalVertexManager"].append(
-            #     self._uipc_sim._system_vertex_offsets["uipc::backend::cuda::GlobalVertexManager"][-2] + num_vertex_points
-            # )
             
             # save indices to later find corresponding points of the meshes for rendering
             num_surf_points = tet_surf_points_world.shape[0] #np.unique(tet_surf_indices)
@@ -600,10 +584,6 @@ class UipcObject(AssetBase):
         obj_geo_slot, _ = obj.geometries().create(mesh)
         self.obj_id = obj_geo_slot.id()
         print(f"obj id of {self.cfg.prim_path}: {self.obj_id} ")
-
-        # After objects in uipc_scene were created for the mesh: Create the animation 
-        if self.cfg.attachment_cfg is not None:
-            self.attachment._create_animation(self)
 
         # save initial world vertex positions        
         geom = self._uipc_sim.scene.geometries()

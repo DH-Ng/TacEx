@@ -113,7 +113,7 @@ def main():
     #     init_state=AssetBaseCfg.InitialStateCfg(pos=[0, 0, 1.0]), #rot=(0.72,-0.3,0.42,-0.45)
     #     spawn=sim_utils.UsdFileCfg(
     #         usd_path=str(tet_ball_asset_path),
-    #         scale=(1.0, 1.0, 1.0)
+    #         scale=(0.5, 0.5, 0.5)
     #     ),
     #     mesh_cfg=mesh_cfg,
     #     constitution_cfg=UipcObjectCfg.StableNeoHookeanCfg()
@@ -128,7 +128,7 @@ def main():
     # This is the case after sim.reset().
     animator = uipc_sim.scene.animator()
     def animate_tet(info: Animation.UpdateInfo): # animation function
-        geo_slots:list[GeometrySlot] = info.geo_slots()
+        geo_slots:list[GeometrySlot] = info.geo_slots() # list of geo_slots -> multiple when uipc_object has instances
         geo: SimplicialComplex = geo_slots[0].geometry()
         rest_geo_slots:list[GeometrySlot] = info.rest_geo_slots()
         rest_geo:SimplicialComplex = rest_geo_slots[0].geometry()
@@ -139,7 +139,8 @@ def main():
         aim_position_view = view(aim_position)
         rest_position_view = rest_geo.positions().view()
 
-        is_constrained_view[0] = 1
+        is_constrained_view[0] = 1 # animate first vertex of the mesh
+        is_constrained_view[1] = 1 # as well as the second vertex
 
         t = info.dt() * info.frame()
         theta = np.pi * t

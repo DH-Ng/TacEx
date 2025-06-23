@@ -75,7 +75,8 @@ from pathlib import Path
 import json
 import platform
 
-from tacex_uipc import UipcSim, UipcSimCfg, UipcObject, UipcObjectCfg, UipcRLEnv, UipcIsaacAttachments, UipcIsaacAttachmentsCfg
+from tacex_uipc import UipcSim, UipcSimCfg, UipcObject, UipcObjectCfg, UipcRLEnv
+from tacex_uipc import UipcIsaacAttachments, UipcIsaacAttachmentsCfg
 from tacex_uipc.utils import TetMeshCfg
 
 class CustomEnvWindow(BaseEnvWindow):
@@ -234,11 +235,13 @@ class BallRollingEnvCfg(DirectRLEnvCfg):
         prim_path="/World/envs/env_.*/Robot/gelsight_mini_gelpad",
         # mesh_cfg=mesh_cfg,
         constitution_cfg=UipcObjectCfg.StableNeoHookeanCfg(),
-        attachment_cfg=UipcIsaacAttachmentsCfg(
-            rigid_prim_path="/World/envs/env_.*/Robot/gelsight_mini_case"
-        )
     )
-    
+    gelpad_attachment_cfg=UipcIsaacAttachmentsCfg(
+        constraint_strength_ratio=100.0,
+        body_name="gelsight_mini_case",
+        debug_vis=False
+    )
+
     gsmini = GelSightMiniCfg(
         prim_path="/World/envs/env_.*/Robot/gelsight_mini_case",
         sensor_camera_cfg = GelSightMiniCfg.SensorCameraCfg(
@@ -399,6 +402,9 @@ class BallRollingEnv(UipcRLEnv):
         self._uipc_gelpad = UipcObject(self.cfg.gelpad_cfg, self.uipc_sim)
         
         self.ball = UipcObject(self.cfg.ball, self.uipc_sim)
+
+        # create attachment
+        self.attachment = UipcIsaacAttachments(self.cfg.gelpad_attachment_cfg, self._uipc_gelpad, self.scene.articulations["robot"])
 
         # # compute attachment between sensor case and gelpad
         # isaac_mesh_path = "/World/envs/env_0/Robot/gelsight_mini_case"

@@ -289,7 +289,7 @@ def _create_attachment(paths):
     except:
         pass
 
-    attachment_offsets, idx = UipcIsaacAttachments.compute_attachment_data(isaac_mesh_path, world_tet_points, tet_indices)
+    attachment_offsets, idx, rigid_prims = UipcIsaacAttachments.compute_attachment_data(isaac_mesh_path, world_tet_points, tet_indices)
     _create_attachment_data_attributes(tet_mesh_path, attachment_offsets, idx)
 
     get_physx_interface().release_physics_objects()

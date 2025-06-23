@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import weakref
+import inspect
+
 import omni
 from omni.physx import get_physx_cooking_interface, get_physx_interface, get_physx_scene_query_interface
 from isaacsim.core.prims import XFormPrim
@@ -12,16 +15,17 @@ import re
 from typing import TYPE_CHECKING
 
 import isaaclab.sim as sim_utils
-
-from isaaclab.utils import configclass
-from isaaclab.utils.math import transform_points
-import isaaclab.utils.math as math_utils
-
 try:
     from isaacsim.util.debug_draw import _debug_draw
     draw = _debug_draw.acquire_debug_draw_interface()
 except:
     draw = None
+
+from isaaclab.utils import configclass
+from isaaclab.utils.math import transform_points
+import isaaclab.utils.math as math_utils
+
+from isaaclab.assets import AssetBase, AssetBaseCfg, RigidObject
 
 from uipc.constitution import SoftPositionConstraint
 from uipc import view
@@ -34,69 +38,197 @@ if TYPE_CHECKING:
 
 @configclass
 class UipcIsaacAttachmentsCfg:
-    rigid_prim_path: str = ""
+    constraint_strength_ratio: float = 100.0
+    """
+    E.g., 100.0 means the stiffness of the constraint is 100 times of the mass of the uipc object.
+    """
+
+    debug_vis: bool = False
+    """Draw attachment offsets and aim_position via IsaacSim's _debug_draw api.
+    
+    """
+    
+    body_name: str = None
+    """Name of the body in the rigid object that should be used for the attachment.
+
+    Useful, e.g. when attaching to a part of an articulation.
+    """
 
     attachment_points_radius: float = 5e-4
-
-    constraint_strength_ratio: float = 100
-
+    """Distance between tet points and isaac collider, which is used to determine the attachment points.
+    
+    If the collision mesh of the isaaclab_rigid_object is in the radius of a point, then the
+    point is considered "attached" to the isaaclab_rigid_object.
+    """
 class UipcIsaacAttachments():
     cfg: UipcIsaacAttachmentsCfg
 
-    #todo fix init properly
-    def __init__(self, cfg: UipcIsaacAttachmentsCfg) -> None: 
-        self.cfg = cfg
+    #todo code init properly
+    def __init__(self, cfg: UipcIsaacAttachmentsCfg, uipc_object: UipcObject, isaaclab_rigid_object: RigidObject) -> None: 
+        # check that the config is valid
+        cfg.validate()
+        self.cfg = cfg.copy()
 
-        self.isaac_rigid_object = None
-        self.uipc_object: UipcObject = None
+        self.uipc_object: UipcObject = uipc_object
+        self.isaaclab_rigid_object: RigidObject = isaaclab_rigid_object
         
+        self.rigid_body_id = None # used to query the position of the rigid body
+
         self.uipc_object_vertex_indices = []
         self.attachment_points_init_positions = []
-        self.attachment_offsets = np.zeros(0) #[] # should be the same for every object of this class, are in local frame
-        self.num_attachment_points_per_obj = 0
-
-        self.body_id = None # used to query the position of the rigid body
 
         #self.attachments_offsets_idx_range = [0]
-        self.new_pos = np.zeros(0)
+        self.aim_positions = np.zeros(0)
+
+        # create the attachment
+        attachment_points_radius = self.cfg.attachment_points_radius
+
+        isaac_rigid_prim_path = self.isaaclab_rigid_object.cfg.prim_path
+        if self.cfg.body_name is not None:
+            isaac_rigid_prim_path += "/.*" + self.cfg.body_name
+        print("isaac_rigid_prim ", isaac_rigid_prim_path)
+
+        mesh = self.uipc_object.uipc_meshes[0]
+        tet_points_world = mesh.positions().view()[:,:,0]
+        tet_indices = mesh.tetrahedra().topo().view()[:,:,0]
+
+        attachment_offsets, idx, rigid_prims = self.compute_attachment_data(isaac_rigid_prim_path, tet_points_world, tet_indices, attachment_points_radius)
+        
+        # set attachment data
+        self.attachment_offsets = attachment_offsets
+        self.attachment_points_idx = idx
+        self.num_attachment_points_per_obj = len(idx)
+
+        # set uipc constraint
+        soft_position_constraint = SoftPositionConstraint()
+        #todo handle multiple meshes properly (currently just single mesh)
+        soft_position_constraint.apply_to(self.uipc_object.uipc_meshes[0], self.cfg.constraint_strength_ratio) 
+
+        # flag for whether the asset is initialized
+        self._is_initialized = False
+
+        # note: Use weakref on all callbacks to ensure that this object can be deleted when its destructor is called.
+        # add callbacks for stage play/stop
+        # The order is set to 10 which is arbitrary but should be lower priority than the default order of 0
+        timeline_event_stream = omni.timeline.get_timeline_interface().get_timeline_event_stream()
+        self._initialize_handle = timeline_event_stream.create_subscription_to_pop_by_type(
+            int(omni.timeline.TimelineEventType.PLAY),
+            lambda event, obj=weakref.proxy(self): obj._initialize_callback(event),
+            order=10,
+        )
+        self._invalidate_initialize_handle = timeline_event_stream.create_subscription_to_pop_by_type(
+            int(omni.timeline.TimelineEventType.STOP),
+            lambda event, obj=weakref.proxy(self): obj._invalidate_initialize_callback(event),
+            order=10,
+        )
+        # add handle for debug visualization (this is set to a valid handle inside set_debug_vis)
+        self._debug_vis_handle = None
+        # set initial state of debug visualization
+        self.set_debug_vis(self.cfg.debug_vis)
+
+    def __del__(self):
+        """Unsubscribe from the callbacks."""
+        # clear physics events handles
+        if self._initialize_handle:
+            self._initialize_handle.unsubscribe()
+            self._initialize_handle = None
+        if self._invalidate_initialize_handle:
+            self._invalidate_initialize_handle.unsubscribe()
+            self._invalidate_initialize_handle = None
+        # clear debug visualization
+        if self._debug_vis_handle:
+            self._debug_vis_handle.unsubscribe()
+            self._debug_vis_handle = None
+    """
+    Properties
+    """
+
+    @property
+    def is_initialized(self) -> bool:
+        """Whether the asset is initialized.
+
+        Returns True if the asset is initialized, False otherwise.
+        """
+        return self._is_initialized
+
+    @property
+    def num_instances(self) -> int:
+        """Number of instances of the asset.
+
+        This is equal to the number of asset instances per environment multiplied by the number of environments.
+        """
+        return NotImplementedError
+
+    @property
+    def device(self) -> str:
+        """Memory device for computation."""
+        return self._device
+
+    @property
+    def has_debug_vis_implementation(self) -> bool:
+        """Whether the asset has a debug visualization implemented."""
+        # check if function raises NotImplementedError
+        source_code = inspect.getsource(self._set_debug_vis_impl)
+        return "NotImplementedError" not in source_code
+
+    """
+    Operations.
+    """
+
+    def set_debug_vis(self, debug_vis: bool) -> bool:
+        """Sets whether to visualize the asset data.
+
+        Args:
+            debug_vis: Whether to visualize the asset data.
+
+        Returns:
+            Whether the debug visualization was successfully set. False if the asset
+            does not support debug visualization.
+        """
+        # check if debug visualization is supported
+        if not self.has_debug_vis_implementation:
+            return False
+        # toggle debug visualization objects
+        self._set_debug_vis_impl(debug_vis)
+        # toggle debug visualization handles
+        if debug_vis:
+            # create a subscriber for the post update event if it doesn't exist
+            if self._debug_vis_handle is None:
+                app_interface = omni.kit.app.get_app_interface()
+                self._debug_vis_handle = app_interface.get_post_update_event_stream().create_subscription_to_pop(
+                    lambda event, obj=weakref.proxy(self): obj._debug_vis_callback(event)
+                )
+        else:
+            # remove the subscriber if it exists
+            if self._debug_vis_handle is not None:
+                self._debug_vis_handle.unsubscribe()
+                self._debug_vis_handle = None
+        # return success
+        return True
 
     def get_new_positions(self):
         if self.body_id is None:
             raise RuntimeError(
                 f"Id for attachment is None. Cannot compute new positions"
             )
-        pose = self.isaac_rigid_object.data.body_state_w[:, self.body_id, 0:7].clone()
+        pose = self.isaac_rigid_prims.data.body_state_w[:, self.body_id, 0:7].clone()
                 
         new_pos = torch.tensor(self.attachment_offsets.reshape((self.objects_gipc.num_objects, self.num_attachment_points_per_obj, 3)), device="cuda:0").float()
         new_pos = transform_points(new_pos, pos=pose[:, 0:3], quat=pose[:, 3:]) 
         new_pos = new_pos.cpu().numpy()
-        self.new_pos = new_pos.flatten().reshape(-1,3)
+        self.aim_positions = new_pos.flatten().reshape(-1,3)
         
         #     # extract velocity
         #     lin_vel = scene["robot"].data.body_state_w[:, robot_entity_cfg.body_ids[1], 7:10]
         #     lin_vel = lin_vel.cpu().numpy()
         #     lin_vel = np.tile(lin_vel, len(attachment_points)).reshape(len(attachment_points),3)
         idx = self.gipc_vertex_idx
-        return idx, self.new_pos
+        return idx, self.aim_positions
     
-    def draw_debug_view(self):
-        
-        draw.draw_points(self.new_pos, [(255,0,0,0.5)]*self.new_pos.shape[0], [30]*self.new_pos.shape[0]) # the new positions
-        pose = self.isaac_rigid_object.data.body_state_w[:, self.body_id, 0:7].clone()
-        obj_center = pose[:, 0:3]
-
-        for i in range(self.objects_gipc.num_objects):
-            for j in range(i, self.objects_gipc.num_objects*self.num_attachment_points_per_obj):
-                draw.draw_lines([obj_center[i].cpu().numpy()], [self.new_pos[j]], [(255,255,0,0.5)], [10])
-
-    def _apply_soft_position_constraint(self, uipc_object: UipcObject):
-        soft_position_constraint = SoftPositionConstraint()
-        #todo handle multiple meshes properly (currently just single mesh)
-        soft_position_constraint.apply_to(uipc_object.uipc_meshes[0], self.cfg.constraint_strength_ratio) 
-
-    def _create_animation(self, uipc_object: UipcObject):
-        animator = uipc_object._uipc_sim.scene.animator()
+    def _create_animation(self):
+        animator = self.uipc_object._uipc_sim.scene.animator()
         def animate_tet(info: Animation.UpdateInfo): # animation function
+            print("animated points ", self.aim_positions)
             geo_slots:list[GeometrySlot] = info.geo_slots()
             geo: SimplicialComplex = geo_slots[0].geometry()
             rest_geo_slots:list[GeometrySlot] = info.rest_geo_slots()
@@ -116,7 +248,7 @@ class UipcIsaacAttachments():
 
             aim_position_view[0] = rest_position_view[0] + Vector3.UnitZ() * z
 
-        animator.insert(uipc_object.uipc_scene_objects[0], animate_tet)
+        animator.insert(self.uipc_object.uipc_scene_objects[0], animate_tet)
 
     def create_attachment(self, mesh_path=None, all_gipc_vertices=None):
         """_summary_
@@ -138,7 +270,7 @@ class UipcIsaacAttachments():
             
         # take one prim path to find out if the body is part of prim_expr
         attached_to_prim_path = self.objects_gipc.prim_view.prims[0].GetAttribute("attached_to").Get()
-        body_names = self.isaac_rigid_object.body_names
+        body_names = self.isaac_rigid_prims.body_names
         
         for i, name in enumerate(body_names):
             if name in attached_to_prim_path:
@@ -208,7 +340,7 @@ class UipcIsaacAttachments():
         # check that spawn was successful
         matching_prims = sim_utils.find_matching_prims(isaac_mesh_path)
         if len(matching_prims) == 0:
-            raise RuntimeError(f"Could not find prim with path {isaac_mesh_path}.")
+            raise RuntimeError(f"Could not find prim with path {isaac_mesh_path}. The body_name in the cfg might not exist.")
         init_prim = matching_prims[0]
 
         pose = omni.usd.get_world_transform_matrix(init_prim) #omni.usd.utils.get_world_transform_matrix(init_prim)
@@ -225,8 +357,8 @@ class UipcIsaacAttachments():
 
         # get position of current object for offset computation
         obj_pos = obj_position[0,:]
-        print("obj_pos ", obj_pos)
-        print("orient ", obj_orientation)
+        # print("obj_pos ", obj_pos)
+        # print("orient ", obj_orientation)
         
         # uipc_mesh = self.uipc_object.uipc_meshes[0]
         # vertex_positions = torch.tensor(uipc_mesh.positions().view().copy().reshape(-1,3), device=self.device)
@@ -243,7 +375,7 @@ class UipcIsaacAttachments():
             ray_dir = [0,0,1] # unit direction of the sphere ray cast -> doesnt really matter here, cause we only use a super short ray. 
             hitInfo = get_physx_scene_query_interface().sweep_sphere_closest(radius=sphere_radius, origin=v, dir=ray_dir, distance=max_dist, bothSides=True)
             if hitInfo["hit"]:
-                print("hiiiit, ", hitInfo["collision"])
+                # print("hiiiit, ", hitInfo["collision"])
                 if str(init_prim.GetPath()) in hitInfo["collision"] : # prevent attaching to unrelated geometry
                     attachment_points_positions.append(v)
                     # idx.append(i+min_vertex_idx) unlike the gipc simulation, we use the object specific idx here
@@ -263,7 +395,7 @@ class UipcIsaacAttachments():
         attachment_offsets = np.array(attachment_offsets).reshape(-1, 3) 
         assert len(idx) == attachment_offsets.shape[0]
 
-        print("offsets, ", attachment_offsets)
+        # print("offsets, ", attachment_offsets)
         # print("attachment local idx, ", idx)
         # print("Init pos, ", attachment_points_positions)
 
@@ -276,39 +408,93 @@ class UipcIsaacAttachments():
         for j in range(0, attachment_points_positions.shape[0]):
             draw.draw_lines([obj_center], [attachment_points_positions[j,:]], [(255,255,0,0.5)], [10])
 
-        return attachment_offsets, idx    
+        return attachment_offsets, idx, matching_prims    
 
-    # def _create_attachment_data_attributes(self, mesh_name, objects_gipc: ObjectsGIPC, gipc_vertex_idx, initial_attachment_points_positions, attachment_offsets):
-    #     """
-    #     Creates an attribute for a prim that holds a boolean.
-    #     See: https://graphics.pixar.com/usd/release/api/class_usd_prim.html.
-    #     The attribute can then be found in the GUI under "Raw USD Properties" of the prim.
-    #     Args:
-    #         prim: A prim that should be holding the attribute.
-    #         attribute_name: The name of the attribute to create.
-    #     Returns:
-    #         An attribute created at specific prim.
-    #     """
+    def _compute_aim_positions(self):
+        pose = self.isaac_lab_rigid_bodies.data.body_state_w[:, self.body_id, 0:7].clone()
+                
+        # aim_pos = torch.tensor(self.attachment_offsets.reshape((self.objects_gipc.num_objects, self.num_attachment_points_per_obj, 3)), device="cuda:0").float()
+        aim_pos = torch.tensor(self.attachment_offsets.reshape((self.objects_gipc.num_objects, self.num_attachment_points_per_obj, 3)), device="cuda:0").float()
+        aim_pos = transform_points(aim_pos, pos=pose[:, 0:3], quat=pose[:, 3:]) 
+        aim_pos = aim_pos.cpu().numpy()
+        self.aim_positions = aim_pos.flatten().reshape(-1,3)
+        
+        #     # extract velocity
+        #     lin_vel = scene["robot"].data.body_state_w[:, robot_entity_cfg.body_ids[1], 7:10]
+        #     lin_vel = lin_vel.cpu().numpy()
+        #     lin_vel = np.tile(lin_vel, len(attachment_points)).reshape(len(attachment_points),3)
+        idx = self.gipc_vertex_idx
+        return self.aim_positions     
+       
+    """
+    Internal helper.
+    """
 
-    #     prim_view = objects_gipc.prim_view
-    #     #TODO use scene_env offsets to adjust the data here!
-    #     for prim in prim_view.prims:
-    #         attr_attached_to = prim.CreateAttribute("attached_to", Sdf.ValueTypeNames.String)
-    #         attr_idx = prim.CreateAttribute("attachment_vertex_idx", Sdf.ValueTypeNames.UIntArray)
-    #         attr_initial = prim.CreateAttribute("initial_attachment_positions", Sdf.ValueTypeNames.Vector3fArray)
-    #         attr_offsets = prim.CreateAttribute("attachment_offsets", Sdf.ValueTypeNames.Vector3fArray)
+    def _initialize_impl(self):
+        if self.cfg.body_name is not None:
+            self.rigid_body_id , found_body_name = self.isaaclab_rigid_object.find_bodies(self.cfg.body_name)
 
-    #         prim.GetAttribute("attached_to").Set(mesh_name)
-    #         prim.GetAttribute("attachment_vertex_idx").Set(gipc_vertex_idx)
-    #         prim.GetAttribute("initial_attachment_positions").Set(initial_attachment_points_positions)
-    #         prim.GetAttribute("attachment_offsets").Set(attachment_offsets)
+        self._create_animation()
 
-    #         print("*"*40)
-    #         print("Created attachment with data: ")
-    #         print("attached to ", attr_attached_to.Get())
-    #         print("idx ", attr_idx.Get())
-    #         # print("inital pos ", attr_initial.Get())
-    #         # print("offsets ", attr_offsets.Get())
-    #         print("*"*40)
 
-    #     return prim_view.prim_paths
+    """
+    Internal simulation callbacks. 
+    
+    Same as AssetBase class from asset_base.py
+    """
+
+    def _initialize_callback(self, event):
+        """Initializes the scene elements.
+
+        Note:
+            PhysX handles are only enabled once the simulator starts playing. Hence, this function needs to be
+            called whenever the simulator "plays" from a "stop" state.
+        """
+        if not self._is_initialized:
+            # obtain simulation related information
+            sim = sim_utils.SimulationContext.instance()
+            if sim is None:
+                raise RuntimeError("SimulationContext is not initialized! Please initialize SimulationContext first.")
+            self._backend = sim.backend
+            self._device = sim.device
+            # initialize attachments
+            self._initialize_impl()
+            # set flag
+            self._is_initialized = True
+
+    def _invalidate_initialize_callback(self, event):
+        """Invalidates the scene elements."""
+        self._is_initialized = False
+
+    def _set_debug_vis_impl(self, debug_vis: bool):
+        if debug_vis:
+            try:
+                from isaacsim.util.debug_draw import _debug_draw
+                self._draw = _debug_draw.acquire_debug_draw_interface()
+            except:
+                self._draw = None
+                print("No debug_vis for attachment. Reason: Cannot import _debug_draw")
+                return
+
+            # # draw attachment data
+            # draw.draw_points(attachment_points_positions, [(255,0,0,0.5)]*attachment_points_positions.shape[0], [30]*attachment_points_positions.shape[0]) # the new positions
+            # obj_center = obj_position[0]
+
+            # for j in range(0, attachment_points_positions.shape[0]):
+            #     draw.draw_lines([obj_center], [attachment_points_positions[j,:]], [(255,255,0,0.5)], [10])
+
+    def _debug_vis_callback(self, event):
+        # # draw attachment data
+        # draw.draw_points(attachment_points_positions, [(255,0,0,0.5)]*attachment_points_positions.shape[0], [30]*attachment_points_positions.shape[0]) # the new positions
+        # obj_center = obj_position[0]
+
+        # for j in range(0, attachment_points_positions.shape[0]):
+        #     draw.draw_lines([obj_center], [attachment_points_positions[j,:]], [(255,255,0,0.5)], [10])
+        print("debug vis")        
+        # self._draw.draw_points(self.aim_positions, [(255,0,0,0.5)]*self.aim_positions.shape[0], [30]*self.aim_positions.shape[0]) # the new positions
+        # pose = self.isaac_rigid_prims.data.body_state_w[:, self.body_id, 0:7].clone()
+        # obj_center = pose[:, 0:3]
+
+        # for i in range(self.objects_gipc.num_objects):
+        #     for j in range(i, self.objects_gipc.num_objects*self.num_attachment_points_per_obj):
+        #         self._draw.draw_lines([obj_center[i].cpu().numpy()], [self.aim_positions[j]], [(255,255,0,0.5)], [10])
