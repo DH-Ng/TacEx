@@ -70,6 +70,11 @@ class UipcObjectCfg(AssetBaseCfg):
 
         E.g. 100.0 MPa = hard-rubber-like material
         """
+
+        kinematic: bool = False
+        """Makes the DoF of the ABD body fixed.
+        
+        """
     
     @configclass
     class StableNeoHookeanCfg:
@@ -169,11 +174,57 @@ class UipcObject(AssetBase):
             mesh = tetmesh(tet_points_world.copy(), tet_indices.copy())
             # enable the contact by labeling the surface 
             label_surface(mesh)
-            # label_triangle_orient(mesh) #-> only needed when we want to export the mesh with uipc
+            label_triangle_orient(mesh) #-> only needed when we want to export the mesh with uipc
+            # flip the triangles inward for better rendering 
+            mesh = flip_inward_triangles(mesh) #todo idk if this makes a difference for us
+            
             surf = extract_surface(mesh)
             tet_surf_points_world = surf.positions().view().reshape(-1,3)
             surf = surf.triangles().topo().view().reshape(-1).tolist()
             MeshGenerator.update_surface_mesh(prim=usd_mesh, surf_points=tet_surf_points_world, triangles=surf)
+
+            # # enable contact for uipc meshes etc.
+            # mesh = self.uipc_meshes[0] #todo code properly cloned envs (i.e. for instanced objects?)
+
+            # create constitutions    
+            constitution_types = {
+                UipcObjectCfg.AffineBodyConstitutionCfg: AffineBodyConstitution,
+                UipcObjectCfg.StableNeoHookeanCfg: StableNeoHookean,
+            }
+            self.constitution = constitution_types[type(self.cfg.constitution_cfg)]()
+
+            if type(self.constitution) == StableNeoHookean:
+                youngs = self.cfg.constitution_cfg.youngs_modulus
+                poisson = self.cfg.constitution_cfg.poisson_rate
+                moduli = ElasticModuli.youngs_poisson(youngs * MPa, poisson)
+                # apply the constitution and contact model to the base mesh
+                self.constitution.apply_to(mesh, moduli, mass_density=self.cfg.mass_density)
+                #needed for writing vertex position to sim
+                self._system_name = "uipc::backend::cuda::FiniteElementMethod"
+            elif type(self.constitution) == AffineBodyConstitution:
+                stiffness = self.cfg.constitution_cfg.m_kappa
+                self.constitution.apply_to(mesh, stiffness * MPa, mass_density=self.cfg.mass_density) 
+                self._system_name = "uipc::backend::cuda::AffineBodyDynamics"
+
+                # make ABD body kinematic
+                if self.cfg.constitution_cfg.kinematic:
+                    is_fixed_attr = mesh.instances().find(builtin.is_fixed)
+                    view(is_fixed_attr)[0] = 1
+
+            # apply the default contact model to the base mesh
+            default_element = self._uipc_sim.scene.contact_tabular().default_element()
+            default_element.apply_to(mesh)
+
+            if self.cfg.attachment_cfg is not None:
+                print("Computing Attachment with ", self.cfg.attachment_cfg.rigid_prim_path)
+                self.attachment = UipcIsaacAttachments(self.cfg.attachment_cfg)
+                tet_points = tet_points_world
+                tet_indices = tet_indices
+                attachment_offsets, idx = self.attachment.compute_attachment_data(self.cfg.attachment_cfg.rigid_prim_path, tet_points, tet_indices, self.cfg.attachment_cfg.attachment_points_radius)
+
+                self.attachment._apply_soft_position_constraint(self)
+            else:
+                self.attachment = None
 
             self.uipc_meshes.append(mesh)
 
@@ -216,50 +267,12 @@ class UipcObject(AssetBase):
                 self._uipc_sim._surf_vertex_offsets[-1] + num_surf_points
             )
 
-            # enable contact for uipc meshes etc.
-            mesh = self.uipc_meshes[0] #todo code properly cloned envs (i.e. for instanced objects?)
-
-            # create constitution    
-            constitution_types = {
-                UipcObjectCfg.AffineBodyConstitutionCfg: AffineBodyConstitution,
-                UipcObjectCfg.StableNeoHookeanCfg: StableNeoHookean,
-            }
-            self.constitution = constitution_types[type(self.cfg.constitution_cfg)]()
-
-            if type(self.constitution) == StableNeoHookean:
-                youngs = self.cfg.constitution_cfg.youngs_modulus
-                poisson = self.cfg.constitution_cfg.poisson_rate
-                moduli = ElasticModuli.youngs_poisson(youngs * MPa, poisson)
-                # apply the constitution and contact model to the base mesh
-                self.constitution.apply_to(mesh, moduli, mass_density=self.cfg.mass_density)
-                #needed for writing vertex position to sim
-                self._system_name = "uipc::backend::cuda::FiniteElementMethod"
-            elif type(self.constitution) == AffineBodyConstitution:
-                stiffness = self.cfg.constitution_cfg.m_kappa
-                self.constitution.apply_to(mesh, stiffness * MPa, mass_density=self.cfg.mass_density) 
-                self._system_name = "uipc::backend::cuda::AffineBodyDynamics"
-
             # update local vertex offset of the subsystem
             self._uipc_sim._system_vertex_offsets[self._system_name].append(
                 self._uipc_sim._system_vertex_offsets[self._system_name][-1] + self._vertex_count
             )
             self.local_system_id = len(self._uipc_sim._system_vertex_offsets[self._system_name])-1
             print("local id ", self.local_system_id)
-
-            # apply the default contact model to the base mesh
-            default_element = self._uipc_sim.scene.contact_tabular().default_element()
-            default_element.apply_to(mesh)
-
-            if self.cfg.attachment_cfg is not None:
-                print("Computing Attachment with ", self.cfg.attachment_cfg.rigid_prim_path)
-                self.attachment = UipcIsaacAttachments(self.cfg.attachment_cfg)
-                tet_points = tet_points_world
-                tet_indices = tet_indices
-                attachment_offsets, idx = self.attachment.compute_attachment_data(self.cfg.attachment_cfg.rigid_prim_path, tet_points, tet_indices, self.cfg.attachment_cfg.attachment_points_radius)
-
-                self.attachment._apply_soft_position_constraint(self)
-            else:
-                self.attachment = None
 
             # will be updated once _uipc_sim.setup_sim() is called
             self.global_system_id = 0

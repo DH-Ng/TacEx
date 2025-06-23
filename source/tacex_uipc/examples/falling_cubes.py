@@ -175,7 +175,7 @@ def main():
     cubes = []
     for i in range(num_cubes):
         if i % 2 == 0:
-            constitution_type = UipcObjectCfg.AffineBodyConstitutionCfg()
+            constitution_type = UipcObjectCfg.AffineBodyConstitutionCfg(kinematic=True)
         else:
             constitution_type = UipcObjectCfg.StableNeoHookeanCfg()
         # might lead to intersections due to random pos
