@@ -636,6 +636,7 @@ def run_simulator(env: BallRollingEnv):
         env._apply_action()
         env.scene.write_data_to_sim()
         env.sim.step(render=False)
+        # env.sim.step()
         if env.step_count >= 500:
             if env.step_count == 500:
                 print("UIPC sim starting!")
@@ -649,6 +650,7 @@ def run_simulator(env: BallRollingEnv):
         
         # render scene for cameras (used by sensor)
         # env.render()
+        env.sim.render()
         env.sim.render()
 
         positions, orientations = env.goal_prim_view.get_world_poses() 
