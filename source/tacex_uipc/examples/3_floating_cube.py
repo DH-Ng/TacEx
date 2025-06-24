@@ -193,7 +193,7 @@ def main():
                 sim.render()
 
             # get time reports
-            # uipc_sim.get_time_report()
+            uipc_sim.get_sim_time_report()
             total_uipc_sim_time += Timer.get_timer_info("uipc_step")
             total_uipc_render_time += Timer.get_timer_info("render_update")
 

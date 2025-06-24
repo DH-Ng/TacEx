@@ -299,14 +299,15 @@ class UipcSim():
     def simple_update_render_meshes(self):
         raise NotImplementedError(f"simple_update_render_meshes not implemented yet for {self.__class__.__name__}.")
     
-    def get_time_report(self, as_json: bool = False):
+    @staticmethod
+    def get_sim_time_report(as_json: bool = False):
         if as_json:
             report = Timer.report_as_json()
         else:
             Timer.report()
     
 
-    def save_current_world_state(self):
+    def save_frame(self):
         """Saves the current frame into multiple files, which can be retrieved to replay the animation later.
 
         For replaying use the method `replay_frames`        
