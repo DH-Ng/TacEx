@@ -147,7 +147,7 @@ class UipcObject(AssetBase):
             print("usd_mesh_path ", usd_mesh_path)
             
             if self.cfg.mesh_cfg is None:
-                # Load precomputed mesh data from USD file.
+                # Load precomputed mesh data from USD prim.
                 tet_points = np.array(prim_children[0].GetAttribute("tet_points").Get())
                 tet_indices = prim_children[0].GetAttribute("tet_indices").Get()
                 surf_points = np.array(prim_children[0].GetAttribute("tet_surf_points").Get())

@@ -54,6 +54,13 @@ class UipcIsaacAttachmentsCfg:
     Useful, e.g. when attaching to a part of an articulation.
     """
 
+    compute_attachment_data: bool = True
+    """False to use precomputed attachment data.
+    
+    Note: Precomputed attachment data is only valid if the corresponding precomputed tet mesh data exists.
+    This means, that the uipc_object of the attachment class should also use precomputed data. 
+    """
+
     attachment_points_radius: float = 5e-4
     """Distance between tet points and isaac collider, which is used to determine the attachment points.
     
@@ -81,18 +88,33 @@ class UipcIsaacAttachments():
         self.aim_positions = np.zeros(0)
 
         # create the attachment
-        attachment_points_radius = self.cfg.attachment_points_radius
+        
+        if not self.cfg.compute_attachment_data:
+            #todo hmm, its kinda tricky. Can only use precomputed attachment data, if its the same tet mesh.
+            #-- how can we make sure that this case? 
 
-        isaac_rigid_prim_path = self.isaaclab_rigid_object.cfg.prim_path
-        if self.cfg.body_name is not None:
-            isaac_rigid_prim_path += "/.*" + self.cfg.body_name
-        print("isaac_rigid_prim ", isaac_rigid_prim_path)
+            # Load precomputed attachmend data from USD prim.
+            prim_children = self.uipc_object._prim_view.prims[0].GetChildren() #todo properly deal with multiple meshs
+            prim = prim_children[0]
+            usd_mesh = UsdGeom.Mesh(prim)
+            attachment_offsets = np.array(prim.GetAttribute("attachment_offsets").Get())
+            idx = prim.GetAttribute("attachment_indices").Get()
 
-        mesh = self.uipc_object.uipc_meshes[0]
-        tet_points_world = mesh.positions().view()[:,:,0]
-        tet_indices = mesh.tetrahedra().topo().view()[:,:,0]
+            if idx is None:
+                raise Exception(f"No precomputed attachment data found for prim at {str(usd_mesh.GetPath())}. Use set a cfg for the attachment to compute attachment data.")
+        else:
+            # compute attachment
+            attachment_points_radius = self.cfg.attachment_points_radius
 
-        attachment_offsets, idx, rigid_prims = self.compute_attachment_data(isaac_rigid_prim_path, tet_points_world, tet_indices, attachment_points_radius)
+            isaac_rigid_prim_path = self.isaaclab_rigid_object.cfg.prim_path
+            if self.cfg.body_name is not None:
+                isaac_rigid_prim_path += "/.*" + self.cfg.body_name
+            print("isaac_rigid_prim ", isaac_rigid_prim_path)
+
+            mesh = self.uipc_object.uipc_meshes[0]
+            tet_points_world = mesh.positions().view()[:,:,0]
+            tet_indices = mesh.tetrahedra().topo().view()[:,:,0]
+            attachment_offsets, idx, rigid_prims = self.compute_attachment_data(isaac_rigid_prim_path, tet_points_world, tet_indices, attachment_points_radius)
         
         # set attachment data
         self.attachment_offsets = attachment_offsets
@@ -100,6 +122,7 @@ class UipcIsaacAttachments():
         self.num_attachment_points_per_obj = len(idx)
 
         self._num_instances = 1
+
         # set uipc constraint
         soft_position_constraint = SoftPositionConstraint()
         #todo handle multiple meshes properly (currently just single mesh)
@@ -210,17 +233,8 @@ class UipcIsaacAttachments():
     @staticmethod
     def compute_attachment_data(isaac_mesh_path, tet_points, tet_indices, sphere_radius=5e-4, max_dist=1e-5): # really small distances to prevent intersection with unwanted geometries
         """
-        Computes the attachment data and sets it as attribute values of the corresponding usd meshs.
 
-        Args:
-            all_gipc_vertices (_type_): _description_
-            scene_env_origins (): origions of the cloned env in the scene
-            sphere_radius (float, optional): _description_. Defaults to 0.0005.
-            max_dist (float, optional): _description_. Defaults to 0.0005.
-
-        Returns:
-            idx (list): List of vertex indices in GIPC for the attachment points
-            attachment_points_positions (list[np.array]): List of positions (x,y,z) for the attachment points. 
+        Returns: attachment_offsets, attachment_indices and the found rigid prims to the isaac_mesh_path
         """
         print(f"Creating Uipc x Isaac attachments for {isaac_mesh_path}")
         # force Physx to cook everything in the scene so it get cached

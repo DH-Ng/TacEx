@@ -154,7 +154,7 @@ def _generate_tet_mesh(path, tet_cfg=None):
     """
     if tet_cfg is None:
         tet_cfg = TetMeshCfg(
-            edge_length_r=0.75
+            edge_length_r=0.25
         )
     mesh_gen = MeshGenerator(tet_cfg)
 

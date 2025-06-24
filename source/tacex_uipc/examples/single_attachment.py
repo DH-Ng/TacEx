@@ -241,7 +241,8 @@ class BallRollingEnvCfg(DirectRLEnvCfg):
     gelpad_attachment_cfg=UipcIsaacAttachmentsCfg(
         constraint_strength_ratio=100.0,
         body_name="gelsight_mini_case",
-        debug_vis=False
+        debug_vis=False,
+        compute_attachment_data=False
     )
 
     gsmini = GelSightMiniCfg(
