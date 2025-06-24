@@ -333,13 +333,13 @@ class UipcIsaacAttachments():
             aim_position_view = view(aim_position)
             rest_position_view = rest_geo.positions().view()
 
-            is_constrained_view[0] = 1
+            is_constrained_view[self.attachment_points_idx] = 1
 
             t = info.dt() * info.frame()
             theta = np.pi * t
             z = -np.sin(theta)
 
-            aim_position_view[0] = rest_position_view[0] + Vector3.UnitZ() * z
+            aim_position_view[self.attachment_points_idx] = self.aim_positions.reshape(-1,3,1)
 
         animator.insert(self.uipc_object.uipc_scene_objects[0], animate_tet)
 
