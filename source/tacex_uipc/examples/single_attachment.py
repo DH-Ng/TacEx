@@ -120,7 +120,7 @@ class BallRollingEnvCfg(DirectRLEnvCfg):
         dt=1/60, 
         render_interval=decimation,
         physx=PhysxCfg(
-            enable_ccd=True, # needed for more stable ball_rolling
+            enable_ccd=True, # for more stable ball_rolling
             # bounce_threshold_velocity=10000,
         ),
         physics_material=sim_utils.RigidBodyMaterialCfg(
@@ -639,20 +639,21 @@ def run_simulator(env: BallRollingEnv):
         if env.step_count >= 500:
             if env.step_count == 500:
                 print("UIPC sim starting!")
+            # env.scene.update(dt=env.physics_dt)
             env.uipc_sim.step()
         physics_end = time.time()
         ###
 
+        # update isaac buffers() -> also updates sensors
+        env.uipc_sim.update_render_meshes()
+        
+        # render scene for cameras (used by sensor)
+        # env.render()
+        env.sim.render()
+
         positions, orientations = env.goal_prim_view.get_world_poses() 
         env.ik_commands[:, :3] = positions - env.scene.env_origins
         env.ik_commands[:, 3:] = orientations
-
-        # update isaac buffers() -> also updates sensors
-        env.uipc_sim.update_render_meshes()
-        env.scene.update(dt=env.physics_dt)
-        # env.uipc_sim.update_render_meshes() #! or update the meshes here?
-        # render scene for cameras (used by sensor)
-        env.sim.render()
 
         ### update sensors again to measure tactile sim time separately
         tactile_sim_start = time.time()
@@ -680,6 +681,7 @@ def run_simulator(env: BallRollingEnv):
         #     f"GPU Memory: {system_utilization_analytics[3]:.2f}% |"
         # )
         # print("")
+        env.scene.update(dt=env.physics_dt)
 
     env.close()
     

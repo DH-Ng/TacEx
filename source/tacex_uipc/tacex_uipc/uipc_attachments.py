@@ -99,6 +99,7 @@ class UipcIsaacAttachments():
         self.attachment_points_idx = idx
         self.num_attachment_points_per_obj = len(idx)
 
+        self._num_instances = 1
         # set uipc constraint
         soft_position_constraint = SoftPositionConstraint()
         #todo handle multiple meshes properly (currently just single mesh)
@@ -157,7 +158,7 @@ class UipcIsaacAttachments():
 
         This is equal to the number of asset instances per environment multiplied by the number of environments.
         """
-        return NotImplementedError
+        return self._num_instances 
 
     @property
     def device(self) -> str:
@@ -205,110 +206,7 @@ class UipcIsaacAttachments():
                 self._debug_vis_handle = None
         # return success
         return True
-
-    def get_new_positions(self):
-        if self.body_id is None:
-            raise RuntimeError(
-                f"Id for attachment is None. Cannot compute new positions"
-            )
-        pose = self.isaac_rigid_prims.data.body_state_w[:, self.body_id, 0:7].clone()
-                
-        new_pos = torch.tensor(self.attachment_offsets.reshape((self.objects_gipc.num_objects, self.num_attachment_points_per_obj, 3)), device="cuda:0").float()
-        new_pos = transform_points(new_pos, pos=pose[:, 0:3], quat=pose[:, 3:]) 
-        new_pos = new_pos.cpu().numpy()
-        self.aim_positions = new_pos.flatten().reshape(-1,3)
-        
-        #     # extract velocity
-        #     lin_vel = scene["robot"].data.body_state_w[:, robot_entity_cfg.body_ids[1], 7:10]
-        #     lin_vel = lin_vel.cpu().numpy()
-        #     lin_vel = np.tile(lin_vel, len(attachment_points)).reshape(len(attachment_points),3)
-        idx = self.gipc_vertex_idx
-        return idx, self.aim_positions
     
-    def _create_animation(self):
-        animator = self.uipc_object._uipc_sim.scene.animator()
-        def animate_tet(info: Animation.UpdateInfo): # animation function
-            print("animated points ", self.aim_positions)
-            geo_slots:list[GeometrySlot] = info.geo_slots()
-            geo: SimplicialComplex = geo_slots[0].geometry()
-            rest_geo_slots:list[GeometrySlot] = info.rest_geo_slots()
-            rest_geo:SimplicialComplex = rest_geo_slots[0].geometry()
-
-            is_constrained = geo.vertices().find(builtin.is_constrained)
-            is_constrained_view = view(is_constrained)
-            aim_position = geo.vertices().find(builtin.aim_position)
-            aim_position_view = view(aim_position)
-            rest_position_view = rest_geo.positions().view()
-
-            is_constrained_view[0] = 1
-
-            t = info.dt() * info.frame()
-            theta = np.pi * t
-            z = -np.sin(theta)
-
-            aim_position_view[0] = rest_position_view[0] + Vector3.UnitZ() * z
-
-        animator.insert(self.uipc_object.uipc_scene_objects[0], animate_tet)
-
-    def create_attachment(self, mesh_path=None, all_gipc_vertices=None):
-        """_summary_
-
-        Args:
-            all_gipc_vertices (_type_): _description_
-            scene_env_origins (): origions of the cloned env in the scene
-            sphere_radius (float, optional): _description_. Defaults to 0.0005.
-            max_dist (float, optional): _description_. Defaults to 0.0005.
-
-        Returns:
-            idx (list): List of vertex indices in GIPC for the attachment points
-            attachment_points_positions (list[np.array]): List of positions (x,y,z) for the attachment points. 
-        """
-        #TODO remove
-        # if mesh_path is not None and all_gipc_vertices is not None:
-        #     print("Computing data for attachment with ", mesh_path)
-        #     self._compute_attachment_data(mesh_path, all_gipc_vertices)
-            
-        # take one prim path to find out if the body is part of prim_expr
-        attached_to_prim_path = self.objects_gipc.prim_view.prims[0].GetAttribute("attached_to").Get()
-        body_names = self.isaac_rigid_prims.body_names
-        
-        for i, name in enumerate(body_names):
-            if name in attached_to_prim_path:
-                self.body_id = i
-        
-        # the offsets in the attachment_offsets attribute are defined in local space, therefore all objects of this class share the same offsets
-        self.attachment_offsets = np.array(self.objects_gipc.prim_view.prims[0].GetAttribute("attachment_offsets").Get())
-        
-        attachment_points_init = []
-        for j in range(self.objects_gipc.num_objects):
-            prim = self.objects_gipc.prim_view.prims[j]
-
-            min_vertex_idx = self.objects_gipc.object_idx_offsets[j]
-            max_vertex_idx = self.objects_gipc.object_idx_offsets[j+1] - 1
-
-            obj_idx = np.array(prim.GetAttribute("attachment_vertex_idx").Get()) + min_vertex_idx # update vertex idx in correspondence to the gipc simulation class
-            self.gipc_vertex_idx.append(obj_idx.tolist())
-            attachment_points_init.append(np.array(prim.GetAttribute("initial_attachment_positions").Get()))
-            
-            #print("attachemnt idx ", self.gipc_vertex_idx)
-            # print("attachemnt init pos ", self.attachment_points_init_positions) #TODO update initial positions for multi env, i.e. use scene offset correctly (I guess)
-            # print("attachment offsets ", self.attachment_offsets)
-            
-        self.num_attachment_points_per_obj = self.attachment_offsets.shape[0]
-        print(f"Number of attachment points per obj '{self.objects_gipc.name}': {self.num_attachment_points_per_obj}")
-
-        # transform attachment offsets array into shape (N,P,3) for transform_points in get_new_positions,
-        # N=number of env's, i.e. number of attachment points per obj
-        self.attachment_offsets.reshape(self.num_attachment_points_per_obj*self.objects_gipc.num_objects, 3)
-        self.attachment_points_init_positions = np.array(attachment_points_init).flatten().reshape(-1,3)
-
-        # print("offsets, ", self.attachment_offsets)
-        # print("init pos, ", self.attachment_points_init_positions)
-        
-        # at the end, make sure that idx list is a flat list
-        self.gipc_vertex_idx = np.array(self.gipc_vertex_idx).flatten().tolist() # can use np flatten, cause every list here has the same number of elements (are basically the same objects with the same amount of attachment points)
-        return self.gipc_vertex_idx, self.attachment_points_init_positions #TODO fix this messed up command here lol, we want a flat list
-     
     @staticmethod
     def compute_attachment_data(isaac_mesh_path, tet_points, tet_indices, sphere_radius=5e-4, max_dist=1e-5): # really small distances to prevent intersection with unwanted geometries
         """
@@ -327,9 +225,6 @@ class UipcIsaacAttachments():
         print(f"Creating Uipc x Isaac attachments for {isaac_mesh_path}")
         # force Physx to cook everything in the scene so it get cached
         get_physx_interface().force_load_physics_from_usd()
-        # stage = omni.usd.get_context().get_stage()
-        # init_prim = stage.GetPrimAtPath(isaac_mesh_path)
-        #print("init prim ",init_prim)
 
         # check if base asset path is valid
         # note: currently the spawner does not work if there is a regex pattern in the leaf
@@ -388,7 +283,6 @@ class UipcIsaacAttachments():
                     offset = offset.cpu().numpy()
                     attachment_offsets.append(offset)
 
-        # print(f"Number of attachment points per obj '{self.objects_gipc.name}': {self.num_attachment_points_per_obj}")
         attachment_points_positions = np.array(attachment_points_positions).reshape(-1,3)
 
         # offset to later compute the `should-be` positions of the attachment point
@@ -409,22 +303,6 @@ class UipcIsaacAttachments():
             draw.draw_lines([obj_center], [attachment_points_positions[j,:]], [(255,255,0,0.5)], [10])
 
         return attachment_offsets, idx, matching_prims    
-
-    def _compute_aim_positions(self):
-        pose = self.isaac_lab_rigid_bodies.data.body_state_w[:, self.body_id, 0:7].clone()
-                
-        # aim_pos = torch.tensor(self.attachment_offsets.reshape((self.objects_gipc.num_objects, self.num_attachment_points_per_obj, 3)), device="cuda:0").float()
-        aim_pos = torch.tensor(self.attachment_offsets.reshape((self.objects_gipc.num_objects, self.num_attachment_points_per_obj, 3)), device="cuda:0").float()
-        aim_pos = transform_points(aim_pos, pos=pose[:, 0:3], quat=pose[:, 3:]) 
-        aim_pos = aim_pos.cpu().numpy()
-        self.aim_positions = aim_pos.flatten().reshape(-1,3)
-        
-        #     # extract velocity
-        #     lin_vel = scene["robot"].data.body_state_w[:, robot_entity_cfg.body_ids[1], 7:10]
-        #     lin_vel = lin_vel.cpu().numpy()
-        #     lin_vel = np.tile(lin_vel, len(attachment_points)).reshape(len(attachment_points),3)
-        idx = self.gipc_vertex_idx
-        return self.aim_positions     
        
     """
     Internal helper.
@@ -436,7 +314,60 @@ class UipcIsaacAttachments():
 
         self._create_animation()
 
+        sim: sim_utils.SimulationContext = sim_utils.SimulationContext.instance()
+        sim.add_physics_callback(f"{self.isaaclab_rigid_object.cfg.prim_path}_uipc_attachment_update", self._compute_aim_positions)
 
+    def _create_animation(self):
+        animator = self.uipc_object._uipc_sim.scene.animator()
+        def animate_tet(info: Animation.UpdateInfo): # animation function
+            # print("test, ", self.aim_positions) 
+
+            geo_slots:list[GeometrySlot] = info.geo_slots()
+            geo: SimplicialComplex = geo_slots[0].geometry()
+            rest_geo_slots:list[GeometrySlot] = info.rest_geo_slots()
+            rest_geo:SimplicialComplex = rest_geo_slots[0].geometry()
+
+            is_constrained = geo.vertices().find(builtin.is_constrained)
+            is_constrained_view = view(is_constrained)
+            aim_position = geo.vertices().find(builtin.aim_position)
+            aim_position_view = view(aim_position)
+            rest_position_view = rest_geo.positions().view()
+
+            is_constrained_view[0] = 1
+
+            t = info.dt() * info.frame()
+            theta = np.pi * t
+            z = -np.sin(theta)
+
+            aim_position_view[0] = rest_position_view[0] + Vector3.UnitZ() * z
+
+        animator.insert(self.uipc_object.uipc_scene_objects[0], animate_tet)
+
+    def _compute_aim_positions(self, dt=0):
+        pose = self.isaaclab_rigid_object.data.body_state_w[:, self.rigid_body_id, 0:7].clone()
+                
+        attachment_offsets = torch.tensor(self.attachment_offsets.reshape((self._num_instances, self.num_attachment_points_per_obj, 3)), device=self.device).float()
+        # only access pose of a single body (thats why idx=0 in second dim)
+        aim_pos = transform_points(attachment_offsets, pos=pose[:, 0, 0:3], quat=pose[:, 0, 3:]) #todo give over batch of pos and quat for each instance (i.e. pos has shape N,3 and quat N,4)
+        aim_pos = aim_pos.cpu().numpy()
+        self.aim_positions = aim_pos.flatten().reshape(-1,3)
+        
+        #      # extract velocity
+        #      lin_vel = scene["robot"].data.body_state_w[:, robot_entity_cfg.body_ids[1], 7:10]
+        #      lin_vel = lin_vel.cpu().numpy()
+        #      lin_vel = np.tile(lin_vel, len(attachment_points)).reshape(len(attachment_points),3)
+        draw.clear_points()
+        draw.clear_lines()
+
+        draw.draw_points(self.aim_positions, [(255,0,0,0.5)]*self.aim_positions.shape[0], [30]*self.aim_positions.shape[0]) # the new positions
+        for i in range(self._num_instances):
+            obj_center = pose[i, 0, 0:3]
+            for j in range(i, self._num_instances*self.num_attachment_points_per_obj):
+                draw.draw_lines([obj_center.cpu().numpy()], [self.aim_positions[j]], [(255,255,0,0.5)], [10])
+
+
+        return self.aim_positions     
+    
     """
     Internal simulation callbacks. 
     
@@ -476,25 +407,20 @@ class UipcIsaacAttachments():
                 print("No debug_vis for attachment. Reason: Cannot import _debug_draw")
                 return
 
-            # # draw attachment data
-            # draw.draw_points(attachment_points_positions, [(255,0,0,0.5)]*attachment_points_positions.shape[0], [30]*attachment_points_positions.shape[0]) # the new positions
-            # obj_center = obj_position[0]
-
-            # for j in range(0, attachment_points_positions.shape[0]):
-            #     draw.draw_lines([obj_center], [attachment_points_positions[j,:]], [(255,255,0,0.5)], [10])
-
     def _debug_vis_callback(self, event):
+        
+        if self.aim_positions.shape[0] == 0:
+            return
+        
         # # draw attachment data
-        # draw.draw_points(attachment_points_positions, [(255,0,0,0.5)]*attachment_points_positions.shape[0], [30]*attachment_points_positions.shape[0]) # the new positions
-        # obj_center = obj_position[0]
+        # self._draw.clear_points()
+        # self._draw.clear_lines()
 
-        # for j in range(0, attachment_points_positions.shape[0]):
-        #     draw.draw_lines([obj_center], [attachment_points_positions[j,:]], [(255,255,0,0.5)], [10])
-        print("debug vis")        
+        # drawing with in the debug method leads to render delay
         # self._draw.draw_points(self.aim_positions, [(255,0,0,0.5)]*self.aim_positions.shape[0], [30]*self.aim_positions.shape[0]) # the new positions
-        # pose = self.isaac_rigid_prims.data.body_state_w[:, self.body_id, 0:7].clone()
-        # obj_center = pose[:, 0:3]
+        # pose = self.isaaclab_rigid_object.data.body_state_w[:, self.rigid_body_id, 0:7].clone()
 
-        # for i in range(self.objects_gipc.num_objects):
-        #     for j in range(i, self.objects_gipc.num_objects*self.num_attachment_points_per_obj):
-        #         self._draw.draw_lines([obj_center[i].cpu().numpy()], [self.aim_positions[j]], [(255,255,0,0.5)], [10])
+        # for i in range(self._num_instances):
+        #     obj_center = pose[i, 0, 0:3]
+        #     for j in range(i, self._num_instances*self.num_attachment_points_per_obj):
+        #         self._draw.draw_lines([obj_center.cpu().numpy()], [self.aim_positions[j]], [(255,255,0,0.5)], [10])

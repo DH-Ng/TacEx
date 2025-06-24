@@ -228,7 +228,6 @@ class UipcObject(AssetBase):
                 fabric_prim.CreateAttribute("Deformable", usdrt.Sdf.ValueTypeNames.PrimTypeTag, True)
 
             # extract world transform
-            # tf_matrix = omni.usd.get_local_transform_matrix(prim)
             rtxformable = usdrt.Rt.Xformable(fabric_prim)
             rtxformable.CreateFabricHierarchyWorldMatrixAttr()
             # set world matrix to identity matrix -> uipc already gives us vertices in world frame

@@ -53,7 +53,7 @@ def main():
     """Main function."""
     # Initialize the simulation context
     # render_cfg = sim_utils.RenderCfg(rendering_mode=)
-    sim_cfg = sim_utils.SimulationCfg(dt=0.01)
+    sim_cfg = sim_utils.SimulationCfg(dt=1/60)
     sim = sim_utils.SimulationContext(sim_cfg)
     # Set main camera
     sim.set_camera_view([2.0, 0.0, 2.5], [-0.5, 0.0, 0.5])

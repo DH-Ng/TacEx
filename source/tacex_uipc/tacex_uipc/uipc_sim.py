@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any, Dict, Tuple, Union, List, TYPE_CHECKING
 
 from isaaclab.utils import configclass
+import isaaclab.sim as sim_utils
 
 import usdrt
 
@@ -121,6 +122,9 @@ class UipcSim():
         """Initialize the uipc simulation.
         
         """
+        # will be initialized in `setup_sim()`
+        self.isaac_sim = None
+
         if cfg is None:
             cfg = UipcSimCfg()
         self.cfg = cfg
@@ -242,7 +246,13 @@ class UipcSim():
             print(f"{uipc_obj.cfg.prim_path} has global id {global_id}")
             uipc_obj.global_system_id = global_id
 
-    def step(self):
+        # initialize callbacks
+        # self.isaac_sim: sim_utils.SimulationContext = sim_utils.SimulationContext.instance()
+        # self.isaac_sim.add_physics_callback("upic_step", self.step)
+        #self.isaac_sim.add_physics_callback("upic_render_mesh_update", self.update_render_meshes)
+        # self.isaac_sim.add_render_callback("upic_render_mesh_update", self.update_render_meshes)
+
+    def step(self, dt=0):
         self.world.advance()
         self.world.retrieve()
 
@@ -260,7 +270,7 @@ class UipcSim():
         self.world.retrieve()
         self.update_render_meshes()
 
-    def update_render_meshes(self):
+    def update_render_meshes(self, dt=0):
         all_trimesh_points = self.sio.simplicial_surface(2).positions().view().reshape(-1,3)
         #triangles = self.sio.simplicial_surface(2).triangles().topo().view()
         for i, fabric_prim in enumerate(self._fabric_meshes):
@@ -273,6 +283,9 @@ class UipcSim():
         draw.clear_points()
         points = np.array(all_trimesh_points)
         draw.draw_points(points, [(255,0,255,0.5)]*points.shape[0], [30]*points.shape[0])
+
+        # if self.isaac_sim is not None:
+        #     self.isaac_sim.render()
 
     def simple_update_render_meshes(self):
         pass
