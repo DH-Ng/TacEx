@@ -26,6 +26,8 @@ import numpy as np
 from isaacsim.core.utils.stage import get_current_stage
 from isaacsim.core.utils.torch.transformations import tf_combine, tf_inverse, tf_vector
 from isaacsim.core.prims import XFormPrim
+from isaacsim.core.api.objects import VisualCuboid
+
 from pxr import UsdGeom, Usd
 import pxr
 import omni.usd
@@ -381,15 +383,23 @@ class BallRollingEnv(UipcRLEnv):
         # )
 
         # cube mesh for setting goal position
-        goal_cfg = sim_utils.MeshCuboidCfg(
-            size=(0.01, 0.01, 0.01),
-            visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(1.0, 0.0, 0.0)),
-        )
-        goal_cfg.func(
-            "/World/envs/env_.*/goal",
-            goal_cfg,
-            translation=[0.5, 0, 0.15],
-            orientation=[0, 1, 0, 0] #! needs to have this orientation to match the ee_offset -> tried to set it directly in _offset_rot, but ik didnt work then
+        # goal_cfg = sim_utils.MeshCuboidCfg(
+        #     size=(0.01, 0.01, 0.01),
+        #     visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(1.0, 0.0, 0.0)),
+        # )
+        # goal_cfg.func(
+        #     "/World/envs/env_.*/goal",
+        #     goal_cfg,
+        #     translation=[0.5, 0, 0.15],
+        #     orientation=[0, 1, 0, 0] #! needs to have this orientation to match the ee_offset -> tried to set it directly in _offset_rot, but ik didnt work then
+        # )
+
+        VisualCuboid(
+            prim_path="/World/envs/env_0/goal",
+            size=0.01,
+            position=np.array([0.5, 0.0, 0.15]),
+            orientation=np.array([0, 1, 0, 0]),
+            color=np.array([255.0, 0.0, 0.0])
         )
 
         # add lights
@@ -636,7 +646,7 @@ def run_simulator(env: BallRollingEnv):
         env._apply_action()
         env.scene.write_data_to_sim()
         env.sim.step(render=False)
-        # env.sim.step()
+
         if env.step_count >= 500:
             if env.step_count == 500:
                 print("UIPC sim starting!")
@@ -645,12 +655,10 @@ def run_simulator(env: BallRollingEnv):
         physics_end = time.time()
         ###
 
-        # update isaac buffers() -> also updates sensors
         env.uipc_sim.update_render_meshes()
         
         # render scene for cameras (used by sensor)
         # env.render()
-        env.sim.render()
         env.sim.render()
 
         positions, orientations = env.goal_prim_view.get_world_poses() 

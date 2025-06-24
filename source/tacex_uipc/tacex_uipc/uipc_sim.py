@@ -247,10 +247,14 @@ class UipcSim():
             uipc_obj.global_system_id = global_id
 
         # initialize callbacks
-        # self.isaac_sim: sim_utils.SimulationContext = sim_utils.SimulationContext.instance()
-        # self.isaac_sim.add_physics_callback("upic_step", self.step)
-        #self.isaac_sim.add_physics_callback("upic_render_mesh_update", self.update_render_meshes)
+        self.isaac_sim: sim_utils.SimulationContext = sim_utils.SimulationContext.instance()
+        self.isaac_sim.add_physics_callback("upic_step", self.step)
+
+        # doesnt really help I think, cause we want the mesh update to happen before we render
         # self.isaac_sim.add_render_callback("upic_render_mesh_update", self.update_render_meshes)
+
+        # using #self.isaac_sim.add_physics_callback("upic_render_mesh_update", self.update_render_meshes)
+        # -> also didnt help
 
     def step(self, dt=0):
         self.world.advance()
@@ -284,11 +288,16 @@ class UipcSim():
         points = np.array(all_trimesh_points)
         draw.draw_points(points, [(255,0,255,0.5)]*points.shape[0], [30]*points.shape[0])
 
-        # if self.isaac_sim is not None:
-        #     self.isaac_sim.render()
+        if self.isaac_sim is not None:
+            self.isaac_sim.forward() # this doesnt really help, I think
+
+            # additional render call to somewhat mitigate render delay #todo search for better to fix this
+            #? render delay might be solved in newest Isaac Ver with FabricSceneDelegate?
+            self.isaac_sim.render()
+            
 
     def simple_update_render_meshes(self):
-        pass
+        raise NotImplementedError(f"simple_update_render_meshes not implemented yet for {self.__class__.__name__}.")
     
     def get_time_report(self, as_json: bool = False):
         if as_json:
