@@ -272,7 +272,7 @@ class MeshGenerator():
         return tet_points, tet_indices, surf_points, surf_indices
     
     @staticmethod
-    def update_surface_mesh(prim: UsdGeom.Mesh, surf_points, triangles: list[int]):
+    def update_usd_mesh(prim: UsdGeom.Mesh, surf_points, triangles: list[int]):
         triangles = np.array(triangles).reshape(-1,3)
 
         prim.GetPointsAttr().Set(surf_points)

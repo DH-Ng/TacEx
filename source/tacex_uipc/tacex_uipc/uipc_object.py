@@ -181,8 +181,8 @@ class UipcObject(AssetBase):
               
             surf = extract_surface(mesh)
             tet_surf_points_world = surf.positions().view().reshape(-1,3)
-            surf = surf.triangles().topo().view().reshape(-1).tolist()
-            MeshGenerator.update_surface_mesh(prim=usd_mesh, surf_points=tet_surf_points_world, triangles=surf)
+            tet_surf_tri = surf.triangles().topo().view().reshape(-1).tolist()
+            MeshGenerator.update_usd_mesh(prim=usd_mesh, surf_points=tet_surf_points_world, triangles=tet_surf_tri)
 
             # # enable contact for uipc meshes etc.
             # mesh = self.uipc_meshes[0] #todo code properly cloned envs (i.e. for instanced objects?)
@@ -240,16 +240,16 @@ class UipcObject(AssetBase):
             # add fabric meshes to uipc sim class for updating the render meshes
             self._uipc_sim._fabric_meshes.append(fabric_prim)
             
-            # required for writing vertex positions to sim
-            num_vertex_points = mesh.positions().view().shape[0]
-            self._vertex_count = num_vertex_points
-            
             # save indices to later find corresponding points of the meshes for rendering
             num_surf_points = tet_surf_points_world.shape[0] #np.unique(tet_surf_indices)
             self._uipc_sim._surf_vertex_offsets.append(
                 self._uipc_sim._surf_vertex_offsets[-1] + num_surf_points
             )
 
+            # required for writing vertex positions to sim
+            num_vertex_points = mesh.positions().view().shape[0]
+            self._vertex_count = num_vertex_points
+            
             # update local vertex offset of the subsystem
             self._uipc_sim._system_vertex_offsets[self._system_name].append(
                 self._uipc_sim._system_vertex_offsets[self._system_name][-1] + self._vertex_count

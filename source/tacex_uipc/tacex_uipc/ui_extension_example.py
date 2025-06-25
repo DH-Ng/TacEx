@@ -261,7 +261,7 @@ def _update_surf_mesh(path):
     
     surf_points = np.array(surf_points)
     triangles = tet_surf_indices
-    MeshGenerator.update_surface_mesh(UsdGeom.Mesh(prim), surf_points=surf_points, triangles=triangles)
+    MeshGenerator.update_usd_mesh(UsdGeom.Mesh(prim), surf_points=surf_points, triangles=triangles)
     print("Updated Surface Mesh of ", path)
 
 def _create_attachment(paths):

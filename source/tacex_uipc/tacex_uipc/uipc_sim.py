@@ -92,12 +92,13 @@ class UipcSimCfg:
         
         enable_friction: bool = True
 
-        default_friction_rate: float = 0.5
+        default_friction_ratio: float = 0.5
 
-        default_resistance: float = 10.0
+        default_contact_resistance: float = 10.0
         """
         in [GPa]
         """
+
         constitution: str = "ipc"
         
         d_hat: float = 0.001
@@ -185,8 +186,8 @@ class UipcSim():
 
         # set default friction ratio and contact resistance
         self.scene.contact_tabular().default_model(
-            friction_rate=self.cfg.contact.default_friction_rate, 
-            resistance=self.cfg.contact.default_resistance * GPa,
+            friction_rate=self.cfg.contact.default_friction_ratio, 
+            resistance=self.cfg.contact.default_contact_resistance * GPa,
             enable=self.cfg.contact.enable
         )
 

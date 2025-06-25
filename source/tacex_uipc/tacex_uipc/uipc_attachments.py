@@ -366,13 +366,14 @@ class UipcIsaacAttachments():
         #      lin_vel = scene["robot"].data.body_state_w[:, robot_entity_cfg.body_ids[1], 7:10]
         #      lin_vel = lin_vel.cpu().numpy()
         #      lin_vel = np.tile(lin_vel, len(attachment_points)).reshape(len(attachment_points),3)
+
         # draw.clear_points()
         # draw.draw_points(self.aim_positions, [(255,0,0,0.5)]*self.aim_positions.shape[0], [30]*self.aim_positions.shape[0]) # the new positions
-        draw.clear_lines()
-        for i in range(self._num_instances):
-            obj_center = pose[i, 0, 0:3]
-            for j in range(i, self._num_instances*self.num_attachment_points_per_obj):
-                draw.draw_lines([obj_center.cpu().numpy()], [self.aim_positions[j]], [(255,255,0,0.5)], [10])
+        # draw.clear_lines()
+        # for i in range(self._num_instances):
+        #     obj_center = pose[i, 0, 0:3]
+        #     for j in range(i, self._num_instances*self.num_attachment_points_per_obj):
+        #         draw.draw_lines([obj_center.cpu().numpy()], [self.aim_positions[j]], [(255,255,0,0.5)], [10])
 
 
         return self.aim_positions     

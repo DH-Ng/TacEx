@@ -1,7 +1,6 @@
 import random
 import omni.usd
 from pxr import UsdGeom, Gf
-import random
 
 class Example():
 
