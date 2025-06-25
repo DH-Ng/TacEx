@@ -313,9 +313,9 @@ class UipcRLEnv(DirectRLEnv):
             # simulate
             self.sim.step(render=False)
 
-            #!test
-            self.scene.update(dt=self.physics_dt) # so that our uipc_sim has the newest data
-            self.uipc_sim.step()
+            # #!test
+            # self.scene.update(dt=self.physics_dt) # so that our uipc_sim has the newest data
+            # self.uipc_sim.step()
             
             # render between steps only if the GUI or an RTX sensor needs it
             # note: we assume the render interval to be the shortest accepted rendering interval.

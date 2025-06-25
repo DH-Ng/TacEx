@@ -346,6 +346,20 @@ class UipcObject(AssetBase):
         """
         return string_utils.resolve_matching_names(name_keys, self.body_names, preserve_order)
 
+    def _compute_obj_position_world(self):
+        # get current world vertex positions        
+        geom = self._uipc_sim.scene.geometries()
+        geo_slot, geo_slot_rest = geom.find(self.obj_id)
+        
+        vertex_positions_world = torch.tensor(geo_slot.geometry().positions().view().copy().reshape(-1,3), device=self.device)
+        obj_pos = torch.mean(vertex_positions_world, dim=0)
+
+        draw.clear_points()
+        points = obj_pos.cpu().numpy()
+        draw.draw_points([points], [(255,0,255,0.5)]*points.shape[0], [30]*points.shape[0])
+
+        return obj_pos
+
     """
     Operations - Write to simulation.
     """

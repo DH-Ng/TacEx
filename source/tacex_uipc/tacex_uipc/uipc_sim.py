@@ -284,12 +284,12 @@ class UipcSim():
             fabric_mesh_points = fabric_prim.GetAttribute("points")
             fabric_mesh_points.Set(usdrt.Vt.Vec3fArray(trimesh_points))
 
-        draw.clear_points()
-        points = np.array(all_trimesh_points)
-        draw.draw_points(points, [(255,0,255,0.5)]*points.shape[0], [30]*points.shape[0])
+        # draw.clear_points()
+        # points = np.array(all_trimesh_points)
+        # draw.draw_points(points, [(255,0,255,0.5)]*points.shape[0], [30]*points.shape[0])
 
         if self.isaac_sim is not None:
-            self.isaac_sim.forward() # this doesnt really help, I think
+            # self.isaac_sim.forward() # this doesnt really help, I think
 
             # additional render call to somewhat mitigate render delay #todo search for better to fix this
             #? render delay might be solved in newest Isaac Ver with FabricSceneDelegate?

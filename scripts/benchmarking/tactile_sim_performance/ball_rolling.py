@@ -152,15 +152,25 @@ class BallRollingEnvCfg(DirectRLEnvCfg):
     )
 
     # plate
-    plate = AssetBaseCfg(
-        prim_path="/World/envs/env_.*/plate",
-        init_state=AssetBaseCfg.InitialStateCfg(pos=[0.5, 0, 0]),
-        spawn=sim_utils.UsdFileCfg(usd_path=f"{TACEX_ASSETS_DATA_DIR}/Props/plate.usd"),
+    plate = RigidObjectCfg(
+        prim_path="/World/envs/env_.*/ground_plate",
+        init_state=RigidObjectCfg.InitialStateCfg(pos=[0.5, 0, 0]),
+        spawn=sim_utils.UsdFileCfg(
+            usd_path=f"{TACEX_ASSETS_DATA_DIR}/Props/plate.usd",
+            rigid_props=RigidBodyPropertiesCfg(
+                solver_position_iteration_count=16,
+                solver_velocity_iteration_count=1,
+                max_angular_velocity=1000.0,
+                max_linear_velocity=1000.0,
+                max_depenetration_velocity=5.0,
+                kinematic_enabled=True
+            )
+        )
     )
 
     ball = RigidObjectCfg(
         prim_path="/World/envs/env_.*/ball",
-        init_state=RigidObjectCfg.InitialStateCfg(pos=[0.5, 0.0, 0.015]),
+        init_state=RigidObjectCfg.InitialStateCfg(pos=[0.5, 0.0, 0.01]),
         spawn=sim_utils.UsdFileCfg(
             usd_path=f"{TACEX_ASSETS_DATA_DIR}/Props/ball_wood.usd",
             #scale=(0.8, 0.8, 0.8),
@@ -179,24 +189,24 @@ class BallRollingEnvCfg(DirectRLEnvCfg):
     robot: ArticulationCfg = FRANKA_PANDA_ARM_GSMINI_SINGLE_ADAPTER_HIGH_PD_CFG.replace(
         prim_path="/World/envs/env_.*/Robot",
         init_state=ArticulationCfg.InitialStateCfg(
-            # joint_pos={
-            #     "panda_joint1": 0.0,
-            #     "panda_joint2": 0.0,
-            #     "panda_joint3": 0.0,
-            #     "panda_joint4": -2.46,
-            #     "panda_joint5": 0.0,
-            #     "panda_joint6": 2.5,
-            #     "panda_joint7": 0.741,
-            # },
             joint_pos={
                 "panda_joint1": 0.0,
-                "panda_joint2": 0.43,
+                "panda_joint2": 0.0,
                 "panda_joint3": 0.0,
-                "panda_joint4": -2.37,
+                "panda_joint4": -2.46,
                 "panda_joint5": 0.0,
-                "panda_joint6": 2.79,
+                "panda_joint6": 2.5,
                 "panda_joint7": 0.741,
             },
+            # joint_pos={
+            #     "panda_joint1": 0.0,
+            #     "panda_joint2": 0.43,
+            #     "panda_joint3": 0.0,
+            #     "panda_joint4": -2.37,
+            #     "panda_joint5": 0.0,
+            #     "panda_joint6": 2.79,
+            #     "panda_joint7": 0.741,
+            # },
         ),
     )
     gsmini = GelSightMiniCfg(
@@ -296,7 +306,7 @@ class BallRollingEnv(DirectRLEnv):
             left, # move ee to the left
             right,    
             center, 
-            #pose_for_reset # move ee over ball again, to prevent that the ball gets thrown around when the scene is resetted (not sure why this happens tho, I think cause the ball spawns directly where the ee is)
+            pose_for_reset # move ee over ball again, to prevent that the ball gets thrown around when the scene is resetted (not sure why this happens tho, I think cause the ball spawns directly where the ee is)
         ]
         # Track the given command
         self.current_goal_idx = 0
@@ -341,6 +351,8 @@ class BallRollingEnv(DirectRLEnv):
         self.gsmini = GelSightSensor(self.cfg.gsmini)
         self.scene.sensors["gsmini"] = self.gsmini
 
+        plate = RigidObject(self.cfg.plate)
+
         # Ground-plane
         ground = AssetBaseCfg(
             prim_path="/World/defaultGroundPlane",
@@ -362,29 +374,6 @@ class BallRollingEnv(DirectRLEnv):
             orientation=ground.init_state.rot
         )
 
-        # plate
-        plate = RigidObjectCfg(
-            prim_path="/World/envs/env_.*/plate",
-            init_state=RigidObjectCfg.InitialStateCfg(pos=[0.5, 0, 0]),
-            spawn=sim_utils.UsdFileCfg(
-                usd_path=f"{TACEX_ASSETS_DATA_DIR}/Props/plate.usd",
-                rigid_props=RigidBodyPropertiesCfg(
-                    solver_position_iteration_count=16,
-                    solver_velocity_iteration_count=1,
-                    max_angular_velocity=1000.0,
-                    max_linear_velocity=1000.0,
-                    max_depenetration_velocity=5.0,
-                    kinematic_enabled=True
-                )
-            )
-        )
-        plate.spawn.func(
-            plate.prim_path,
-            plate.spawn,
-            translation=plate.init_state.pos,
-            orientation=ground.init_state.rot
-        )
-
         # add lights
         light_cfg = sim_utils.DomeLightCfg(intensity=2000.0, color=(0.75, 0.75, 0.75))
         light_cfg.func("/World/Light", light_cfg)
@@ -395,7 +384,7 @@ class BallRollingEnv(DirectRLEnv):
         # update movement pattern according to the ball position
         ball_pos = self.object.data.root_link_pos_w - self.scene.env_origins
         # change goal
-        if self.step_count % self.num_step_goal_change == 0:
+        if (self.step_count+1) % self.num_step_goal_change == 0:
             self.current_goal_idx = (self.current_goal_idx+1)  % len(self.pattern_offsets)
         self.ik_commands[:, :3] = ball_pos + self.pattern_offsets[self.current_goal_idx]
         
