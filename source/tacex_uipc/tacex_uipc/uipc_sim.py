@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from typing import Any, Dict, Tuple, Union, List, TYPE_CHECKING
+import pathlib
 
 from isaaclab.utils import configclass
 import isaaclab.sim as sim_utils
@@ -43,6 +44,13 @@ class UipcSimCfg:
     Options: "quiet", "normal"
     "quiet" = do not export mesh
     """
+    
+    workspace: str = str(pathlib.Path().resolve())
+    """Path to directory where the libuipc files (e.g. systems.json) should be saved.
+
+    Defaults to current working directory.
+    """
+
     logger_level: str = "Error"
 
     gravity: tuple = (0.0, 0.0, -9.8)
@@ -141,7 +149,7 @@ class UipcSim():
         elif self.cfg.logger_level == "Info":
             Logger.set_level(Logger.Info)
 
-        self.engine: Engine = Engine(backend_name=self.cfg.device)
+        self.engine: Engine = Engine(backend_name=self.cfg.device, workspace=self.cfg.workspace)
         self.world: World = World(self.engine)
 
         # update uipc default config with our config
@@ -331,55 +339,64 @@ class UipcSim():
 
     def init_libuipc_scene_rendering(self):
         num_objs = self.scene.objects().size()
-        for id in range(1, num_objs):
-            # uipc_scene_obj = self.scene.objects().find(id)
-            # print("uipc_scene_obj ", uipc_scene_obj.name()) #-- doesnt work
-
-            geom = self.scene.geometries()
-            geo_slot, geo_slot_rest = geom.find(id)
-        
-            # spawn a usd mesh in Isaac
-            stage = omni.usd.get_context().get_stage()
-            prim_path = f"/World/uipc_mesh_{id}"
-            prim = UsdGeom.Mesh.Define(stage, prim_path)
-
-            # extract_surface
-            dim = geo_slot.geometry().dim()
-            if dim == 2:
-                # e.g. cloth
-                surf = geo_slot.geometry()
-            else:
-                # extract_surface only possible for tetrahedra meshes
-                surf = extract_surface(geo_slot.geometry())
+        for obj_id in range(1, num_objs):
+            # print("obj id ", obj_id)
+            obj = self.scene.objects().find(obj_id)
+            obj_geometry_ids = obj.geometries().ids()
+            # obj_name = obj.name() #-- doesnt work, get error message (otherwise use this to set prim_path)
             
-            surf_tri = surf.triangles().topo().view().reshape(-1).tolist()
-            surf_points_world = surf.positions().view().reshape(-1,3)
+            # create prim for each geometry
+            for id in obj_geometry_ids:
+                scene_geom = self.scene.geometries()
+                geo_slot, geo_slot_rest = scene_geom.find(id)
+                # extract_surface
+                geom = geo_slot.geometry()
 
-            MeshGenerator.update_usd_mesh(prim=prim, surf_points=surf_points_world, triangles=surf_tri)
+                # create a mesh for each instance (we keep it simple here and dont clone the prim like in IsaacLab workflow)
+                num_geom = geom.instances().size()
+                for instance_num in range(num_geom):
+                    id += instance_num
+                    # spawn a usd mesh in Isaac
+                    stage = omni.usd.get_context().get_stage()
+                    prim_path = f"/World/uipc_mesh_{id}"
+                    prim = UsdGeom.Mesh.Define(stage, prim_path)
 
-            # setup mesh updates via Fabric
-            fabric_stage = usdrt.Usd.Stage.Attach(omni.usd.get_context().get_stage_id())
-            fabric_prim = fabric_stage.GetPrimAtPath(usdrt.Sdf.Path(prim_path))
+                    dim = geom.dim()
+                    if dim == 2:
+                        # e.g. cloth
+                        surf = geom
+                    else:
+                        # extract_surface only possible for tetrahedra meshes
+                        surf = extract_surface(geom)
 
-            # Tell OmniHydra to render points from Fabric
-            if not fabric_prim.HasAttribute("Deformable"):
-                fabric_prim.CreateAttribute("Deformable", usdrt.Sdf.ValueTypeNames.PrimTypeTag, True)
+                    surf_tri = surf.triangles().topo().view().reshape(-1).tolist()
+                    surf_points_world = surf.positions().view().reshape(-1,3)
 
-            # extract world transform
-            rtxformable = usdrt.Rt.Xformable(fabric_prim)
-            rtxformable.CreateFabricHierarchyWorldMatrixAttr()
-            # set world matrix to identity matrix -> uipc already gives us vertices in world frame
-            rtxformable.GetFabricHierarchyWorldMatrixAttr().Set(usdrt.Gf.Matrix4d())
+                    MeshGenerator.update_usd_mesh(prim=prim, surf_points=surf_points_world, triangles=surf_tri)
 
-            # update fabric mesh with world coor. points
-            fabric_mesh_points_attr = fabric_prim.GetAttribute("points")
-            fabric_mesh_points_attr.Set(usdrt.Vt.Vec3fArray(surf_points_world))
+                    # setup mesh updates via Fabric
+                    fabric_stage = usdrt.Usd.Stage.Attach(omni.usd.get_context().get_stage_id())
+                    fabric_prim = fabric_stage.GetPrimAtPath(usdrt.Sdf.Path(prim_path))
 
-            # add fabric meshes to uipc sim class for updating the render meshes
-            self._fabric_meshes.append(fabric_prim)
+                    # Tell OmniHydra to render points from Fabric
+                    if not fabric_prim.HasAttribute("Deformable"):
+                        fabric_prim.CreateAttribute("Deformable", usdrt.Sdf.ValueTypeNames.PrimTypeTag, True)
 
-            # save indices to later find corresponding points of the meshes for rendering
-            num_surf_points = surf_points_world.shape[0]
-            self._surf_vertex_offsets.append(
-                self._surf_vertex_offsets[-1] + num_surf_points
-            )
+                    # extract world transform
+                    rtxformable = usdrt.Rt.Xformable(fabric_prim)
+                    rtxformable.CreateFabricHierarchyWorldMatrixAttr()
+                    # set world matrix to identity matrix -> uipc already gives us vertices in world frame
+                    rtxformable.GetFabricHierarchyWorldMatrixAttr().Set(usdrt.Gf.Matrix4d())
+
+                    # update fabric mesh with world coor. points
+                    fabric_mesh_points_attr = fabric_prim.GetAttribute("points")
+                    fabric_mesh_points_attr.Set(usdrt.Vt.Vec3fArray(surf_points_world))
+
+                    # add fabric meshes to uipc sim class for updating the render meshes
+                    self._fabric_meshes.append(fabric_prim)
+
+                    # save indices to later find corresponding points of the meshes for rendering
+                    num_surf_points = surf_points_world.shape[0]
+                    self._surf_vertex_offsets.append(
+                        self._surf_vertex_offsets[-1] + num_surf_points
+                    )

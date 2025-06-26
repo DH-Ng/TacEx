@@ -30,15 +30,13 @@ from pxr import Gf, Sdf, Usd, UsdGeom
 import omni.usd
 import usdrt
 
-import uipc
-from uipc import Logger, Transform, Quaternion, Vector3, Vector2, view, builtin
-from uipc.core import Engine, World, Scene
-from uipc.geometry import tetmesh, label_surface, label_triangle_orient, flip_inward_triangles
-from uipc.geometry import SimplicialComplexIO
-from uipc.constitution import AffineBodyConstitution, NeoHookeanShell, DiscreteShellBending, ElasticModuli
-from uipc.unit import MPa, GPa, kPa 
-
-from tacex_uipc import UipcSim, UipcSimCfg, UipcObject, UipcObjectCfg
+from uipc import view
+from uipc import Vector3, Vector2, Transform, Logger, Quaternion, AngleAxis
+from uipc import builtin
+from uipc.core import Engine, World, Scene, ContactElement
+from uipc.geometry import GeometrySlot, SimplicialComplex, SimplicialComplexIO, ground, label_surface, label_triangle_orient, flip_inward_triangles
+from uipc.constitution import AffineBodyConstitution
+from tacex_uipc import UipcSim, UipcSimCfg
 
 def setup_base_scene(sim: sim_utils.SimulationContext):
     """To make the scene pretty.
@@ -53,7 +51,7 @@ def setup_base_scene(sim: sim_utils.SimulationContext):
     cfg_ground.func(
         prim_path="/World/defaultGroundPlane", 
         cfg=cfg_ground,
-        translation=[0, -1, 0],
+        translation=[0, -2, 0],
         orientation=[0.7071068, -0.7071068, 0, 0]
     )
 
@@ -66,39 +64,67 @@ def setup_base_scene(sim: sim_utils.SimulationContext):
 
 def setup_libuipc_scene(uipc_sim: UipcSim):
     trimesh_path = str(pathlib.Path(__file__).parent.resolve() / "trimesh")
-    tetmesh_path = str(pathlib.Path(__file__).parent.resolve() / "tet_meshes")
 
     scene = uipc_sim.scene
     
-    # setup the scene
-    cloth = scene.objects().create('cloth')
-    t = Transform.Identity()
-    t.scale(2.0)
-    io = SimplicialComplexIO(t)
-    cloth_mesh = io.read(f'{trimesh_path}/grid20x20.obj')
-    label_surface(cloth_mesh)
-    nks = NeoHookeanShell()
-    dsb = DiscreteShellBending()
-    moduli = ElasticModuli.youngs_poisson(10 * kPa, 0.499)
-    nks.apply_to(cloth_mesh, moduli=moduli, mass_density=200, thickness=0.001)
-    dsb.apply_to(cloth_mesh, E = 10.0)
-    view(cloth_mesh.positions())[:] += 1.0
-    cloth.geometries().create(cloth_mesh)   
-
-    bunny = scene.objects().create('bunny')
-    t = Transform.Identity()
-    t.translate(Vector3.UnitX() + Vector3.UnitZ())
-    io = SimplicialComplexIO(t)
-    bunny_mesh = io.read(f'{tetmesh_path}/bunny0.msh')
-    label_surface(bunny_mesh)
-    label_triangle_orient(bunny_mesh)
-    bunny_mesh = flip_inward_triangles(bunny_mesh)
     abd = AffineBodyConstitution()
-    abd.apply_to(bunny_mesh, 100 * MPa)
-    is_fixed = bunny_mesh.instances().find(builtin.is_fixed)
-    view(is_fixed)[:] = 1   
+    scene.constitution_tabular().insert(abd)
+    contact_tabular = scene.contact_tabular()
+    contact_tabular.default_model(0.5, 1e9)
+    default_element = scene.contact_tabular().default_element()
 
-    bunny.geometries().create(bunny_mesh)
+    io = SimplicialComplexIO()
+    N = 8
+    friction_rate_step = 1.0 / (N - 1)
+    contact_elements:list[ContactElement] = []
+
+    for i in range(N):
+        friction_rate = i * friction_rate_step
+        e = contact_tabular.create(f'element_{i}')
+        contact_tabular.insert(e, default_element, 
+                               friction_rate=friction_rate,
+                               resistance=1e9)
+        contact_elements.append(e)
+
+    pre_transform = Transform.Identity()
+    pre_transform.scale(0.3)
+    io = SimplicialComplexIO(pre_transform)
+    cube_mesh = io.read(f'{trimesh_path}/cube.obj')
+    label_surface(cube_mesh)
+
+    abd.apply_to(cube_mesh, 1e8)
+    step = 0.5
+    start_x = - step * (N - 1) / 2
+
+    # create cubes
+    cube_object = scene.objects().create("cubes")
+    for i in range(N):
+        cube = cube_mesh.copy()
+        contact_elements[i].apply_to(cube)
+        t = Transform.Identity()
+        t.translate(Vector3.Values([start_x + i * step, 1, -0.7]))
+        t.rotate(AngleAxis(30 * np.pi / 180, Vector3.UnitX()))
+        view(cube.transforms())[0] = t.matrix()
+        cube_object.geometries().create(cube)
+
+    # create ramp
+    ramp_object = scene.objects().create("ramp")
+    pre_transform = Transform.Identity()
+    pre_transform.scale(Vector3.Values([0.5 * N, 0.1, 5]))
+    io = SimplicialComplexIO(pre_transform)
+    ramp_mesh = io.read(f'{trimesh_path}/cube.obj')
+    label_surface(ramp_mesh)
+    default_element.apply_to(ramp_mesh)
+    abd.apply_to(ramp_mesh, 1e8)
+
+    # rotate by 30 degrees
+    t = Transform.Identity()
+    t.rotate(AngleAxis(30 * np.pi / 180, Vector3.UnitX()))
+    view(ramp_mesh.transforms())[0] = t.matrix()
+
+    is_fixed = ramp_mesh.instances().find(builtin.is_fixed)
+    view(is_fixed).fill(1)
+    ramp_object.geometries().create(ramp_mesh)
 
 def main():
     """Main function."""
@@ -108,6 +134,7 @@ def main():
         gravity=[0.0, -9.8, 0.0],
     )
     sim = sim_utils.SimulationContext(sim_cfg)
+
     setup_base_scene(sim)
 
     # Initialize uipc sim
@@ -115,11 +142,11 @@ def main():
         dt=0.01,
         gravity=[0.0, -9.8, 0.0],
         ground_normal=[0, 1, 0],
-        ground_height=-1.0,
+        ground_height=-2.0,
         # logger_level="Info",
         contact=UipcSimCfg.Contact(
             default_friction_ratio=0.5,
-            default_contact_resistance=1.0,
+            default_contact_resistance=1e9,
             d_hat=0.01
         )
     )
@@ -128,9 +155,10 @@ def main():
     setup_libuipc_scene(uipc_sim)
     
     uipc_sim.init_libuipc_scene_rendering()
+    
     # init liubipc world etc.
     uipc_sim.setup_sim()
-    
+
     # Now we are ready!
     print("[INFO]: Setup complete...")
 

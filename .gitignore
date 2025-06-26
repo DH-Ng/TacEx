@@ -40,9 +40,12 @@ _isaac_lab*
 
 **/*/.container.cfg
 
+# from tacex_uipc
 build
 CMakeBuild
 __tracked_surface.stl
 dump
+dumps
+systems.json
 
 .cache/

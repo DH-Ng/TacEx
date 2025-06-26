@@ -295,4 +295,5 @@ class MeshGenerator():
             pv.SetInterpolation(UsdGeom.Tokens.faceVarying)
             pv.Set(uv_coor)
         except:
-            print("During update of the surface mesh: No `primvars:st` attribute found.")
+            pass
+            # print("During update of the surface mesh: No `primvars:st` attribute found.")

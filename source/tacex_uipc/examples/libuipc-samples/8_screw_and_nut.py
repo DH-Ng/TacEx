@@ -21,6 +21,7 @@ app_launcher = AppLauncher(args_cli)
 simulation_app = app_launcher.app
 
 import numpy as np
+import pathlib
 
 import isaaclab.sim as sim_utils
 from isaaclab.utils.timer import Timer
@@ -34,6 +35,16 @@ from uipc.core import Engine, World, Scene
 from uipc.geometry import tetmesh, label_surface, label_triangle_orient, flip_inward_triangles, extract_surface
 from uipc.constitution import AffineBodyConstitution
 from uipc.unit import MPa, GPa
+
+
+from uipc import view
+from uipc import Logger, Animation
+from uipc import Vector3, Vector2, Transform, Quaternion, AngleAxis
+from uipc import builtin
+from uipc.core import Engine, World, Scene, SceneIO
+from uipc.geometry import GeometrySlot, SimplicialComplex, SimplicialComplexSlot, SimplicialComplexIO, label_surface
+from uipc.constitution import AffineBodyConstitution, RotatingMotor
+from uipc.unit import MPa
 
 from tacex_uipc import UipcSim, UipcSimCfg
 
@@ -62,52 +73,43 @@ def setup_base_scene(sim: sim_utils.SimulationContext):
     cfg_light_dome.func("/World/lightDome", cfg_light_dome, translation=(1, 10, 0))
 
 def setup_libuipc_scene(uipc_sim: UipcSim):
+    trimesh_path = str(pathlib.Path(__file__).parent.resolve() / "trimesh")
+    
     scene = uipc_sim.scene
 
-    # create constitution and contact model
+
+    t = Transform.Identity()
+    t.scale(0.05)
+    io = SimplicialComplexIO()
     abd = AffineBodyConstitution()
+    rm = RotatingMotor()
+    scene.contact_tabular().default_model(0, 1e9)
+    
+    screw_obj = scene.objects().create('screw')
+    screw_mesh = io.read(f'{trimesh_path}/screw-and-nut/screw-big-2.obj')
+    label_surface(screw_mesh)
+    abd.apply_to(screw_mesh, 100 * MPa)
+    rm.apply_to(screw_mesh, 100, motor_axis=Vector3.UnitY(), motor_rot_vel=-np.pi)
+    screw_obj.geometries().create(screw_mesh)
+    
+    def screw_animation(info:Animation.UpdateInfo):
+        geo_slots = info.geo_slots()
+        geo_slot: SimplicialComplexSlot = geo_slots[0]
+        geo = geo_slot.geometry()
+        is_constrained = geo.instances().find(builtin.is_constrained)
+        view(is_constrained)[0] = 1
+        RotatingMotor.animate(geo, info.dt())
+        
+    scene.animator().insert(screw_obj, screw_animation)
+    
+    nut_obj = scene.objects().create('nut')
+    nut_mesh = io.read(f'{trimesh_path}/screw-and-nut/nut-big-2.obj')
+    label_surface(nut_mesh)
+    abd.apply_to(nut_mesh, 100 * MPa)
+    is_fixed = nut_mesh.instances().find(builtin.is_fixed)
+    view(is_fixed)[:] = 1
+    nut_obj.geometries().create(nut_mesh)
 
-    # friction ratio and contact resistance
-    scene.contact_tabular().default_model(0.5, 1.0 * GPa)
-    default_element = scene.contact_tabular().default_element()
-
-    # create a regular tetrahedron
-    Vs = np.array([[0,1,0],
-                   [0,0,1],
-                   [-np.sqrt(3)/2, 0, -0.5],
-                   [np.sqrt(3)/2, 0, -0.5]])
-    Ts = np.array([[0,1,2,3]])
-
-    # setup a base mesh to reduce the later work
-    base_mesh = tetmesh(Vs, Ts)
-    # apply the constitution and contact model to the base mesh
-    abd.apply_to(base_mesh, 100 * MPa)
-    # apply the default contact model to the base mesh
-    default_element.apply_to(base_mesh)
-
-    # label the surface, enable the contact
-    label_surface(base_mesh)
-    # label the triangle orientation to export the correct surface mesh
-    label_triangle_orient(base_mesh)
-    # flip the triangles inward for better rendering
-    base_mesh = flip_inward_triangles(base_mesh)
-
-    mesh1 = base_mesh.copy()
-    pos_view = uipc.view(mesh1.positions())
-    # move the mesh up for 1 unit
-    pos_view += uipc.Vector3.UnitY() * 1.5
-
-    mesh2 = base_mesh.copy()
-    is_fixed = mesh2.instances().find(uipc.builtin.is_fixed)
-    is_fixed_view = uipc.view(is_fixed)
-    is_fixed_view[:] = 1 # make the second mesh static
-
-    # create objects
-    object1 = scene.objects().create("upper_tet")
-    object1.geometries().create(mesh1)  
-
-    object2 = scene.objects().create("lower_tet")
-    object2.geometries().create(mesh2)
 
 def main():
     """Main function."""
@@ -122,14 +124,18 @@ def main():
 
     # Initialize uipc sim
     uipc_cfg = UipcSimCfg(
-        dt=0.02,
-        gravity=[0.0, -9.8, 0.0],
+        workspace=str(pathlib.Path(__file__).parent.resolve() / "dumps" / "8_screw_and_nut"),
+        dt=0.005,
+        gravity=[0.0, 0.0, 0.0],
         ground_normal=[0, 1, 0],
         ground_height=-1.0,
         # logger_level="Info",
         contact=UipcSimCfg.Contact(
-            default_friction_ratio=0.5,
-            default_contact_resistance=1.0,
+            enable_friction=False,
+            d_hat=0.02,
+        ),
+        newton=UipcSimCfg.Newton(
+            velocity_tol=0.05,
         )
     )
     uipc_sim = UipcSim(uipc_cfg)
@@ -148,6 +154,9 @@ def main():
     total_uipc_sim_time = 0.0
     total_uipc_render_time = 0.0
 
+    # to save/ load the simulation frames
+    recover_sim = False
+    
     # Simulate physics
     while simulation_app.is_running():
 
@@ -155,23 +164,33 @@ def main():
         sim.render()
 
         if sim.is_playing():
-            print("")
-            print("====================================================================================")
-            print("====================================================================================")
-            print("Step number ", step)
-            with Timer("[INFO]: Time taken for uipc sim step", name="uipc_step"):
-                uipc_sim.step()
-                # uipc_sim.save_current_world_state()
+            if recover_sim:
+                if step==500:
+                    break
+
+                if (uipc_sim.world.recover(uipc_sim.world.frame() + 1)):
+                    uipc_sim.world.retrieve()
+                    print("Replaying frame ", uipc_sim.world.frame() + 1)
+                else:
+                    print("")
+                    print("====================================================================================")
+                    print("====================================================================================")
+                    print("Step number ", step)
+                    with Timer("[INFO]: Time taken for uipc sim step", name="uipc_step"):
+                        uipc_sim.step()
+                        uipc_sim.world.dump()   
+                    total_uipc_sim_time += Timer.get_timer_info("uipc_step")
+
             with Timer("[INFO]: Time taken for rendering", name="render_update"):
                 uipc_sim.update_render_meshes()
                 sim.render()
+            total_uipc_render_time += Timer.get_timer_info("render_update")
 
             # get time reports
             uipc_sim.get_sim_time_report()
-            total_uipc_sim_time += Timer.get_timer_info("uipc_step")
-            total_uipc_render_time += Timer.get_timer_info("render_update")
-
-            step += 1      
+            
+            step += 1
+         
           
 if __name__ == "__main__":
     # run the main function

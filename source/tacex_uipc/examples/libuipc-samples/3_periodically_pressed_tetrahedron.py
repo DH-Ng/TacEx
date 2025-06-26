@@ -53,9 +53,6 @@ def setup_base_scene(sim: sim_utils.SimulationContext):
     stage = omni.usd.get_context().get_stage()
     UsdGeom.SetStageUpAxis(stage, UsdGeom.Tokens.y)
 
-    # Set main camera
-    # sim.set_camera_view([2.0, 0.0, 2.5], [-0.5, 0.0, 0.5])
-
     # Design scene by spawning assets
     cfg_ground = sim_utils.GroundPlaneCfg()
     cfg_ground.func(
@@ -71,32 +68,8 @@ def setup_base_scene(sim: sim_utils.SimulationContext):
         color=(0.75, 0.75, 0.75),
     )
     cfg_light_dome.func("/World/lightDome", cfg_light_dome, translation=(1, 10, 0))
-        
-def main():
-    """Main function."""
-    # Initialize the simulation context
-    sim_cfg = sim_utils.SimulationCfg(
-        dt=1/60,
-        gravity=[0.0, -9.8, 0.0],
-    )
-    sim = sim_utils.SimulationContext(sim_cfg)
 
-    setup_base_scene(sim)
-
-    # Initialize uipc sim
-    uipc_cfg = UipcSimCfg(
-        dt=0.02,
-        gravity=[0.0, -9.8, 0.0],
-        ground_normal=[0, 1, 0],
-        ground_height=-0.5,
-        # logger_level="Info",
-        contact=UipcSimCfg.Contact(
-            default_friction_ratio=0.1,
-            default_contact_resistance=1.0,
-        )
-    )
-    uipc_sim = UipcSim(uipc_cfg)
-
+def setup_libuipc_scene(uipc_sim: UipcSim):
     snh = StableNeoHookean()
     spc = SoftPositionConstraint()
     tet_object = uipc_sim.scene.objects().create('tet_object')
@@ -137,10 +110,37 @@ def main():
         aim_position_view[0] = rest_position_view[0] + Vector3.UnitY() * y
 
     animator.insert(tet_object, animate_tet)
+ 
+def main():
+    """Main function."""
+    # Initialize the simulation context
+    sim_cfg = sim_utils.SimulationCfg(
+        dt=1/60,
+        gravity=[0.0, -9.8, 0.0],
+    )
+    sim = sim_utils.SimulationContext(sim_cfg)
+    setup_base_scene(sim)
+
+    # Initialize uipc sim
+    uipc_cfg = UipcSimCfg(
+        dt=0.02,
+        gravity=[0.0, -9.8, 0.0],
+        ground_normal=[0, 1, 0],
+        ground_height=-0.5,
+        # logger_level="Info",
+        contact=UipcSimCfg.Contact(
+            default_friction_ratio=0.1,
+            default_contact_resistance=1.0,
+        )
+    )
+    uipc_sim = UipcSim(uipc_cfg)
+
+    setup_libuipc_scene(uipc_sim)
+    
     uipc_sim.init_libuipc_scene_rendering()
-
+    # init liubipc world etc.
     uipc_sim.setup_sim()
-
+   
     # Now we are ready!
     print("[INFO]: Setup complete...")
 
@@ -160,10 +160,10 @@ def main():
             print("====================================================================================")
             print("====================================================================================")
             print("Step number ", step)
-            with Timer("[INFO]: Time taken for uipc sim step.", name="uipc_step"):
+            with Timer("[INFO]: Time taken for uipc sim step", name="uipc_step"):
                 uipc_sim.step()
                 # uipc_sim.save_current_world_state()
-            with Timer("[INFO]: Time taken for updating the render meshes.", name="render_update"):
+            with Timer("[INFO]: Time taken for rendering", name="render_update"):
                 uipc_sim.update_render_meshes()
                 sim.render()
 
