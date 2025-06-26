@@ -43,7 +43,7 @@ from uipc.constitution import SoftPositionConstraint
 from uipc.geometry import GeometrySlot, SimplicialComplex, SimplicialComplexIO
 
 from tacex_uipc import UipcSim, UipcSimCfg, UipcObject, UipcObjectCfg
-from tacex_uipc.utils import TetMeshCfg, MeshGenerator
+from tacex_uipc.utils import TetMeshCfg, MeshGenerator, create_prim_for_uipc_scene_object
 
 def setup_base_scene(sim: sim_utils.SimulationContext):
     """To make the scene pretty.
@@ -71,49 +71,6 @@ def setup_base_scene(sim: sim_utils.SimulationContext):
         color=(0.75, 0.75, 0.75),
     )
     cfg_light_dome.func("/World/lightDome", cfg_light_dome, translation=(1, 10, 0))
-
-def create_prim_for_uipc_scene_object(uipc_sim, prim_path, uipc_scene_object):
-    # spawn a usd mesh in Isaac
-    stage = omni.usd.get_context().get_stage()
-    prim = UsdGeom.Mesh.Define(stage, prim_path)
-    
-    # get corresponding simplical complex from uipc_scene
-    obj_id = uipc_scene_object.geometries().ids()[0]     
-    simplicial_complex_slot, _ = uipc_sim.scene.geometries().find(obj_id)
-    
-    # extract_surface
-    surf = extract_surface(simplicial_complex_slot.geometry())
-    tet_surf_tri = surf.triangles().topo().view().reshape(-1).tolist()
-    tet_surf_points_world = surf.positions().view().reshape(-1,3)
-    
-    MeshGenerator.update_usd_mesh(prim=prim, surf_points=tet_surf_points_world, triangles=tet_surf_tri)
-
-    # setup mesh updates via Fabric
-    fabric_stage = usdrt.Usd.Stage.Attach(omni.usd.get_context().get_stage_id())
-    fabric_prim = fabric_stage.GetPrimAtPath(usdrt.Sdf.Path(prim_path))
-
-    # Tell OmniHydra to render points from Fabric
-    if not fabric_prim.HasAttribute("Deformable"):
-        fabric_prim.CreateAttribute("Deformable", usdrt.Sdf.ValueTypeNames.PrimTypeTag, True)
-
-    # extract world transform
-    rtxformable = usdrt.Rt.Xformable(fabric_prim)
-    rtxformable.CreateFabricHierarchyWorldMatrixAttr()
-    # set world matrix to identity matrix -> uipc already gives us vertices in world frame
-    rtxformable.GetFabricHierarchyWorldMatrixAttr().Set(usdrt.Gf.Matrix4d())
-
-    # update fabric mesh with world coor. points
-    fabric_mesh_points_attr = fabric_prim.GetAttribute("points")
-    fabric_mesh_points_attr.Set(usdrt.Vt.Vec3fArray(tet_surf_points_world))
-
-    # add fabric meshes to uipc sim class for updating the render meshes
-    uipc_sim._fabric_meshes.append(fabric_prim)
-    
-    # save indices to later find corresponding points of the meshes for rendering
-    num_surf_points = tet_surf_points_world.shape[0]
-    uipc_sim._surf_vertex_offsets.append(
-        uipc_sim._surf_vertex_offsets[-1] + num_surf_points
-    )
         
 def main():
     """Main function."""
@@ -185,12 +142,7 @@ def main():
     object2 = uipc_sim.scene.objects().create("lower_tet")
     object2.geometries().create(mesh2)
 
-    # create prims in Isaac for rendering
-    create_prim_for_uipc_scene_object(uipc_sim, prim_path="/World/upper_tet", uipc_scene_object=object1)
-    create_prim_for_uipc_scene_object(uipc_sim, prim_path="/World/lower_tet", uipc_scene_object=object2)
-
-    # # Play the simulator
-    # sim.reset()
+    uipc_sim.init_libuipc_scene_rendering()
 
     uipc_sim.setup_sim()
 
