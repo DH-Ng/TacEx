@@ -21,6 +21,7 @@ app_launcher = AppLauncher(args_cli)
 simulation_app = app_launcher.app
 
 import numpy as np
+import pathlib
 
 import isaaclab.sim as sim_utils
 from isaaclab.utils.timer import Timer
@@ -30,20 +31,13 @@ import omni.usd
 import usdrt
 
 import uipc
+from uipc import Logger, Transform, Quaternion, Vector3, Vector2, view, builtin
 from uipc.core import Engine, World, Scene
-from uipc.geometry import tetmesh, label_surface, label_triangle_orient, flip_inward_triangles, extract_surface
-from uipc.constitution import AffineBodyConstitution
-from uipc.unit import MPa, GPa
-
-from uipc import view
-from uipc import builtin
-from uipc import Animation, Vector3
-from uipc.core import Engine, World, Scene, SceneIO
-from uipc.constitution import ElasticModuli, StableNeoHookean, SoftPositionConstraint
-from uipc.geometry import GeometrySlot, SimplicialComplex, SimplicialComplexIO
-
+from uipc.geometry import tetmesh, label_surface, label_triangle_orient, flip_inward_triangles
+from uipc.geometry import SimplicialComplexIO
+from uipc.constitution import AffineBodyConstitution, NeoHookeanShell, DiscreteShellBending, ElasticModuli
+from uipc.unit import MPa, GPa, kPa 
 from tacex_uipc import UipcSim, UipcSimCfg, UipcObject, UipcObjectCfg
-from tacex_uipc.utils import TetMeshCfg, MeshGenerator, create_prim_for_uipc_scene_object
 
 def setup_base_scene(sim: sim_utils.SimulationContext):
     """To make the scene pretty.
@@ -61,7 +55,7 @@ def setup_base_scene(sim: sim_utils.SimulationContext):
     cfg_ground.func(
         prim_path="/World/defaultGroundPlane", 
         cfg=cfg_ground,
-        translation=[0, -0.5, 0],
+        translation=[0, -1, 0],
         orientation=[0.7071068, -0.7071068, 0, 0]
     )
 
@@ -85,58 +79,53 @@ def main():
 
     # Initialize uipc sim
     uipc_cfg = UipcSimCfg(
-        dt=0.02,
+        dt=0.01,
         gravity=[0.0, -9.8, 0.0],
         ground_normal=[0, 1, 0],
-        ground_height=-0.5,
+        ground_height=-1.0,
         # logger_level="Info",
         contact=UipcSimCfg.Contact(
-            default_friction_ratio=0.1,
+            default_friction_ratio=0.5,
             default_contact_resistance=1.0,
+            d_hat=0.01
         )
     )
     uipc_sim = UipcSim(uipc_cfg)
 
-    snh = StableNeoHookean()
-    spc = SoftPositionConstraint()
-    tet_object = uipc_sim.scene.objects().create('tet_object')
-    Vs = np.array([[0,1,0],
-                   [0,0,1],
-                   [-np.sqrt(3)/2, 0, -0.5],
-                   [np.sqrt(3)/2, 0, -0.5]])
-    Ts = np.array([[0,1,2,3]])
-    tet = tetmesh(Vs, Ts)
-    label_surface(tet)
-    label_triangle_orient(tet)
-    tet = flip_inward_triangles(tet)
-    moduli = ElasticModuli.youngs_poisson(0.1 * MPa, 0.49)
-    snh.apply_to(tet, moduli)
-    spc.apply_to(tet, 100) # constraint strength ratio
-    tet_object.geometries().create(tet)
+    trimesh_path = str(pathlib.Path(__file__).parent.resolve() / "trimesh")
+    tetmesh_path = str(pathlib.Path(__file__).parent.resolve() / "tet_meshes")
 
-    animator = uipc_sim.scene.animator()
+    # begin setup the scene
+    cloth = uipc_sim.scene.objects().create('cloth')
+    t = Transform.Identity()
+    t.scale(2.0)
+    io = SimplicialComplexIO(t)
+    cloth_mesh = io.read(f'{trimesh_path}/grid20x20.obj')
+    label_surface(cloth_mesh)
+    nks = NeoHookeanShell()
+    dsb = DiscreteShellBending()
+    moduli = ElasticModuli.youngs_poisson(10 * kPa, 0.499)
+    nks.apply_to(cloth_mesh, moduli=moduli, mass_density=200, thickness=0.001)
+    dsb.apply_to(cloth_mesh, E = 10.0)
+    view(cloth_mesh.positions())[:] += 1.0
+    cloth.geometries().create(cloth_mesh)   
 
-    def animate_tet(info:Animation.UpdateInfo): # animation function
-        geo_slots:list[GeometrySlot] = info.geo_slots()
-        geo:SimplicialComplex = geo_slots[0].geometry()
-        rest_geo_slots:list[GeometrySlot] = info.rest_geo_slots()
-        rest_geo:SimplicialComplex = rest_geo_slots[0].geometry()
+    bunny = uipc_sim.scene.objects().create('bunny')
+    t = Transform.Identity()
+    t.translate(Vector3.UnitX() + Vector3.UnitZ())
+    io = SimplicialComplexIO(t)
+    bunny_mesh = io.read(f'{tetmesh_path}/bunny0.msh')
+    label_surface(bunny_mesh)
+    label_triangle_orient(bunny_mesh)
+    bunny_mesh = flip_inward_triangles(bunny_mesh)
+    abd = AffineBodyConstitution()
+    abd.apply_to(bunny_mesh, 100 * MPa)
+    is_fixed = bunny_mesh.instances().find(builtin.is_fixed)
+    view(is_fixed)[:] = 1   
 
-        is_constrained = geo.vertices().find(builtin.is_constrained)
-        is_constrained_view = view(is_constrained)
-        aim_position = geo.vertices().find(builtin.aim_position)
-        aim_position_view = view(aim_position)
-        rest_position_view = rest_geo.positions().view()
+    bunny.geometries().create(bunny_mesh)
+    # end setup the scene
 
-        is_constrained_view[0] = 1
-
-        t = info.dt() * info.frame()
-        theta = np.pi * t
-        y = -np.sin(theta)
-
-        aim_position_view[0] = rest_position_view[0] + Vector3.UnitY() * y
-
-    animator.insert(tet_object, animate_tet)
     uipc_sim.init_libuipc_scene_rendering()
 
     uipc_sim.setup_sim()

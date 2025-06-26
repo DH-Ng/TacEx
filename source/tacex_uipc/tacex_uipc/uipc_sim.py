@@ -302,54 +302,6 @@ class UipcSim():
             self.isaac_sim.render()
             
 
-    def init_libuipc_scene_rendering(self):
-        num_objs = self.scene.objects().size()
-        for id in range(1, num_objs):
-            # uipc_scene_obj = self.scene.objects().find(id)
-            # print("uipc_scene_obj ", uipc_scene_obj.name()) #-- doesnt work
-
-            geom = self.scene.geometries()
-            geo_slot, geo_slot_rest = geom.find(id)
-        
-            # spawn a usd mesh in Isaac
-            stage = omni.usd.get_context().get_stage()
-            prim_path = f"/World/uipc_mesh_{id}"
-            prim = UsdGeom.Mesh.Define(stage, prim_path)
-
-            # extract_surface
-            surf = extract_surface(geo_slot.geometry())
-            tet_surf_tri = surf.triangles().topo().view().reshape(-1).tolist()
-            tet_surf_points_world = surf.positions().view().reshape(-1,3)
-
-            MeshGenerator.update_usd_mesh(prim=prim, surf_points=tet_surf_points_world, triangles=tet_surf_tri)
-
-            # setup mesh updates via Fabric
-            fabric_stage = usdrt.Usd.Stage.Attach(omni.usd.get_context().get_stage_id())
-            fabric_prim = fabric_stage.GetPrimAtPath(usdrt.Sdf.Path(prim_path))
-
-            # Tell OmniHydra to render points from Fabric
-            if not fabric_prim.HasAttribute("Deformable"):
-                fabric_prim.CreateAttribute("Deformable", usdrt.Sdf.ValueTypeNames.PrimTypeTag, True)
-
-            # extract world transform
-            rtxformable = usdrt.Rt.Xformable(fabric_prim)
-            rtxformable.CreateFabricHierarchyWorldMatrixAttr()
-            # set world matrix to identity matrix -> uipc already gives us vertices in world frame
-            rtxformable.GetFabricHierarchyWorldMatrixAttr().Set(usdrt.Gf.Matrix4d())
-
-            # update fabric mesh with world coor. points
-            fabric_mesh_points_attr = fabric_prim.GetAttribute("points")
-            fabric_mesh_points_attr.Set(usdrt.Vt.Vec3fArray(tet_surf_points_world))
-
-            # add fabric meshes to uipc sim class for updating the render meshes
-            self._fabric_meshes.append(fabric_prim)
-
-            # save indices to later find corresponding points of the meshes for rendering
-            num_surf_points = tet_surf_points_world.shape[0]
-            self._surf_vertex_offsets.append(
-                self._surf_vertex_offsets[-1] + num_surf_points
-            )
-
     @staticmethod
     def get_sim_time_report(as_json: bool = False):
         if as_json:
@@ -376,3 +328,58 @@ class UipcSim():
             self.world.retrieve()
         else:
             print(f"No data for frame {frame_num}.")      
+
+    def init_libuipc_scene_rendering(self):
+        num_objs = self.scene.objects().size()
+        for id in range(1, num_objs):
+            # uipc_scene_obj = self.scene.objects().find(id)
+            # print("uipc_scene_obj ", uipc_scene_obj.name()) #-- doesnt work
+
+            geom = self.scene.geometries()
+            geo_slot, geo_slot_rest = geom.find(id)
+        
+            # spawn a usd mesh in Isaac
+            stage = omni.usd.get_context().get_stage()
+            prim_path = f"/World/uipc_mesh_{id}"
+            prim = UsdGeom.Mesh.Define(stage, prim_path)
+
+            # extract_surface
+            dim = geo_slot.geometry().dim()
+            if dim == 2:
+                # e.g. cloth
+                surf = geo_slot.geometry()
+            else:
+                # extract_surface only possible for tetrahedra meshes
+                surf = extract_surface(geo_slot.geometry())
+            
+            surf_tri = surf.triangles().topo().view().reshape(-1).tolist()
+            surf_points_world = surf.positions().view().reshape(-1,3)
+
+            MeshGenerator.update_usd_mesh(prim=prim, surf_points=surf_points_world, triangles=surf_tri)
+
+            # setup mesh updates via Fabric
+            fabric_stage = usdrt.Usd.Stage.Attach(omni.usd.get_context().get_stage_id())
+            fabric_prim = fabric_stage.GetPrimAtPath(usdrt.Sdf.Path(prim_path))
+
+            # Tell OmniHydra to render points from Fabric
+            if not fabric_prim.HasAttribute("Deformable"):
+                fabric_prim.CreateAttribute("Deformable", usdrt.Sdf.ValueTypeNames.PrimTypeTag, True)
+
+            # extract world transform
+            rtxformable = usdrt.Rt.Xformable(fabric_prim)
+            rtxformable.CreateFabricHierarchyWorldMatrixAttr()
+            # set world matrix to identity matrix -> uipc already gives us vertices in world frame
+            rtxformable.GetFabricHierarchyWorldMatrixAttr().Set(usdrt.Gf.Matrix4d())
+
+            # update fabric mesh with world coor. points
+            fabric_mesh_points_attr = fabric_prim.GetAttribute("points")
+            fabric_mesh_points_attr.Set(usdrt.Vt.Vec3fArray(surf_points_world))
+
+            # add fabric meshes to uipc sim class for updating the render meshes
+            self._fabric_meshes.append(fabric_prim)
+
+            # save indices to later find corresponding points of the meshes for rendering
+            num_surf_points = surf_points_world.shape[0]
+            self._surf_vertex_offsets.append(
+                self._surf_vertex_offsets[-1] + num_surf_points
+            )

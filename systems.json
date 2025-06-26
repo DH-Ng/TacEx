@@ -26,6 +26,17 @@
             "weak_deps": []
         },
         {
+            "engine_aware": false,
+            "name": "uipc::backend::cuda::FEMABDContactReceiver",
+            "strong_deps": [
+                "uipc::backend::cuda::GlobalContactManager",
+                "uipc::backend::cuda::AffineBodyVertexReporter",
+                "uipc::backend::cuda::FiniteElementVertexReporter"
+            ],
+            "valid": true,
+            "weak_deps": []
+        },
+        {
             "engine_aware": true,
             "name": "uipc::backend::cuda::GradientHessianComputer",
             "strong_deps": [],
@@ -85,6 +96,20 @@
         },
         {
             "engine_aware": false,
+            "name": "uipc::backend::cuda::FEMLinearSubsystem",
+            "strong_deps": [
+                "uipc::backend::cuda::GlobalLinearSystem",
+                "uipc::backend::cuda::FiniteElementMethod",
+                "uipc::backend::cuda::FiniteElementVertexReporter"
+            ],
+            "valid": true,
+            "weak_deps": [
+                "uipc::backend::cuda::FEMContactReceiver",
+                "uipc::backend::cuda::FiniteElementAnimator"
+            ]
+        },
+        {
+            "engine_aware": false,
             "name": "uipc::backend::cuda::LinearPCG",
             "strong_deps": [
                 "uipc::backend::cuda::GlobalLinearSystem",
@@ -115,11 +140,34 @@
             "weak_deps": []
         },
         {
+            "engine_aware": false,
+            "name": "uipc::backend::cuda::FEMLineSearchReporter",
+            "strong_deps": [
+                "uipc::backend::cuda::LineSearcher",
+                "uipc::backend::cuda::FiniteElementMethod"
+            ],
+            "valid": true,
+            "weak_deps": [
+                "uipc::backend::cuda::FiniteElementAnimator"
+            ]
+        },
+        {
             "engine_aware": true,
             "name": "uipc::backend::cuda::GlobalContactManager",
             "strong_deps": [
                 "uipc::backend::cuda::GlobalVertexManager",
                 "uipc::backend::cuda::GlobalTrajectoryFilter"
+            ],
+            "valid": true,
+            "weak_deps": []
+        },
+        {
+            "engine_aware": false,
+            "name": "uipc::backend::cuda::ABDFEMContactReceiver",
+            "strong_deps": [
+                "uipc::backend::cuda::GlobalContactManager",
+                "uipc::backend::cuda::AffineBodyVertexReporter",
+                "uipc::backend::cuda::FiniteElementVertexReporter"
             ],
             "valid": true,
             "weak_deps": []
@@ -218,6 +266,16 @@
         },
         {
             "engine_aware": false,
+            "name": "uipc::backend::cuda::FiniteElementKinetic",
+            "strong_deps": [
+                "uipc::backend::cuda::FiniteElementMethod",
+                "uipc::backend::cuda::FiniteElementMethod"
+            ],
+            "valid": true,
+            "weak_deps": []
+        },
+        {
+            "engine_aware": false,
             "name": "uipc::backend::cuda::ABDLineSearchReporter",
             "strong_deps": [
                 "uipc::backend::cuda::LineSearcher",
@@ -260,11 +318,39 @@
         },
         {
             "engine_aware": false,
+            "name": "uipc::backend::cuda::FEMContactReceiver",
+            "strong_deps": [
+                "uipc::backend::cuda::GlobalContactManager",
+                "uipc::backend::cuda::FiniteElementVertexReporter"
+            ],
+            "valid": true,
+            "weak_deps": []
+        },
+        {
+            "engine_aware": false,
             "name": "uipc::backend::cuda::HalfPlaneVertexReporter",
             "strong_deps": [
                 "uipc::backend::cuda::GlobalVertexManager",
                 "uipc::backend::cuda::HalfPlane",
                 "uipc::backend::cuda::HalfPlaneBodyReporter"
+            ],
+            "valid": true,
+            "weak_deps": []
+        },
+        {
+            "engine_aware": false,
+            "name": "uipc::backend::cuda::ABDFEMLinearSubsystem",
+            "strong_deps": [
+                "uipc::backend::cuda::GlobalLinearSystem",
+                "uipc::backend::cuda::GlobalLinearSystem",
+                "uipc::backend::cuda::ABDFEMContactReceiver",
+                "uipc::backend::cuda::FEMABDContactReceiver",
+                "uipc::backend::cuda::ABDLinearSubsystem",
+                "uipc::backend::cuda::FEMLinearSubsystem",
+                "uipc::backend::cuda::AffineBodyDynamics",
+                "uipc::backend::cuda::FiniteElementMethod",
+                "uipc::backend::cuda::AffineBodyVertexReporter",
+                "uipc::backend::cuda::FiniteElementVertexReporter"
             ],
             "valid": true,
             "weak_deps": []
@@ -290,9 +376,70 @@
             "weak_deps": []
         },
         {
+            "engine_aware": false,
+            "name": "uipc::backend::cuda::FiniteElementBodyReporter",
+            "strong_deps": [
+                "uipc::backend::cuda::GlobalBodyManager",
+                "uipc::backend::cuda::FiniteElementMethod"
+            ],
+            "valid": true,
+            "weak_deps": []
+        },
+        {
+            "engine_aware": false,
+            "name": "uipc::backend::cuda::FEMDofPredictor",
+            "strong_deps": [
+                "uipc::backend::cuda::FiniteElementMethod",
+                "uipc::backend::cuda::DofPredictor"
+            ],
+            "valid": true,
+            "weak_deps": []
+        },
+        {
+            "engine_aware": true,
+            "name": "uipc::backend::cuda::FiniteElementMethod",
+            "strong_deps": [
+                "uipc::backend::cuda::GlobalVertexManager"
+            ],
+            "valid": true,
+            "weak_deps": []
+        },
+        {
             "engine_aware": true,
             "name": "uipc::backend::cuda::GlobalVertexManager",
             "strong_deps": [],
+            "valid": true,
+            "weak_deps": []
+        },
+        {
+            "engine_aware": false,
+            "name": "uipc::backend::cuda::FiniteElementSurfaceReporter",
+            "strong_deps": [
+                "uipc::backend::cuda::GlobalSimpicialSurfaceManager",
+                "uipc::backend::cuda::FiniteElementMethod",
+                "uipc::backend::cuda::FiniteElementVertexReporter"
+            ],
+            "valid": true,
+            "weak_deps": []
+        },
+        {
+            "engine_aware": false,
+            "name": "uipc::backend::cuda::FiniteElementVertexReporter",
+            "strong_deps": [
+                "uipc::backend::cuda::GlobalVertexManager",
+                "uipc::backend::cuda::FiniteElementMethod",
+                "uipc::backend::cuda::FiniteElementBodyReporter"
+            ],
+            "valid": true,
+            "weak_deps": []
+        },
+        {
+            "engine_aware": false,
+            "name": "uipc::backend::cuda::DiscreteShellBending",
+            "strong_deps": [
+                "uipc::backend::cuda::FiniteElementMethod",
+                "uipc::backend::cuda::FiniteElementMethod"
+            ],
             "valid": true,
             "weak_deps": []
         },
@@ -318,6 +465,19 @@
         },
         {
             "engine_aware": false,
+            "name": "uipc::backend::cuda::FEMDiagPreconditioner",
+            "strong_deps": [
+                "uipc::backend::cuda::GlobalLinearSystem",
+                "uipc::backend::cuda::FiniteElementMethod",
+                "uipc::backend::cuda::GlobalLinearSystem",
+                "uipc::backend::cuda::FEMLinearSubsystem",
+                "uipc::backend::cuda::GlobalVertexManager"
+            ],
+            "valid": true,
+            "weak_deps": []
+        },
+        {
+            "engine_aware": false,
             "name": "uipc::backend::cuda::LBVHSimplexTrajectoryFilter",
             "strong_deps": [
                 "uipc::backend::cuda::GlobalVertexManager",
@@ -325,6 +485,16 @@
                 "uipc::backend::cuda::GlobalContactManager",
                 "uipc::backend::cuda::GlobalBodyManager",
                 "uipc::backend::cuda::GlobalTrajectoryFilter"
+            ],
+            "valid": true,
+            "weak_deps": []
+        },
+        {
+            "engine_aware": false,
+            "name": "uipc::backend::cuda::NeoHookeanShell2D",
+            "strong_deps": [
+                "uipc::backend::cuda::FiniteElementMethod",
+                "uipc::backend::cuda::FiniteElementMethod"
             ],
             "valid": true,
             "weak_deps": []
