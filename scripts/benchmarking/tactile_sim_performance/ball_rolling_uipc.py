@@ -9,7 +9,7 @@ from isaaclab.app import AppLauncher
 
 # add argparse arguments
 parser = argparse.ArgumentParser(description="Ball rolling experiment with a Franka, which is equipped with one GelSight Mini Sensor.")
-parser.add_argument("--num_envs", type=int, default=10, help="Number of environments to spawn.")
+parser.add_argument("--num_envs", type=int, default=1, help="Number of environments to spawn.")
 parser.add_argument("--sys", type=bool, default=True, help="Whether to track system utilization.")
 parser.add_argument("--debug_vis", default=True, action="store_true", help="Whether to render tactile images in the# append AppLauncher cli args")
 AppLauncher.add_app_launcher_args(parser)
@@ -62,12 +62,16 @@ from isaaclab.controllers.differential_ik_cfg import DifferentialIKControllerCfg
 from isaaclab.controllers.differential_ik import DifferentialIKController
 import isaaclab.utils.math as math_utils
 
-from tacex_assets.robots.franka.franka_gsmini_single_adapter_rigid import FRANKA_PANDA_ARM_GSMINI_SINGLE_ADAPTER_HIGH_PD_CFG
+from tacex_assets.robots.franka.franka_gsmini_single_adapter_uipc import FRANKA_PANDA_ARM_GSMINI_SINGLE_ADAPTER_HIGH_PD_CFG
 from tacex_assets import TACEX_ASSETS_DATA_DIR
 from tacex_assets.sensors.gelsight_mini.gelsight_mini_cfg import GelSightMiniCfg
 
 from tacex import GelSightSensor, GelSightSensorCfg
 from tacex.simulation_approaches.gpu_taxim import TaximSimulatorCfg
+
+from tacex_uipc import UipcSim, UipcSimCfg, UipcObject, UipcObjectCfg, UipcRLEnv
+from tacex_uipc import UipcIsaacAttachments, UipcIsaacAttachmentsCfg
+from tacex_uipc.utils import TetMeshCfg
 
 import time
 import psutil
@@ -76,6 +80,9 @@ import datetime
 from pathlib import Path
 import json
 import platform
+
+
+
 class CustomEnvWindow(BaseEnvWindow):
     """Window manager for the RL environment."""
 
@@ -130,9 +137,17 @@ class BallRollingEnvCfg(DirectRLEnvCfg):
         ),
     )
 
+    uipc_sim = UipcSimCfg(
+        # logger_level="Info"
+        ground_height=0.0025,
+        contact=UipcSimCfg.Contact(
+            d_hat=0.0005
+        )
+    )
+
     # scene
     scene: InteractiveSceneCfg = InteractiveSceneCfg(
-        num_envs=20, 
+        num_envs=1, 
         env_spacing=1.5, 
         replicate_physics=True,
         lazy_sensor_update=True, # only update sensors when they are accessed
@@ -168,22 +183,20 @@ class BallRollingEnvCfg(DirectRLEnvCfg):
         )
     )
 
-    ball = RigidObjectCfg(
+    mesh_cfg = TetMeshCfg(
+        stop_quality=8,
+        max_its=100,
+        edge_length_r=1/5,
+        # epsilon_r=0.01
+    )
+    ball = UipcObjectCfg(
         prim_path="/World/envs/env_.*/ball",
-        init_state=RigidObjectCfg.InitialStateCfg(pos=[0.5, 0.0, 0.01]),
+        init_state=AssetBaseCfg.InitialStateCfg(pos=[0.5, 0, 0.01]), #rot=(0.72,-0.3,0.42,-0.45)
         spawn=sim_utils.UsdFileCfg(
             usd_path=f"{TACEX_ASSETS_DATA_DIR}/Props/ball_wood.usd",
-            #scale=(0.8, 0.8, 0.8),
-            rigid_props=sim_utils.RigidBodyPropertiesCfg(
-                solver_position_iteration_count=16,
-                solver_velocity_iteration_count=1,
-                max_angular_velocity=1000.0,
-                max_linear_velocity=1000.0,
-                max_depenetration_velocity=5.0,
-                kinematic_enabled=False,
-                disable_gravity=False,
-            )
-        )
+        ),
+        mesh_cfg=mesh_cfg,
+        constitution_cfg=UipcObjectCfg.AffineBodyConstitutionCfg() #UipcObjectCfg.StableNeoHookeanCfg()
     )
 
     robot: ArticulationCfg = FRANKA_PANDA_ARM_GSMINI_SINGLE_ADAPTER_HIGH_PD_CFG.replace(
@@ -209,6 +222,25 @@ class BallRollingEnvCfg(DirectRLEnvCfg):
             # },
         ),
     )
+    # simulate the gelpad as uipc mesh
+    mesh_cfg = TetMeshCfg(
+        stop_quality=8,
+        max_its=100,
+        edge_length_r=1/5,
+        # epsilon_r=0.01
+    )
+    gelpad_cfg = UipcObjectCfg(
+        prim_path="/World/envs/env_.*/Robot/gelsight_mini_gelpad",
+        mesh_cfg=mesh_cfg,
+        constitution_cfg=UipcObjectCfg.StableNeoHookeanCfg(),
+    )
+    gelpad_attachment_cfg=UipcIsaacAttachmentsCfg(
+        constraint_strength_ratio=100.0,
+        body_name="gelsight_mini_case",
+        debug_vis=False,
+        compute_attachment_data=True
+    )
+
     gsmini = GelSightMiniCfg(
         prim_path="/World/envs/env_.*/Robot/gelsight_mini_case",
         sensor_camera_cfg = GelSightMiniCfg.SensorCameraCfg(
@@ -224,6 +256,7 @@ class BallRollingEnvCfg(DirectRLEnvCfg):
         marker_motion_sim_cfg=None,
         data_types=["tactile_rgb"], #marker_motion
     )
+
     # settings for optical sim
     gsmini.optical_sim_cfg = gsmini.optical_sim_cfg.replace(
         with_shadow=False,
@@ -242,7 +275,7 @@ class BallRollingEnvCfg(DirectRLEnvCfg):
     observation_space = 0 
     state_space = 0
 
-class BallRollingEnv(DirectRLEnv):
+class BallRollingEnv(UipcRLEnv):
     cfg: BallRollingEnvCfg
 
     def __init__(self, cfg: BallRollingEnvCfg, render_mode: str | None = None, **kwargs):
@@ -320,9 +353,6 @@ class BallRollingEnv(DirectRLEnv):
         self._robot = Articulation(self.cfg.robot)
         self.scene.articulations["robot"] = self._robot
 
-        self.object = RigidObject(self.cfg.ball)
-        self.scene.rigid_objects["object"] = self.object
-
         # clone, filter, and replicate
         self.scene.clone_environments(copy_from_source=False)
         
@@ -378,23 +408,37 @@ class BallRollingEnv(DirectRLEnv):
         light_cfg = sim_utils.DomeLightCfg(intensity=2000.0, color=(0.75, 0.75, 0.75))
         light_cfg.func("/World/Light", light_cfg)
 
+        ### UIPC simulation setup
+
+        # gelpad simulated via uipc
+        self._uipc_gelpad: UipcObject = UipcObject(self.cfg.gelpad_cfg, self.uipc_sim)
+        
+        self.object: UipcObject = UipcObject(self.cfg.ball, self.uipc_sim)
+
+        # create attachment
+        self.attachment = UipcIsaacAttachments(self.cfg.gelpad_attachment_cfg, self._uipc_gelpad, self.scene.articulations["robot"])
+
+
     #MARK: pre-physics step calls
         
     def _pre_physics_step(self, actions: torch.Tensor):
         # update movement pattern according to the ball position
-        ball_pos = self.object.data.root_link_pos_w - self.scene.env_origins
+        # ball_pos = self.object.data.root_link_pos_w - self.scene.env_origins
+        #todo code how current ball position can be computed
+        ball_pos = self.object._compute_obj_position_world() - self.scene.env_origins
+        
         # change goal
         if (self.step_count+1) % self.num_step_goal_change == 0:
             self.current_goal_idx = (self.current_goal_idx+1)  % len(self.pattern_offsets)
         self.ik_commands[:, :3] = ball_pos + self.pattern_offsets[self.current_goal_idx]
         
-        # add some randomization for diverse tactile signals
-        self.ik_commands[:, :2] += sample_uniform(
-            -0.002, 
-            0.002,
-            (self.num_envs, 2), 
-            self.device
-        )
+        # # add some randomization for diverse tactile signals
+        # self.ik_commands[:, :2] += sample_uniform(
+        #     -0.002, 
+        #     0.002,
+        #     (self.num_envs, 2), 
+        #     self.device
+        # )
         self._ik_controller.set_command(self.ik_commands)
 
     def _apply_action(self):
@@ -424,16 +468,16 @@ class BallRollingEnv(DirectRLEnv):
     def _reset_idx(self, env_ids: torch.Tensor | None):
         super()._reset_idx(env_ids)
 
-        # spawn ball at random position
-        obj_pos = self.object.data.default_root_state[env_ids] 
-        obj_pos[:, :3] += self.scene.env_origins[env_ids]
-        # obj_pos[:, :2] += sample_uniform(
-        #     self.cfg.obj_pos_randomization_range[0], 
-        #     self.cfg.obj_pos_randomization_range[1],
-        #     (len(env_ids), 2), 
-        #     self.device
-        # )
-        self.object.write_root_state_to_sim(obj_pos, env_ids=env_ids)
+        # # spawn ball at random position
+        # obj_pos = self.object.data.default_root_state[env_ids] 
+        # obj_pos[:, :3] += self.scene.env_origins[env_ids]
+        # # obj_pos[:, :2] += sample_uniform(
+        # #     self.cfg.obj_pos_randomization_range[0], 
+        # #     self.cfg.obj_pos_randomization_range[1],
+        # #     (len(env_ids), 2), 
+        # #     self.device
+        # # )
+        # self.object.write_root_state_to_sim(obj_pos, env_ids=env_ids)
 
         # reset robot state 
         joint_pos = (
@@ -448,8 +492,10 @@ class BallRollingEnv(DirectRLEnv):
         joint_vel = torch.zeros_like(joint_pos)
         self._robot.set_joint_position_target(joint_pos, env_ids=env_ids)
         self._robot.write_joint_state_to_sim(joint_pos, joint_vel, env_ids=env_ids)
-        
 
+        self.object.write_vertex_positions_to_sim(vertex_positions=self.object.init_vertex_pos)
+        self._uipc_gelpad.write_vertex_positions_to_sim(vertex_positions=self._uipc_gelpad.init_vertex_pos)
+        
         # reset goal
         self.current_goal_idx = 0
 
@@ -607,43 +653,43 @@ def run_simulator(env: BallRollingEnv):
                 )
                 print("")
 
-                # #! write down the average simulation times
-                #todo make code more clean by using dictionaries to collect information and then just dumpt them into txt
-                if current_num_resets == save_after_num_resets:
-                    print("*"*15)
-                    print("Writing performance data into ", file_name)
-                    print("*"*15)
-                    with open(file_name, "a+") as f:
-                        f.write("Sensor Config: \n")
-                        f.write(json.dumps(env.cfg.gsmini.to_dict(), indent=2))
-                        f.write("\n")
-                        # f.write("CPU Info: \n")
-                        # f.write(f"Name: {platform.processor()} \n")
-                        # f.write(f"Physical cores: {psutil.cpu_count(logical=False)} \n")
-                        # f.write(f"Total cores: {psutil.cpu_count(logical=True)} \n")
-                        # f.write("\n")
-                        # currently only works with one gpu -> #todo add an for loop, for multiple
-                        f.write("GPU Info: \n")
-                        f.write(f"Name: {pynvml.nvmlDeviceGetName(pynvml.nvmlDeviceGetHandleByIndex(0))} \n")
-                        f.write(f"Driver: {pynvml.nvmlSystemGetDriverVersion()} \n")
-                        f.write("\n")
-                        f.write("Performance data: \n")
-                        f.write(f"num_envs: {env.num_envs} \n")
-                        f.write(f"Total amount of 'in-contact' frames per env (ran pattern {current_num_resets} times): {len(frame_times_physics)}\n")
-                        f.write("Total sim time: {:8.4f}ms \n".format(time.time()-total_sim_time))
-                        f.write("Avg physics_sim time for one frame per env:    {:8.4f}ms \n".format(np.mean(np.array(frame_times_physics)/env.num_envs)))
-                        f.write("Avg tactile_sim time for one frame per env:    {:8.4f}ms \n".format(np.mean(np.array(frame_times_tactile)/env.num_envs)))
-                        f.write("\n")
-                        f.write(
-                            f"| CPU:{system_utilization_analytics[0]}% | "
-                            f"RAM:{system_utilization_analytics[1]}% | "
-                            f"GPU Compute:{system_utilization_analytics[2]}% | "
-                            f"GPU Memory: {system_utilization_analytics[3]:.2f}% |"
-                        )
-                        f.write("\n")
-                    frame_times_physics = []
-                    frame_times_tactile = []
-                    break
+                # # #! write down the average simulation times
+                # #todo make code more clean by using dictionaries to collect information and then just dumpt them into txt
+                # if current_num_resets == save_after_num_resets:
+                #     print("*"*15)
+                #     print("Writing performance data into ", file_name)
+                #     print("*"*15)
+                #     with open(file_name, "a+") as f:
+                #         f.write("Sensor Config: \n")
+                #         f.write(json.dumps(env.cfg.gsmini.to_dict(), indent=2))
+                #         f.write("\n")
+                #         # f.write("CPU Info: \n")
+                #         # f.write(f"Name: {platform.processor()} \n")
+                #         # f.write(f"Physical cores: {psutil.cpu_count(logical=False)} \n")
+                #         # f.write(f"Total cores: {psutil.cpu_count(logical=True)} \n")
+                #         # f.write("\n")
+                #         # currently only works with one gpu -> #todo add an for loop, for multiple
+                #         f.write("GPU Info: \n")
+                #         f.write(f"Name: {pynvml.nvmlDeviceGetName(pynvml.nvmlDeviceGetHandleByIndex(0))} \n")
+                #         f.write(f"Driver: {pynvml.nvmlSystemGetDriverVersion()} \n")
+                #         f.write("\n")
+                #         f.write("Performance data: \n")
+                #         f.write(f"num_envs: {env.num_envs} \n")
+                #         f.write(f"Total amount of 'in-contact' frames per env (ran pattern {current_num_resets} times): {len(frame_times_physics)}\n")
+                #         f.write("Total sim time: {:8.4f}ms \n".format(time.time()-total_sim_time))
+                #         f.write("Avg physics_sim time for one frame per env:    {:8.4f}ms \n".format(np.mean(np.array(frame_times_physics)/env.num_envs)))
+                #         f.write("Avg tactile_sim time for one frame per env:    {:8.4f}ms \n".format(np.mean(np.array(frame_times_tactile)/env.num_envs)))
+                #         f.write("\n")
+                #         f.write(
+                #             f"| CPU:{system_utilization_analytics[0]}% | "
+                #             f"RAM:{system_utilization_analytics[1]}% | "
+                #             f"GPU Compute:{system_utilization_analytics[2]}% | "
+                #             f"GPU Memory: {system_utilization_analytics[3]:.2f}% |"
+                #         )
+                #         f.write("\n")
+                #     frame_times_physics = []
+                #     frame_times_tactile = []
+                #     break
             current_num_resets += 1
 
         # perform physics step
@@ -655,9 +701,11 @@ def run_simulator(env: BallRollingEnv):
         physics_end = time.time()
         ###
 
-        # update isaac buffers() -> also updates sensors
+        # update isaac buffers() -> this also updates sensors
         env.scene.update(dt=env.physics_dt)
+
         # render scene for cameras (used by sensor)
+        env.uipc_sim.update_render_meshes()
         env.sim.render()
 
         ### update sensors again to measure tactile sim time separately
@@ -670,22 +718,22 @@ def run_simulator(env: BallRollingEnv):
         #- add frame times, if sensor was in contact
         #todo currently assumed that every env was in contact. Need to filter out the envs where no contact
         contact_idx, = torch.where(env.gsmini._indentation_depth > 0)
-        if contact_idx.shape[0] != 0:
-            frame_times_physics.append(1000 * (physics_end - physics_start))
-            frame_times_tactile.append(1000 * (tactile_sim_end - tactile_sim_start))
+        # if contact_idx.shape[0] != 0:
+        #     frame_times_physics.append(1000 * (physics_end - physics_start))
+        #     frame_times_tactile.append(1000 * (tactile_sim_end - tactile_sim_start))
         
-        print("Current total amount of 'in-contact' frames per env: ", len(frame_times_physics))
-        print("Total sim time currently: {:8.4f}ms".format(time.time()-total_sim_time))
-        print("Avg physics_sim time per env:    {:8.4f}ms".format(np.mean(np.array(frame_times_physics)/env.num_envs)))
-        print("Avg tactile_sim time per env:    {:8.4f}ms".format(np.mean(np.array(frame_times_tactile)/env.num_envs)))
-        system_utilization_analytics = _get_utilization_percentages(reset=False)
-        print(
-            f"| CPU:{system_utilization_analytics[0]}% | "
-            f"RAM:{system_utilization_analytics[1]}% | "
-            f"GPU Compute:{system_utilization_analytics[2]}% | "
-            f"GPU Memory: {system_utilization_analytics[3]:.2f}% |"
-        )
-        print("")
+        # print("Current total amount of 'in-contact' frames per env: ", len(frame_times_physics))
+        # print("Total sim time currently: {:8.4f}ms".format(time.time()-total_sim_time))
+        # print("Avg physics_sim time per env:    {:8.4f}ms".format(np.mean(np.array(frame_times_physics)/env.num_envs)))
+        # print("Avg tactile_sim time per env:    {:8.4f}ms".format(np.mean(np.array(frame_times_tactile)/env.num_envs)))
+        # system_utilization_analytics = _get_utilization_percentages(reset=False)
+        # print(
+        #     f"| CPU:{system_utilization_analytics[0]}% | "
+        #     f"RAM:{system_utilization_analytics[1]}% | "
+        #     f"GPU Compute:{system_utilization_analytics[2]}% | "
+        #     f"GPU Memory: {system_utilization_analytics[3]:.2f}% |"
+        # )
+        # print("")
         
 
     env.close()

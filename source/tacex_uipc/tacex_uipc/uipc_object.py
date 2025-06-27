@@ -8,14 +8,16 @@ from __future__ import annotations
 import torch
 from collections.abc import Sequence
 from typing import TYPE_CHECKING
+import re
 
 import omni.log
 import omni.physics.tensors.impl.api as physx
-from pxr import UsdPhysics
 
 import omni.usd
 import usdrt
 from isaacsim.core.prims import XFormPrim
+from pxr import UsdPhysics, UsdGeom, Gf, Usd
+import usdrt.UsdGeom
 
 # from isaacsim.core.utils.extensions import enable_extension
 # enable_extension("isaacsim.util.debug_draw")
@@ -37,22 +39,61 @@ import uipc
 from uipc import builtin, view
 from uipc.core import Engine, World, Scene, SceneIO
 from uipc import Vector3, Vector2, Transform, Logger, Quaternion, AngleAxis
-from uipc.geometry import tetmesh, label_surface, label_triangle_orient, flip_inward_triangles
-from uipc.constitution import AffineBodyConstitution
+from uipc.geometry import tetmesh, label_surface, label_triangle_orient, flip_inward_triangles, extract_surface
+from uipc.constitution import AffineBodyConstitution, ElasticModuli, StableNeoHookean
 from uipc.unit import MPa, GPa
 
+import random
 import numpy as np
 import warp as wp
 wp.init()
+
+from tacex_uipc.utils import TetMeshCfg, MeshGenerator
+from tacex_uipc.uipc_attachments import UipcIsaacAttachments, UipcIsaacAttachmentsCfg
 
 if TYPE_CHECKING:
     from tacex_uipc import UipcSim
 
 @configclass
 class UipcObjectCfg(AssetBaseCfg):
-    constitution_type: str = "AffineBodyConstitution"
-
+    mesh_cfg: TetMeshCfg = None
     # contact_model: 
+
+    mass_density: float = 1e3
+    
+    @configclass
+    class AffineBodyConstitutionCfg:
+        # class_type = AffineBodyConstitution # doesnt work, cause no builtin signature found for AffineBodyConstitution class
+        m_kappa: float = 100.0
+        """Stiffness (hardness) of the object
+        in [MPa]
+
+        E.g. 100.0 MPa = hard-rubber-like material
+        """
+
+        kinematic: bool = False
+        """Makes the DoF of the ABD body fixed.
+        
+        """
+    
+    @configclass
+    class StableNeoHookeanCfg:
+        # class_type = StableNeoHookean
+        youngs_modulus: float = 0.01
+        """
+        in [MPa]
+        """
+
+        poisson_rate: float = 0.49
+        """ Poission Rate
+        
+        Has to be < 0.5.
+        """
+    
+    constitution_cfg: AffineBodyConstitutionCfg | StableNeoHookeanCfg = None
+
+    attachment_cfg: UipcIsaacAttachmentsCfg = None
+
 
 class UipcObject(AssetBase):
     """A rigid object asset class.
@@ -79,14 +120,118 @@ class UipcObject(AssetBase):
     """Configuration instance for the rigid object."""
 
     def __init__(self, cfg: UipcObjectCfg, uipc_sim: UipcSim):
-        """Initialize the rigid object.
+        """Initialize the uipc object.
 
         Args:
             cfg: A configuration instance.
         """
-        self._uipc_sim = uipc_sim
         super().__init__(cfg)
+        self._uipc_sim = uipc_sim
+
+        prim_paths_expr = self.cfg.prim_path #+ "/mesh"
+        print(f"Initializing uipc objects {prim_paths_expr}...")
+        self._prim_view = XFormPrim(prim_paths_expr=prim_paths_expr, name=f"{prim_paths_expr}", usd=False)
+        self._prim_view.initialize()
+
+        self.stage = usdrt.Usd.Stage.Attach(omni.usd.get_context().get_stage_id())
         
+        self.uipc_scene_objects = []
+
+        self.uipc_meshes = []
+        # setup tet meshes for uipc
+        for prim in self._prim_view.prims: # todo dont loop over all prims of the view -> just take one base prim. Rather loop over the prim children?
+            # need to access the mesh data of the usd prim
+            prim_children = prim.GetChildren()
+            usd_mesh = UsdGeom.Mesh(prim_children[0])
+            usd_mesh_path = str(usd_mesh.GetPath())
+            print("usd_mesh_path ", usd_mesh_path)
+            
+            if self.cfg.mesh_cfg is None:
+                # Load precomputed mesh data from USD prim.
+                tet_points = np.array(prim_children[0].GetAttribute("tet_points").Get())
+                tet_indices = prim_children[0].GetAttribute("tet_indices").Get()
+                surf_points = np.array(prim_children[0].GetAttribute("tet_surf_points").Get())
+                tet_surf_indices = prim_children[0].GetAttribute("tet_surf_indices").Get()
+
+                if tet_indices is None:
+                    # cannot use default config, since we dont know what type of mesh it is (tet or tri mesh?) #todo should we create different object classes? One for tet meshes, one for cloth etc.
+                    raise Exception(f"No precomputed tet mesh data found for prim at {usd_mesh_path}")
+            else:
+                mesh_gen = MeshGenerator(config=self.cfg.mesh_cfg)
+                if type(self.cfg.mesh_cfg) == TetMeshCfg:
+                    tet_points, tet_indices, surf_points, tet_surf_indices = mesh_gen.generate_tet_mesh_for_prim(usd_mesh)
+
+            # transform local tet points to world coor
+            tf_world = np.array(omni.usd.get_world_transform_matrix(usd_mesh))
+            tet_points_world = tf_world.T @ np.vstack((tet_points.T, np.ones(tet_points.shape[0])))
+            tet_points_world = (tet_points_world[:-1].T)
+            
+            # uipc wants 2D array
+            tet_indices = np.array(tet_indices).reshape(-1,4)
+            tet_surf_indices = np.array(tet_surf_indices).reshape(-1,3)
+
+            # create uipc mesh
+            mesh = tetmesh(tet_points_world.copy(), tet_indices.copy())
+            # enable the contact by labeling the surface 
+            label_surface(mesh)
+            label_triangle_orient(mesh) #-> only needed when we want to export the mesh with uipc
+            # flip the triangles inward for better rendering 
+            mesh = flip_inward_triangles(mesh) #todo idk if this makes a difference for us
+            self.uipc_meshes.append(mesh)
+              
+            surf = extract_surface(mesh)
+            tet_surf_points_world = surf.positions().view().reshape(-1,3)
+            tet_surf_tri = surf.triangles().topo().view().reshape(-1).tolist()
+            MeshGenerator.update_usd_mesh(prim=usd_mesh, surf_points=tet_surf_points_world, triangles=tet_surf_tri)
+
+            # # enable contact for uipc meshes etc.
+            # mesh = self.uipc_meshes[0] #todo code properly cloned envs (i.e. for instanced objects?)
+            self._create_constitutions(mesh)
+
+            # setup mesh updates via Fabric
+            fabric_prim = self.stage.GetPrimAtPath(usdrt.Sdf.Path(usd_mesh_path))
+            if not fabric_prim:
+                print(f"Prim at path {usd_mesh_path} is not in Fabric")
+            if not fabric_prim.HasAttribute("points"):
+                print(f"Prim at path {usd_mesh_path} does not have points attribute")
+
+            # Tell OmniHydra to render points from Fabric
+            if not fabric_prim.HasAttribute("Deformable"):
+                fabric_prim.CreateAttribute("Deformable", usdrt.Sdf.ValueTypeNames.PrimTypeTag, True)
+
+            # extract world transform
+            rtxformable = usdrt.Rt.Xformable(fabric_prim)
+            rtxformable.CreateFabricHierarchyWorldMatrixAttr()
+            # set world matrix to identity matrix -> uipc already gives us vertices in world frame
+            rtxformable.GetFabricHierarchyWorldMatrixAttr().Set(usdrt.Gf.Matrix4d())
+
+            # update fabric mesh with world coor. points
+            fabric_mesh_points_attr = fabric_prim.GetAttribute("points")
+            fabric_mesh_points_attr.Set(usdrt.Vt.Vec3fArray(tet_surf_points_world))
+
+            # add fabric meshes to uipc sim class for updating the render meshes
+            self._uipc_sim._fabric_meshes.append(fabric_prim)
+            
+            # save indices to later find corresponding points of the meshes for rendering
+            num_surf_points = tet_surf_points_world.shape[0] #np.unique(tet_surf_indices)
+            self._uipc_sim._surf_vertex_offsets.append(
+                self._uipc_sim._surf_vertex_offsets[-1] + num_surf_points
+            )
+
+            # required for writing vertex positions to sim
+            num_vertex_points = mesh.positions().view().shape[0]
+            self._vertex_count = num_vertex_points
+            
+            # update local vertex offset of the subsystem
+            self._uipc_sim._system_vertex_offsets[self._system_name].append(
+                self._uipc_sim._system_vertex_offsets[self._system_name][-1] + self._vertex_count
+            )
+            self.local_system_id = len(self._uipc_sim._system_vertex_offsets[self._system_name])-1
+            print("local id ", self.local_system_id)
+
+            # will be updated once _uipc_sim.setup_sim() is called
+            self.global_system_id = 0
+
     """
     Properties
     """
@@ -120,7 +265,7 @@ class UipcObject(AssetBase):
 
         """
         return self._uipc_sim
-
+     
     """
     Operations.
     """
@@ -173,24 +318,38 @@ class UipcObject(AssetBase):
         """
         return string_utils.resolve_matching_names(name_keys, self.body_names, preserve_order)
 
+    def _compute_obj_position_world(self):
+        # get current world vertex positions        
+        geom = self._uipc_sim.scene.geometries()
+        geo_slot, geo_slot_rest = geom.find(self.obj_id)
+        
+        vertex_positions_world = torch.tensor(geo_slot.geometry().positions().view().copy().reshape(-1,3), device=self.device)
+        obj_pos = torch.mean(vertex_positions_world, dim=0)
+
+        draw.clear_points()
+        points = obj_pos.cpu().numpy()
+        draw.draw_points([points], [(255,0,255,0.5)]*points.shape[0], [30]*points.shape[0])
+
+        return obj_pos
+
     """
     Operations - Write to simulation.
     """
 
-    def write_root_state_to_sim(self, root_state: torch.Tensor, env_ids: Sequence[int] | None = None):
-        """Set the root state over selected environment indices into the simulation.
+    # def write_root_state_to_sim(self, root_state: torch.Tensor, env_ids: Sequence[int] | None = None):
+    #     """Set the root state over selected environment indices into the simulation.
 
-        The root state comprises of the cartesian position, quaternion orientation in (w, x, y, z), and linear
-        and angular velocity. All the quantities are in the simulation frame.
+    #     The root state comprises of the cartesian position, quaternion orientation in (w, x, y, z), and linear
+    #     and angular velocity. All the quantities are in the simulation frame.
 
-        Args:
-            root_state: Root state in simulation frame. Shape is (len(env_ids), 13).
-            env_ids: Environment indices. If None, then all indices are used.
-        """
+    #     Args:
+    #         root_state: Root state in simulation frame. Shape is (len(env_ids), 13).
+    #         env_ids: Environment indices. If None, then all indices are used.
+    #     """
 
-        # set into simulation
-        self.write_root_pose_to_sim(root_state[:, :7], env_ids=env_ids)
-        self.write_root_velocity_to_sim(root_state[:, 7:], env_ids=env_ids)
+    #     # set into simulation
+    #     self.write_root_pose_to_sim(root_state[:, :7], env_ids=env_ids)
+    #     self.write_root_velocity_to_sim(root_state[:, 7:], env_ids=env_ids)
 
     def write_root_com_state_to_sim(self, root_state: torch.Tensor, env_ids: Sequence[int] | None = None):
         """Set the root center of mass state over selected environment indices into the simulation.
@@ -220,28 +379,28 @@ class UipcObject(AssetBase):
         self.write_root_link_pose_to_sim(root_state[:, :7], env_ids=env_ids)
         self.write_root_link_velocity_to_sim(root_state[:, 7:], env_ids=env_ids)
 
-    def write_root_pose_to_sim(self, root_pose: torch.Tensor, env_ids: Sequence[int] | None = None):
-        """Set the root pose over selected environment indices into the simulation.
+    # def write_root_pose_to_sim(self, root_pose: torch.Tensor, env_ids: Sequence[int] | None = None):
+    #     """Set the root pose over selected environment indices into the simulation.
 
-        The root pose comprises of the cartesian position and quaternion orientation in (w, x, y, z).
+    #     The root pose comprises of the cartesian position and quaternion orientation in (w, x, y, z).
 
-        Args:
-            root_pose: Root poses in simulation frame. Shape is (len(env_ids), 7).
-            env_ids: Environment indices. If None, then all indices are used.
-        """
-        # resolve all indices
-        physx_env_ids = env_ids
-        if env_ids is None:
-            env_ids = slice(None)
-            physx_env_ids = self._ALL_INDICES
-        # note: we need to do this here since tensors are not set into simulation until step.
-        # set into internal buffers
-        self._data.root_state_w[env_ids, :7] = root_pose.clone()
-        # convert root quaternion from wxyz to xyzw
-        root_poses_xyzw = self._data.root_state_w[:, :7].clone()
-        root_poses_xyzw[:, 3:] = math_utils.convert_quat(root_poses_xyzw[:, 3:], to="xyzw")
-        # set into simulation
-        self.root_physx_view.set_transforms(root_poses_xyzw, indices=physx_env_ids)
+    #     Args:
+    #         root_pose: Root poses in simulation frame. Shape is (len(env_ids), 7).
+    #         env_ids: Environment indices. If None, then all indices are used.
+    #     """
+    #     # resolve all indices
+    #     physx_env_ids = env_ids
+    #     if env_ids is None:
+    #         env_ids = slice(None)
+    #         physx_env_ids = self._ALL_INDICES
+    #     # note: we need to do this here since tensors are not set into simulation until step.
+    #     # set into internal buffers
+    #     self._data.root_state_w[env_ids, :7] = root_pose.clone()
+    #     # convert root quaternion from wxyz to xyzw
+    #     root_poses_xyzw = self._data.root_state_w[:, :7].clone()
+    #     root_poses_xyzw[:, 3:] = math_utils.convert_quat(root_poses_xyzw[:, 3:], to="xyzw")
+    #     # set into simulation
+    #     self.root_physx_view.set_transforms(root_poses_xyzw, indices=physx_env_ids)
 
     def write_root_link_pose_to_sim(self, root_pose: torch.Tensor, env_ids: Sequence[int] | None = None):
         """Set the root link pose over selected environment indices into the simulation.
@@ -342,132 +501,99 @@ class UipcObject(AssetBase):
         # set into simulation
         self.root_physx_view.set_velocities(self._data.root_com_state_w[:, 7:], indices=physx_env_ids)
 
+    def write_root_state_to_sim(self, root_state: torch.Tensor, env_ids: Sequence[int] | None = None):
+        """Set the root state over selected environment indices into the simulation.
+
+        The root state comprises of the cartesian position, quaternion orientation in (w, x, y, z), and linear
+        and angular velocity. All the quantities are in the simulation frame.
+
+        Args:
+            root_state: Root state in simulation frame. Shape is (len(env_ids), 13).
+            env_ids: Environment indices. If None, then all indices are used.
+        """
+
+        # set into simulation
+        self.write_root_pose_to_sim(root_state[:, :7], env_ids=env_ids)
+        self.write_root_velocity_to_sim(root_state[:, 7:], env_ids=env_ids)
+
+    def write_vertex_positions_to_sim(self, vertex_positions: torch.Tensor, env_ids: Sequence[int] | None = None):
+        """Set the root pose over selected environment indices into the simulation.
+
+        The root pose comprises of the cartesian position and quaternion orientation in (w, x, y, z).
+
+        Args:
+            root_pose: Root poses in simulation frame. Shape is (len(env_ids), 7).
+            env_ids: Environment indices. If None, then all indices are used.
+        """
+        # resolve all indices
+        physx_env_ids = env_ids
+        if env_ids is None:
+            env_ids = slice(None)
+            physx_env_ids = self._ALL_INDICES
+        # # note: we need to do this here since tensors are not set into simulation until step.
+        # # set into internal buffers
+        # self._data.root_state_w[env_ids, :7] = root_pose.clone()
+        # # convert root quaternion from wxyz to xyzw
+        # root_poses_xyzw = self._data.root_state_w[:, :7].clone()
+        # root_poses_xyzw[:, 3:] = math_utils.convert_quat(root_poses_xyzw[:, 3:], to="xyzw")
+        # # set into simulation
+        # self.root_physx_view.set_transforms(root_poses_xyzw, indices=physx_env_ids)
+        print("")
+        print(f"Write vertex pos for {self.cfg.prim_path} with id {self.obj_id}")
+        
+        global_vertex_offset = self._uipc_sim._system_vertex_offsets["uipc::backend::cuda::GlobalVertexManager"][self.global_system_id-1]
+        local_vertex_offset = self._uipc_sim._system_vertex_offsets[self._system_name][self.local_system_id-1]
+        print("system ", self._system_name)
+        print("local sys id ", self.local_system_id)
+        print("global vertex offset ", global_vertex_offset)
+        print("local vertex offset ", local_vertex_offset)
+        print("vertex count ", self._vertex_count)
+        print("")
+        if self._system_name == "uipc::backend::cuda::AffineBodyDynamics":
+            self.uipc_sim.world.write_vertex_pos_to_sim(vertex_positions.cpu().numpy(), global_vertex_offset, self.local_system_id-1, self._vertex_count, self._system_name)
+        else:
+            self.uipc_sim.world.write_vertex_pos_to_sim(vertex_positions.cpu().numpy(), global_vertex_offset, local_vertex_offset, self._vertex_count, self._system_name)
+    
     """
     Internal helper.
     """
 
     def _initialize_impl(self):
-        
-        prim_paths_expr = self.cfg.prim_path + "/mesh"
-        print(f"Initializing uipc objects {prim_paths_expr}...")
-        self._prim_view = XFormPrim(prim_paths_expr=prim_paths_expr, name=f"{prim_paths_expr}", usd=False)
-        self._prim_view.initialize()
-        # Check that sizes are correct
-        # if self._view.count != self._num_envs:
-        #     raise RuntimeError(
-        #         f"Number of sensor prims in the view ({self._view.count}) does not match"
-        #         f" the number of environments ({self._num_envs})."
-        #     )
 
-        self.stage = usdrt.Usd.Stage.Attach(omni.usd.get_context().get_stage_id())
-        
-        self.uipc_meshes = []
-        self.objects = []
-        # setup tet meshes for uipc
-        for prim in self._prim_view.prims:
-            prim_path = str(prim.GetPrimPath())
-            # setup mesh updates via Fabric
-            fabric_prim = self.stage.GetPrimAtPath(usdrt.Sdf.Path(prim_path))
-            if not fabric_prim:
-                print(f"Prim at path {prim_path} is not in Fabric")
-            if not fabric_prim.HasAttribute("points"):
-                print(f"Prim at path {prim_path} does not have points attribute")
+        # create objects in the uipc scene for the meshes
+        mesh = self.uipc_meshes[0]
 
-            # Tell OmniHydra to render points from Fabric
-            if not fabric_prim.HasAttribute("Deformable"):
-                fabric_prim.CreateAttribute("Deformable", usdrt.Sdf.ValueTypeNames.PrimTypeTag, True)
+        obj = self._uipc_sim.scene.objects().create(self.cfg.prim_path)
+        self.uipc_scene_objects.append(obj)
 
-            # extract world transform
-            # tf_matrix = omni.usd.get_local_transform_matrix(prim)
-            # print("tf ", tf_matrix)
-            tf_world = np.array(omni.usd.get_world_transform_matrix(prim))
-            # clear xform world transform
-            rtxformable = usdrt.Rt.Xformable(fabric_prim)
-            # rtxformable.ClearWorldXform()
+        obj_geo_slot, _ = obj.geometries().create(mesh)
+        self.obj_id = obj_geo_slot.id()
+        print(f"obj id of {self.cfg.prim_path}: {self.obj_id} ")
 
-            rtxformable.CreateFabricHierarchyWorldMatrixAttr()
-            # rtxformable.SetWorldXformFromUsd()
-            world_tf = rtxformable.GetFabricHierarchyWorldMatrixAttr().Get()
-            print("test ", rtxformable.GetWorldPositionAttr().Get())
-
-            rtxformable.GetFabricHierarchyWorldMatrixAttr().Set(usdrt.Gf.Matrix4d())
-            print("test2 ", rtxformable.GetFabricHierarchyWorldMatrixAttr().Get())
-            #tf_world = np.array(rtxformable.GetFabricHierarchyWorldMatrixAttr().Get())
+        # save initial world vertex positions        
+        geom = self._uipc_sim.scene.geometries()
+        geo_slot, geo_slot_rest = geom.find(self.obj_id)
+        self.init_vertex_pos = torch.tensor(geo_slot.geometry().positions().view().copy().reshape(-1,3), device=self.device)
             
-            # update Transform
-            # fabric_id = self.stage.GetFabricId()
-            # hier = usdrt.hierarchy.IFabricHierarchy().get_fabric_hierarchy(fabric_id, omni.usd.get_context().get_stage_id())
-            # print("tf ", usdrt.Gf.Matrix4d(np.array(tf_matrix)))
-            # hier.set_world_xform(usdrt.Sdf.Path(prim_path), usdrt.Gf.Matrix4d(np.array(tf_matrix)))
-            # hier.update_world_xforms()
-            # world_xform = hier.get_world_xform(usdrt.Sdf.Path(prim_path))
-            # print("world xform ", np.array(world_xform))
-            # print("local xform ", hier.get_local_xform(usdrt.Sdf.Path(prim_path)))
-
-            # print("new xform: ", usdrt.Gf.Matrix4d(tf_view))
-            # hier.set_local_xform(usdrt.Sdf.Path(prim_path), usdrt.Gf.Matrix4d(tf_view))
-            # # hier.set_world_xform(path, Gf.Matrix4d(1))
-            # hier.update_world_xforms()
-            print("tf ", tf_world.T)
-            tet_points = np.array(prim.GetAttribute("tet_points").Get())
-            print("orig ")
-            print(tet_points)
-            # transform points to world coor
-            tet_points_new = tf_world.T @ np.vstack((tet_points.T, np.ones(tet_points.shape[0])))
-            tet_points_new = (tet_points_new[:-1].T)
-            print("new ")
-            print(tet_points_new)
-            draw.draw_points(tet_points_new, [(0,0,255,0.5)]*tet_points_new.shape[0], [30]*tet_points_new.shape[0])
-
-            tet_indices = np.array(prim.GetAttribute("tet_indices").Get()).reshape(-1,4) # uipc wants 2D array
-            print("idx")
-            print(tet_indices)
-            tet_surf_indices = np.array(prim.GetAttribute("tet_surf_indices").Get()).reshape(-1,3)
-                        
-            mesh = tetmesh(tet_points_new.copy(), tet_indices)
-            self.uipc_meshes.append(mesh)
-
-            # update mesh with world coor. points
-            fabric_mesh_points = fabric_prim.GetAttribute("points")
-            fabric_mesh_points.Set(usdrt.Vt.Vec3fArray(tet_points_new))
-
-            # create constitution and contact model
-            abd = AffineBodyConstitution()
-            # friction ratio and contact resistance
-            self._uipc_sim.scene.contact_tabular().default_model(0.5, 1.0 * GPa)
-            default_element = self._uipc_sim.scene.contact_tabular().default_element()
-            
-            # apply the constitution and contact model to the base mesh
-            abd.apply_to(mesh, 100 * MPa) # stiffness (hardness) of 100 MPa (= hard-rubber-like material)
-            # apply the default contact model to the base mesh
-            default_element.apply_to(mesh)
-
-            # enable the contact by labeling the surface 
-            label_surface(mesh)
-
-            # create objects
-            obj = self._uipc_sim.scene.objects().create(self.cfg.prim_path)
-            obj_geo_slot, _ = obj.geometries().create(mesh)
-            self.objects.append(obj_geo_slot)
-
-        # log information about the rigid body
+        # log information the uipc body
         omni.log.info(f"UIPC body initialized at: {self.cfg.prim_path}.")
         omni.log.info(f"Number of instances: {self.num_instances}")
 
         # create buffers
-        # self._create_buffers()
+        self._create_buffers()
         # process configuration
-        # self._process_cfg()
+        self._process_cfg()
         # update the rigid body data
         self.update(0.0)
-
+        
+        # add this object to the list of all uipc objects in the world
         self._uipc_sim.uipc_objects.append(self)
-        self.sio = SceneIO(self._uipc_sim.scene)
-
-    # def _create_buffers(self):
-    #     """Create buffers for storing data."""
-    #     # constants
-    #     self._ALL_INDICES = torch.arange(self.num_instances, dtype=torch.long, device=self.device)
+                
+            
+    def _create_buffers(self):
+        """Create buffers for storing data."""
+        # constants
+        self._ALL_INDICES = torch.arange(self.num_instances, dtype=torch.long, device=self.device)
 
     #     # external forces and torques
     #     self.has_external_wrench = False
@@ -479,68 +605,50 @@ class UipcObject(AssetBase):
     #     self._data.default_mass = self.root_physx_view.get_masses().clone()
     #     self._data.default_inertia = self.root_physx_view.get_inertias().clone()
 
-    # def _process_cfg(self):
-    #     """Post processing of configuration parameters."""
-    #     # default state
-    #     # -- root state
-    #     # note: we cast to tuple to avoid torch/numpy type mismatch.
-    #     default_root_state = (
-    #         tuple(self.cfg.init_state.pos)
-    #         + tuple(self.cfg.init_state.rot)
-    #         + tuple(self.cfg.init_state.lin_vel)
-    #         + tuple(self.cfg.init_state.ang_vel)
-    #     )
-    #     default_root_state = torch.tensor(default_root_state, dtype=torch.float, device=self.device)
-    #     self._data.default_root_state = default_root_state.repeat(self.num_instances, 1)
+    def _process_cfg(self):
+        """Post processing of configuration parameters."""
+        # default state
+        # -- root state
+        # note: we cast to tuple to avoid torch/numpy type mismatch.
+        default_root_state = (
+            tuple(self.cfg.init_state.pos)
+            + tuple(self.cfg.init_state.rot)
+            # + tuple(self.cfg.init_state.lin_vel)
+            # + tuple(self.cfg.init_state.ang_vel)
+        )
+        default_root_state = torch.tensor(default_root_state, dtype=torch.float, device=self.device)
+        #self._data.default_root_state = default_root_state.repeat(self.num_instances, 1)
 
-    def _update_meshes(self):
-        for i, prim_path in enumerate(self._prim_view.prim_paths):
-            #uipc_points = self.objects[i].geometry().positions().view()[:,:,0] #todo check how it can be optimized -> how can we use third dim effectively?
-            trimesh_points = self.sio.simplicial_surface(2).positions().view().reshape(-1,3)
-            print("Updated points ", trimesh_points)
+    def _create_constitutions(self, mesh):
+        # create constitutions    
+        constitution_types = {
+            UipcObjectCfg.AffineBodyConstitutionCfg: AffineBodyConstitution,
+            UipcObjectCfg.StableNeoHookeanCfg: StableNeoHookean,
+        }
+        self.constitution = constitution_types[type(self.cfg.constitution_cfg)]()
 
-            # tf_view = view(self.objects[i].geometry().transforms())[0]
-            # print("Transformation matrix ")
-            # print(tf_view)
+        if type(self.constitution) == StableNeoHookean:
+            youngs = self.cfg.constitution_cfg.youngs_modulus
+            poisson = self.cfg.constitution_cfg.poisson_rate
+            moduli = ElasticModuli.youngs_poisson(youngs * MPa, poisson)
+            # apply the constitution and contact model to the base mesh
+            self.constitution.apply_to(mesh, moduli, mass_density=self.cfg.mass_density)
+            #needed for writing vertex position to sim
+            self._system_name = "uipc::backend::cuda::FiniteElementMethod"
+        elif type(self.constitution) == AffineBodyConstitution:
+            stiffness = self.cfg.constitution_cfg.m_kappa
+            self.constitution.apply_to(mesh, stiffness * MPa, mass_density=self.cfg.mass_density) 
+            self._system_name = "uipc::backend::cuda::AffineBodyDynamics"
 
-            fabric_prim = self.stage.GetPrimAtPath(usdrt.Sdf.Path(prim_path))
-            mesh_points = fabric_prim.GetAttribute("points")
-            mesh_points.Set(usdrt.Vt.Vec3fArray(trimesh_points))
+            # make ABD body kinematic
+            if self.cfg.constitution_cfg.kinematic:
+                is_fixed_attr = mesh.instances().find(builtin.is_fixed)
+                view(is_fixed_attr)[0] = 1
 
-            # draw.clear_points()
-            points = np.array(trimesh_points)
-            draw.draw_points(points, [(255,0,255,0.5)]*points.shape[0], [30]*points.shape[0])
-
-            # extract world transform
-            # update Transform
-            # fabric_id = self.stage.GetFabricId()
-            # hier = usdrt.hierarchy.IFabricHierarchy().get_fabric_hierarchy(fabric_id, omni.usd.get_context().get_stage_id())
-            # hier.update_world_xforms()
-            # world_xform = hier.get_world_xform(usdrt.Sdf.Path(prim_path))
-            # print("world xform ", np.array(world_xform))
-            # print("local xform ", hier.get_local_xform(usdrt.Sdf.Path(prim_path)))
-
-            # # update Transform
-            # fabric_id = self.stage.GetFabricId()
-            # hier = usdrt.hierarchy.IFabricHierarchy().get_fabric_hierarchy(fabric_id, omni.usd.get_context().get_stage_id())
-            # local_xform = hier.get_local_xform(usdrt.Sdf.Path(prim_path))
-            # print("local xform ", local_xform)
-            # print("new xform: ", usdrt.Gf.Matrix4d(tf_view))
-            # hier.set_local_xform(usdrt.Sdf.Path(prim_path), usdrt.Gf.Matrix4d(tf_view))
-            # # hier.set_world_xform(path, Gf.Matrix4d(1))
-            # hier.update_world_xforms()
-
-            # rtxformable = usdrt.Rt.Xformable(fabric_prim)
-            # # Generate a random orientation quaternion
-            # import random, math
-            # angle = random.random()*math.pi*2
-            # axis = usdrt.Gf.Vec3f(random.random(), random.random(), random.random()).GetNormalized()
-            # halfangle = angle/2.0
-            # shalfangle = math.sin(halfangle)
-            # rotation = usdrt.Gf.Quatf(math.cos(halfangle), axis[0]*shalfangle, axis[1]*shalfangle, axis[2]*shalfangle)
-
-            # rtxformable.GetWorldOrientationAttr().Set(rotation)
-
+        # apply the default contact model to the base mesh
+        default_element = self._uipc_sim.scene.contact_tabular().default_element()
+        default_element.apply_to(mesh)
+            
     """
     Internal simulation callbacks.
     """

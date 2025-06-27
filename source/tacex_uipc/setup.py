@@ -1,7 +1,7 @@
-"""Installation script for the 'tacex_ipc' python package.
+"""Installation script for the 'tacex_uipc' python package.
 
 Invoke with, for example:
-# in .../source/tacex_ipc folder
+# in .../source/tacex_uipc folder
 pip install -e .
 
 or with user arguments:
@@ -74,8 +74,11 @@ class CMakeBuild(build_ext):
 
         cmake_args = [
             "-DCMAKE_LIBRARY_OUTPUT_DIRECTORY=" + extdir,
+            "-DCMAKE_EXPORT_COMPILE_COMMANDS=1",
+            "-DCMAKE_COLOR_DIAGNOSTICS=1",
             "-DUIPC_BUILD_PYBIND=" + self.DUIPC_BUILD_PYBIND, # per default = 1
-            "-DUIPC_DEV_MODE=1"
+            "-DUIPC_DEV_MODE=1",
+            "-DUIPC_BUILD_GUI=0"
         ]
         if self.DCMAKE_CUDA_ARCHITECTURES is not None: # None means "use native cuda architecture"
             cmake_args += ["-DCMAKE_CUDA_ARCHITECTURES="+self.DCMAKE_CUDA_ARCHITECTURES]
@@ -102,7 +105,7 @@ class CMakeBuild(build_ext):
         if not os.path.exists(self.build_dir):
             os.makedirs(self.build_dir)
         subprocess.check_call(['cmake', ext.sourcedir] + cmake_args,
-                              cwd=self.build_dir, env=env)
+                              cwd=self.build_dir, env=env)    
         subprocess.check_call(['cmake', '--build', '.'] + build_args,
                               cwd=self.build_dir)
 

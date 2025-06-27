@@ -1000,7 +1000,7 @@ class BallRollingTactileRGBEnv(DirectRLEnv):
     ###################################
 
     def _set_debug_vis_impl(self, debug_vis: bool):
-        # create markers if necessary for the first tome
+        # create markers if necessary for the first time
         if debug_vis:
             if not hasattr(self, "goal_pos_visualizer"):
                 marker_cfg = VisualizationMarkersCfg(
