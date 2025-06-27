@@ -166,34 +166,24 @@ def main():
     total_uipc_render_time = 0.0
     # Simulate physics
     while simulation_app.is_running():
-
-        # perform step
-        sim.step()
+        sim.render()
 
         if start_uipc_test:
-            # draw the old points
-            # draw.clear_points()
-            # points = np.array(gipc_sim.sim.get_vertices())
-            # draw.draw_points(points, [(255,0,255,0.5)]*points.shape[0], [30]*points.shape[0])
             print("")
             print("====================================================================================")
             print("====================================================================================")
             print("Step number ", step)
-            ## if you want to replay frames which were saved via world.dump()-> tet meshes need to be the same as when the frames were saved!
-            # if(uipc_sim.world.recover(uipc_sim.world.frame() + 1)):
-            #     uipc_sim.replay_frame(uipc_sim.world.frame() + 1)
-            # else:
-            #     uipc_sim.step()
-            with Timer("[INFO]: Time taken for uipc sim step.", name="uipc_step"):
-                uipc_sim.step()
-                # uipc_sim.save_current_world_state()
-            # gipc_sim.render_tet_surface_wireframes(clean_up_first=True)
-            with Timer("[INFO]: Time taken for updating the render meshes.", name="render_update"):
-                uipc_sim.update_render_meshes()
-                sim.render()
+            with Timer("[INFO]: Time taken for uipc sim step", name="uipc_step"):
+                sim.step()
 
+            with Timer("[INFO]: Time taken for updating the render meshes", name="render_update"):
+                # render the new scene
+                uipc_sim.update_render_meshes()
+                #sim.forward()
+                # sim._update_fabric(0.0, 0.0)
+            
             # get time reports
-            uipc_sim.get_sim_time_report()
+            # uipc_sim.get_sim_time_report()
             total_uipc_sim_time += Timer.get_timer_info("uipc_step")
             total_uipc_render_time += Timer.get_timer_info("render_update")
 
@@ -203,6 +193,7 @@ def main():
         if sim.is_playing() is False:
             start_uipc_test = True
             print("Start uipc simulation by pressing Play")
+
 
           
 if __name__ == "__main__":

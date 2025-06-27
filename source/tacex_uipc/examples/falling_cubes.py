@@ -83,33 +83,6 @@ def change_mat_color(stage, shader_prim_path, color):
     shader_prim.GetAttribute('inputs:diffuse_color_constant').Set(color)
     shader_prim.GetAttribute('inputs:diffuse_tint').Set(color)
      
-def _usd_set_xform(xform, pos: tuple, rot: tuple, scale: tuple):
-    from pxr import UsdGeom, Gf
-
-    xform = UsdGeom.Xform(xform)
-
-    xform_ops = xform.GetOrderedXformOps()
-
-    if pos is not None:
-        xform_ops[0].Set(Gf.Vec3d(float(pos[0]), float(pos[1]), float(pos[2])))
-    if rot is not None:
-        xform_ops[1].Set(Gf.Quatd(float(rot[3]), float(rot[0]), float(rot[1]), float(rot[2])))
-    if scale is not None:
-        xform_ops[2].Set(Gf.Vec3d(float(scale[0]), float(scale[1]), float(scale[2])))
-
-# Probably useful when we need to update multiple bodies -> look into the warp render code
-# def update_body_transforms(self, body_q):
-#     from pxr import UsdGeom, Sdf
-#     if isinstance(body_q, wp.array):
-#         body_q = body_q.numpy()
-#     with Sdf.ChangeBlock():
-#         for b in range(self.model.body_count):
-#             node_name = self.body_names[b]
-#             node = UsdGeom.Xform(self.stage.GetPrimAtPath(self.root.GetPath().AppendChild(node_name)))
-#             # unpack rigid transform
-#             X_sb = wp.transform_expand(body_q[b])
-#             _usd_set_xform(node, X_sb.p, X_sb.q, (1.0, 1.0, 1.0), self.time)
-       
 def main():
     """Main function."""
 
@@ -225,34 +198,22 @@ def main():
     total_uipc_render_time = 0.0
     # Simulate physics
     while simulation_app.is_running():
-
-        # perform step
-        sim.step()
+        sim.render()
 
         if start_uipc_test:
-            # draw the old points
-            # draw.clear_points()
-            # points = np.array(gipc_sim.sim.get_vertices())
-            # draw.draw_points(points, [(255,0,255,0.5)]*points.shape[0], [30]*points.shape[0])
             print("")
             print("====================================================================================")
             print("====================================================================================")
             print("Step number ", step)
-            ## if you want to replay frames which were saved via world.dump()-> tet meshes need to be the same as when the frames were saved!
-            # if(uipc_sim.world.recover(uipc_sim.world.frame() + 1)):
-            #     uipc_sim.replay_frame(uipc_sim.world.frame() + 1)
-            # else:
-            #     uipc_sim.step()
-            with Timer("[INFO]: Time taken for uipc sim step.", name="uipc_step"):
-                uipc_sim.step()
-                # uipc_sim.save_current_world_state()
-            # gipc_sim.render_tet_surface_wireframes(clean_up_first=True)
-            with Timer("[INFO]: Time taken for updating the render meshes.", name="render_update"):
+            with Timer("[INFO]: Time taken for uipc sim step", name="uipc_step"):
+                sim.step()
+
+            with Timer("[INFO]: Time taken for updating the render meshes", name="render_update"):
+                # render the new scene
                 uipc_sim.update_render_meshes()
                 #sim.forward()
                 # sim._update_fabric(0.0, 0.0)
-                # render the updated meshes
-                sim.render()
+            
             # get time reports
             # uipc_sim.get_sim_time_report()
             total_uipc_sim_time += Timer.get_timer_info("uipc_step")
@@ -279,10 +240,8 @@ def main():
                 cubes[small_cube_id].write_vertex_positions_to_sim(vertex_positions=cubes[small_cube_id].init_vertex_pos)
 
                 uipc_sim.reset()
-                # start_uipc_test = False
-                # draw.clear_points()
-                # draw.clear_lines()
                 sim.render()
+            
             avg_uipc_step_time = total_uipc_sim_time/step
             print(f"Sim step for uipc took in avg {avg_uipc_step_time} per frame.")
             

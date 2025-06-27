@@ -188,24 +188,6 @@ class BallRollingEnvCfg(DirectRLEnvCfg):
         )
     )
 
-    # ball = RigidObjectCfg(
-    #     prim_path="/World/envs/env_.*/ball",
-    #     init_state=RigidObjectCfg.InitialStateCfg(pos=[0.5, 0.0, 0.015]),
-    #     spawn=sim_utils.UsdFileCfg(
-    #         usd_path=f"{TACEX_ASSETS_DATA_DIR}/Props/ball_wood.usd",
-    #         #scale=(0.8, 0.8, 0.8),
-    #         rigid_props=sim_utils.RigidBodyPropertiesCfg(
-    #             solver_position_iteration_count=16,
-    #             solver_velocity_iteration_count=1,
-    #             max_angular_velocity=1000.0,
-    #             max_linear_velocity=1000.0,
-    #             max_depenetration_velocity=5.0,
-    #             kinematic_enabled=False,
-    #             disable_gravity=False,
-    #         )
-    #     )
-    # )
-
     mesh_cfg = TetMeshCfg(
         stop_quality=8,
         max_its=100,
@@ -230,7 +212,7 @@ class BallRollingEnvCfg(DirectRLEnvCfg):
     mesh_cfg = TetMeshCfg(
         stop_quality=8,
         max_its=100,
-        edge_length_r=1/5,
+        edge_length_r=1/15,
         # epsilon_r=0.01
     )
     gelpad_cfg = UipcObjectCfg(
