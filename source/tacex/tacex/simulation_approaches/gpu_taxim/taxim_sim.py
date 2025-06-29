@@ -51,7 +51,12 @@ class TaximSimulator(GelSightSimulator):
         # self._taxim.height = self.cfg.tactile_img_res[1]
         
         # tactile rgb image without indentation
-        self.background_img = self._taxim.background_img.movedim(0, 2)
+        self.background_img = self._taxim.background_img
+        #  up/downscale height map if different than tactile img res
+        if self.background_img.shape != (3, self.cfg.tactile_img_res[1], self.cfg.tactile_img_res[0]):
+            self.background_img = F.resize(self.background_img, (self.cfg.tactile_img_res[1], self.cfg.tactile_img_res[0]))
+        # last dim should be channels for isaac
+        self.background_img = self.background_img.movedim(0, 2)
     
         self.tactile_rgb_img = torch.zeros(
             (self._num_envs, self.cfg.tactile_img_res[1], self.cfg.tactile_img_res[0], 3),
@@ -61,8 +66,6 @@ class TaximSimulator(GelSightSimulator):
 
         # if camera resolution is different than the tactile RGB res, scale img
         self.img_res = self.cfg.tactile_img_res
-
-
 
     def optical_simulation(self):
         """ Returns simulation output of Taxim optical simulation.
@@ -78,15 +81,22 @@ class TaximSimulator(GelSightSimulator):
         if self._device == "cpu":
             height_map = height_map.cpu()
 
-        self.tactile_rgb_img[self._indentation_depth <= 0][:] = self.background_img
+        # only simulate in case of indentation
+        # self.tactile_rgb_img[self._indentation_depth <= 0][:] = self.background_img
+        # if height_map[self._indentation_depth > 0].shape[0] > 0:
+        #     self.tactile_rgb_img[self._indentation_depth > 0] = self._taxim.render_direct(
+        #         height_map[self._indentation_depth > 0],
+        #         with_shadow=self.cfg.with_shadow,
+        #         press_depth=self._indentation_depth[self._indentation_depth > 0],
+        #         orig_hm_fmt=False,
+        #     ).movedim(1, 3) #*255).type(torch.uint8) 
 
-        if height_map[self._indentation_depth > 0].shape[0] > 0:
-            self.tactile_rgb_img[self._indentation_depth > 0] = self._taxim.render_direct(
-                height_map[self._indentation_depth > 0],
-                with_shadow=self.cfg.with_shadow,
-                press_depth=self._indentation_depth[self._indentation_depth > 0],
-                orig_hm_fmt=False,
-            ).movedim(1, 3) #*255).type(torch.uint8) 
+        self.tactile_rgb_img[:] = self._taxim.render_direct(
+            height_map[:],
+            with_shadow=self.cfg.with_shadow,
+            press_depth=self._indentation_depth,
+            orig_hm_fmt=False,
+        ).movedim(1, 3) #*255).type(torch.uint8) 
 
         return self.tactile_rgb_img
 

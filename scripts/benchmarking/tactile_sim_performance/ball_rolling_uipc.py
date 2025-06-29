@@ -251,7 +251,7 @@ class BallRollingEnvCfg(DirectRLEnvCfg):
         sensor_camera_cfg = GelSightMiniCfg.SensorCameraCfg(
             prim_path_appendix = "/Camera",
             update_period= 0,
-            resolution = (32,32), #(120, 160),
+            resolution = (480,640), #(120, 160),
             data_types = ["depth"],
             clipping_range = (0.024, 0.034),
         ),
@@ -265,7 +265,7 @@ class BallRollingEnvCfg(DirectRLEnvCfg):
     gsmini.optical_sim_cfg = gsmini.optical_sim_cfg.replace(
         with_shadow=False,
         device="cuda",
-        tactile_img_res=(32, 32),
+        tactile_img_res=(480,640),
     )
     # update FOTS cfg
     # gsmini.marker_motion_sim_cfg = gsmini.marker_motion_sim_cfg.replace(
