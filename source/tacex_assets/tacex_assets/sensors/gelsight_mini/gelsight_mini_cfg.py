@@ -42,7 +42,7 @@ class GelSightMiniCfg(GelSightSensorCfg):
         gelpad_height= gelpad_dimensions.height,
         gelpad_to_camera_min_distance= 0.024,
         with_shadow=False,
-        tactile_img_res=(280,320),
+        tactile_img_res=(240,320),
         device = "cuda",
     )
 
@@ -58,9 +58,9 @@ class GelSightMiniCfg(GelSightSensorCfg):
             dx=29,
             dy=26
         ),
-        tactile_img_res=(280, 320),
+        tactile_img_res=(240, 320),
         device = "cuda",
-        frame_transformer_cfg = MISSING
+        frame_transformer_cfg = None #MISSING
     )
     compute_indentation_depth_class = "optical_sim"
 

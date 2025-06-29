@@ -24,7 +24,7 @@ from isaacsim.core.simulation_manager import SimulationManager
 from isaacsim.core.version import get_version
 
 from isaaclab.managers import EventManager
-from isaaclab.scene import InteractiveScene
+# from isaaclab.scene import InteractiveScene
 from isaaclab.sim import SimulationContext
 from isaaclab.utils.noise import NoiseModel
 from isaaclab.utils.timer import Timer
@@ -35,6 +35,7 @@ from isaaclab.envs.utils.spaces import sample_space, spec_to_gym_space
 from isaaclab.envs.common import VecEnvObs, VecEnvStepReturn
 
 from tacex_uipc import UipcSim, UipcSimCfg, UipcObject, UipcObjectCfg
+from tacex_uipc import UipcInteractiveScene
 
 class UipcRLEnv(DirectRLEnv):
 
@@ -91,7 +92,7 @@ class UipcRLEnv(DirectRLEnv):
 
         # generate scene
         with Timer("[INFO]: Time taken for scene creation", "scene_creation"):
-            self.scene = InteractiveScene(self.cfg.scene)
+            self.scene: UipcInteractiveScene = UipcInteractiveScene(self.cfg.scene)
             self._setup_scene()
         print("[INFO]: Scene manager: ", self.scene)
 

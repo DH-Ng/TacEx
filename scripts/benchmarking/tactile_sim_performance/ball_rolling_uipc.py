@@ -68,6 +68,7 @@ from tacex_assets.sensors.gelsight_mini.gelsight_mini_cfg import GelSightMiniCfg
 
 from tacex import GelSightSensor, GelSightSensorCfg
 from tacex.simulation_approaches.gpu_taxim import TaximSimulatorCfg
+from tacex.simulation_approaches.fots import FOTSMarkerSimulatorCfg
 
 from tacex_uipc import UipcSim, UipcSimCfg, UipcObject, UipcObjectCfg, UipcRLEnv
 from tacex_uipc import UipcIsaacAttachments, UipcIsaacAttachmentsCfg
@@ -81,7 +82,11 @@ from pathlib import Path
 import json
 import platform
 
-
+try:
+    from isaacsim.util.debug_draw import _debug_draw
+    draw = _debug_draw.acquire_debug_draw_interface()
+except:
+    draw = None
 
 class CustomEnvWindow(BaseEnvWindow):
     """Window manager for the RL environment."""
@@ -196,7 +201,7 @@ class BallRollingEnvCfg(DirectRLEnvCfg):
             usd_path=f"{TACEX_ASSETS_DATA_DIR}/Props/ball_wood.usd",
         ),
         mesh_cfg=mesh_cfg,
-        constitution_cfg=UipcObjectCfg.AffineBodyConstitutionCfg() #UipcObjectCfg.StableNeoHookeanCfg()
+        constitution_cfg=UipcObjectCfg.AffineBodyConstitutionCfg() # UipcObjectCfg.StableNeoHookeanCfg() #
     )
 
     robot: ArticulationCfg = FRANKA_PANDA_ARM_GSMINI_SINGLE_ADAPTER_HIGH_PD_CFG.replace(
@@ -235,7 +240,7 @@ class BallRollingEnvCfg(DirectRLEnvCfg):
         constitution_cfg=UipcObjectCfg.StableNeoHookeanCfg(),
     )
     gelpad_attachment_cfg=UipcIsaacAttachmentsCfg(
-        constraint_strength_ratio=100.0,
+        constraint_strength_ratio=1000.0,
         body_name="gelsight_mini_case",
         debug_vis=False,
         compute_attachment_data=True
@@ -252,17 +257,22 @@ class BallRollingEnvCfg(DirectRLEnvCfg):
         ),
         device = "cuda",
         debug_vis=True, # for rendering sensor output in the gui
-        # update Taxim cfg
         marker_motion_sim_cfg=None,
         data_types=["tactile_rgb"], #marker_motion
     )
 
-    # settings for optical sim
+    # settings for optical sim - update Taxim cfg
     gsmini.optical_sim_cfg = gsmini.optical_sim_cfg.replace(
         with_shadow=False,
         device="cuda",
         tactile_img_res=(32, 32),
     )
+    # update FOTS cfg
+    # gsmini.marker_motion_sim_cfg = gsmini.marker_motion_sim_cfg.replace(
+    #     device="cuda",
+    #     tactile_img_res=(32, 32),
+    # )
+
     ik_controller_cfg = DifferentialIKControllerCfg(command_type="pose", use_relative_mode=False, ik_method="dls")
 
     ball_radius = 0.005
@@ -414,6 +424,7 @@ class BallRollingEnv(UipcRLEnv):
         self._uipc_gelpad: UipcObject = UipcObject(self.cfg.gelpad_cfg, self.uipc_sim)
         
         self.object: UipcObject = UipcObject(self.cfg.ball, self.uipc_sim)
+        self.scene.uipc_objects["object"] = self.object
 
         # create attachment
         self.attachment = UipcIsaacAttachments(self.cfg.gelpad_attachment_cfg, self._uipc_gelpad, self.scene.articulations["robot"])
@@ -425,8 +436,13 @@ class BallRollingEnv(UipcRLEnv):
         # update movement pattern according to the ball position
         # ball_pos = self.object.data.root_link_pos_w - self.scene.env_origins
         #todo code how current ball position can be computed
-        ball_pos = self.object._compute_obj_position_world() - self.scene.env_origins
-        
+        ball_pos = self.object.data.root_pos_w - self.scene.env_origins
+
+        draw.clear_points()
+        points = ball_pos.cpu().numpy()
+
+        draw.draw_points(points, [(255,0,255,0.5)]*points.shape[0], [30]*points.shape[0])
+
         # change goal
         if (self.step_count+1) % self.num_step_goal_change == 0:
             self.current_goal_idx = (self.current_goal_idx+1)  % len(self.pattern_offsets)
@@ -701,7 +717,7 @@ def run_simulator(env: BallRollingEnv):
         physics_end = time.time()
         ###
 
-        # update isaac buffers() -> this also updates sensors
+        # update scene buffers (i.e. from rigid bodies, uipc bodies, sensors...)
         env.scene.update(dt=env.physics_dt)
 
         # render scene for cameras (used by sensor)

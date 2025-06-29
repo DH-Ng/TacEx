@@ -317,7 +317,6 @@ class UipcSim():
         else:
             Timer.report()
     
-
     def save_frame(self):
         """Saves the current frame into multiple files, which can be retrieved to replay the animation later.
 
@@ -343,8 +342,8 @@ class UipcSim():
             # print("obj id ", obj_id)
             obj = self.scene.objects().find(obj_id)
             obj_geometry_ids = obj.geometries().ids()
-            # obj_name = obj.name() #-- doesnt work, get error message (otherwise use this to set prim_path)
-            
+            #obj_name = obj.name() #-- doesnt work, get error message (otherwise use this to set prim_path)
+
             # create prim for each geometry
             for id in obj_geometry_ids:
                 scene_geom = self.scene.geometries()

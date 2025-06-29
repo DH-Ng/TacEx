@@ -51,6 +51,9 @@ wp.init()
 from tacex_uipc.utils import TetMeshCfg, MeshGenerator
 from tacex_uipc.uipc_attachments import UipcIsaacAttachments, UipcIsaacAttachmentsCfg
 
+from .uipc_object_deformable_data import UipcObjectDeformableData
+from .uipc_object_rigid_data import UipcObjectRigidData
+
 if TYPE_CHECKING:
     from tacex_uipc import UipcSim
 
@@ -126,7 +129,7 @@ class UipcObject(AssetBase):
             cfg: A configuration instance.
         """
         super().__init__(cfg)
-        self._uipc_sim = uipc_sim
+        self._uipc_sim: UipcSim = uipc_sim
 
         prim_paths_expr = self.cfg.prim_path #+ "/mesh"
         print(f"Initializing uipc objects {prim_paths_expr}...")
@@ -212,7 +215,7 @@ class UipcObject(AssetBase):
             # add fabric meshes to uipc sim class for updating the render meshes
             self._uipc_sim._fabric_meshes.append(fabric_prim)
             
-            # save indices to later find corresponding points of the meshes for rendering
+            # save surface offsets for finding corresponding surface points of the meshes for rendering
             num_surf_points = tet_surf_points_world.shape[0] #np.unique(tet_surf_indices)
             self._uipc_sim._surf_vertex_offsets.append(
                 self._uipc_sim._surf_vertex_offsets[-1] + num_surf_points
@@ -237,9 +240,8 @@ class UipcObject(AssetBase):
     """
 
     @property
-    def data(self):
-        return None
-        #return self._data
+    def data(self) -> UipcObjectDeformableData | UipcObjectRigidData: 
+        return self._data
 
     @property
     def num_instances(self) -> int:
@@ -296,8 +298,7 @@ class UipcObject(AssetBase):
             )
 
     def update(self, dt: float):
-        pass
-        #self._data.update(dt)
+        self._data.update(dt)
 
     """
     Operations - Finders.
@@ -318,204 +319,23 @@ class UipcObject(AssetBase):
         """
         return string_utils.resolve_matching_names(name_keys, self.body_names, preserve_order)
 
-    def _compute_obj_position_world(self):
-        # get current world vertex positions        
-        geom = self._uipc_sim.scene.geometries()
-        geo_slot, geo_slot_rest = geom.find(self.obj_id)
+    # def _compute_obj_position_world(self):
+    #     # get current world vertex positions        
+    #     geom = self._uipc_sim.scene.geometries()
+    #     geo_slot, geo_slot_rest = geom.find(self.obj_id)
         
-        vertex_positions_world = torch.tensor(geo_slot.geometry().positions().view().copy().reshape(-1,3), device=self.device)
-        obj_pos = torch.mean(vertex_positions_world, dim=0)
+    #     vertex_positions_world = torch.tensor(geo_slot.geometry().positions().view().copy().reshape(-1,3), device=self.device)
+    #     obj_pos = torch.mean(vertex_positions_world, dim=0)
 
-        draw.clear_points()
-        points = obj_pos.cpu().numpy()
-        draw.draw_points([points], [(255,0,255,0.5)]*points.shape[0], [30]*points.shape[0])
+    #     draw.clear_points()
+    #     points = obj_pos.cpu().numpy()
+    #     draw.draw_points([points], [(255,0,255,0.5)]*points.shape[0], [30]*points.shape[0])
 
-        return obj_pos
+    #     return obj_pos
 
     """
     Operations - Write to simulation.
     """
-
-    # def write_root_state_to_sim(self, root_state: torch.Tensor, env_ids: Sequence[int] | None = None):
-    #     """Set the root state over selected environment indices into the simulation.
-
-    #     The root state comprises of the cartesian position, quaternion orientation in (w, x, y, z), and linear
-    #     and angular velocity. All the quantities are in the simulation frame.
-
-    #     Args:
-    #         root_state: Root state in simulation frame. Shape is (len(env_ids), 13).
-    #         env_ids: Environment indices. If None, then all indices are used.
-    #     """
-
-    #     # set into simulation
-    #     self.write_root_pose_to_sim(root_state[:, :7], env_ids=env_ids)
-    #     self.write_root_velocity_to_sim(root_state[:, 7:], env_ids=env_ids)
-
-    def write_root_com_state_to_sim(self, root_state: torch.Tensor, env_ids: Sequence[int] | None = None):
-        """Set the root center of mass state over selected environment indices into the simulation.
-
-        The root state comprises of the cartesian position, quaternion orientation in (w, x, y, z), and linear
-        and angular velocity. All the quantities are in the simulation frame.
-
-        Args:
-            root_state: Root state in simulation frame. Shape is (len(env_ids), 13).
-            env_ids: Environment indices. If None, then all indices are used.
-        """
-        # set into simulation
-        self.write_root_com_pose_to_sim(root_state[:, :7], env_ids=env_ids)
-        self.write_root_com_velocity_to_sim(root_state[:, 7:], env_ids=env_ids)
-
-    def write_root_link_state_to_sim(self, root_state: torch.Tensor, env_ids: Sequence[int] | None = None):
-        """Set the root link state over selected environment indices into the simulation.
-
-        The root state comprises of the cartesian position, quaternion orientation in (w, x, y, z), and linear
-        and angular velocity. All the quantities are in the simulation frame.
-
-        Args:
-            root_state: Root state in simulation frame. Shape is (len(env_ids), 13).
-            env_ids: Environment indices. If None, then all indices are used.
-        """
-        # set into simulation
-        self.write_root_link_pose_to_sim(root_state[:, :7], env_ids=env_ids)
-        self.write_root_link_velocity_to_sim(root_state[:, 7:], env_ids=env_ids)
-
-    # def write_root_pose_to_sim(self, root_pose: torch.Tensor, env_ids: Sequence[int] | None = None):
-    #     """Set the root pose over selected environment indices into the simulation.
-
-    #     The root pose comprises of the cartesian position and quaternion orientation in (w, x, y, z).
-
-    #     Args:
-    #         root_pose: Root poses in simulation frame. Shape is (len(env_ids), 7).
-    #         env_ids: Environment indices. If None, then all indices are used.
-    #     """
-    #     # resolve all indices
-    #     physx_env_ids = env_ids
-    #     if env_ids is None:
-    #         env_ids = slice(None)
-    #         physx_env_ids = self._ALL_INDICES
-    #     # note: we need to do this here since tensors are not set into simulation until step.
-    #     # set into internal buffers
-    #     self._data.root_state_w[env_ids, :7] = root_pose.clone()
-    #     # convert root quaternion from wxyz to xyzw
-    #     root_poses_xyzw = self._data.root_state_w[:, :7].clone()
-    #     root_poses_xyzw[:, 3:] = math_utils.convert_quat(root_poses_xyzw[:, 3:], to="xyzw")
-    #     # set into simulation
-    #     self.root_physx_view.set_transforms(root_poses_xyzw, indices=physx_env_ids)
-
-    def write_root_link_pose_to_sim(self, root_pose: torch.Tensor, env_ids: Sequence[int] | None = None):
-        """Set the root link pose over selected environment indices into the simulation.
-
-        The root pose comprises of the cartesian position and quaternion orientation in (w, x, y, z).
-
-        Args:
-            root_pose: Root poses in simulation frame. Shape is (len(env_ids), 7).
-            env_ids: Environment indices. If None, then all indices are used.
-        """
-        # resolve all indices
-        physx_env_ids = env_ids
-        if env_ids is None:
-            env_ids = slice(None)
-            physx_env_ids = self._ALL_INDICES
-        # note: we need to do this here since tensors are not set into simulation until step.
-        # set into internal buffers
-        self._data.root_link_state_w[env_ids, :7] = root_pose.clone()
-        self._data.root_state_w[env_ids, :7] = self._data.root_link_state_w[env_ids, :7]
-        # convert root quaternion from wxyz to xyzw
-        root_poses_xyzw = self._data.root_link_state_w[:, :7].clone()
-        root_poses_xyzw[:, 3:] = math_utils.convert_quat(root_poses_xyzw[:, 3:], to="xyzw")
-        # set into simulation
-        self.root_physx_view.set_transforms(root_poses_xyzw, indices=physx_env_ids)
-
-    def write_root_com_pose_to_sim(self, root_pose: torch.Tensor, env_ids: Sequence[int] | None = None):
-        """Set the root center of mass pose over selected environment indices into the simulation.
-
-        The root pose comprises of the cartesian position and quaternion orientation in (w, x, y, z).
-        The orientation is the orientation of the principle axes of inertia.
-
-        Args:
-            root_pose: Root center of mass poses in simulation frame. Shape is (len(env_ids), 7).
-            env_ids: Environment indices. If None, then all indices are used.
-        """
-        # resolve all indices
-        if env_ids is None:
-            local_env_ids = slice(env_ids)
-        else:
-            local_env_ids = env_ids
-
-        com_pos = self.data.com_pos_b[local_env_ids, 0, :]
-        com_quat = self.data.com_quat_b[local_env_ids, 0, :]
-
-        root_link_pos, root_link_quat = math_utils.combine_frame_transforms(
-            root_pose[..., :3],
-            root_pose[..., 3:7],
-            math_utils.quat_rotate(math_utils.quat_inv(com_quat), -com_pos),
-            math_utils.quat_inv(com_quat),
-        )
-
-        root_link_pose = torch.cat((root_link_pos, root_link_quat), dim=-1)
-        self.write_root_link_pose_to_sim(root_pose=root_link_pose, env_ids=env_ids)
-
-    def write_root_velocity_to_sim(self, root_velocity: torch.Tensor, env_ids: Sequence[int] | None = None):
-        """Set the root center of mass velocity over selected environment indices into the simulation.
-
-        The velocity comprises linear velocity (x, y, z) and angular velocity (x, y, z) in that order.
-        NOTE: This sets the velocity of the root's center of mass rather than the roots frame.
-
-        Args:
-            root_velocity: Root center of mass velocities in simulation world frame. Shape is (len(env_ids), 6).
-            env_ids: Environment indices. If None, then all indices are used.
-        """
-        # resolve all indices
-        physx_env_ids = env_ids
-        if env_ids is None:
-            env_ids = slice(None)
-            physx_env_ids = self._ALL_INDICES
-        # note: we need to do this here since tensors are not set into simulation until step.
-        # set into internal buffers
-        self._data.root_state_w[env_ids, 7:] = root_velocity.clone()
-        self._data.body_acc_w[env_ids] = 0.0
-        # set into simulation
-        self.root_physx_view.set_velocities(self._data.root_state_w[:, 7:], indices=physx_env_ids)
-
-    def write_root_com_velocity_to_sim(self, root_velocity: torch.Tensor, env_ids: Sequence[int] | None = None):
-        """Set the root center of mass velocity over selected environment indices into the simulation.
-
-        The velocity comprises linear velocity (x, y, z) and angular velocity (x, y, z) in that order.
-        NOTE: This sets the velocity of the root's center of mass rather than the roots frame.
-
-        Args:
-            root_velocity: Root center of mass velocities in simulation world frame. Shape is (len(env_ids), 6).
-            env_ids: Environment indices. If None, then all indices are used.
-        """
-
-        # resolve all indices
-        physx_env_ids = env_ids
-        if env_ids is None:
-            env_ids = slice(None)
-            physx_env_ids = self._ALL_INDICES
-        # note: we need to do this here since tensors are not set into simulation until step.
-        # set into internal buffers
-        self._data.root_com_state_w[env_ids, 7:] = root_velocity.clone()
-        self._data.root_state_w[env_ids, 7:] = self._data.root_com_state_w[env_ids, 7:]
-        self._data.body_acc_w[env_ids] = 0.0
-        # set into simulation
-        self.root_physx_view.set_velocities(self._data.root_com_state_w[:, 7:], indices=physx_env_ids)
-
-    def write_root_state_to_sim(self, root_state: torch.Tensor, env_ids: Sequence[int] | None = None):
-        """Set the root state over selected environment indices into the simulation.
-
-        The root state comprises of the cartesian position, quaternion orientation in (w, x, y, z), and linear
-        and angular velocity. All the quantities are in the simulation frame.
-
-        Args:
-            root_state: Root state in simulation frame. Shape is (len(env_ids), 13).
-            env_ids: Environment indices. If None, then all indices are used.
-        """
-
-        # set into simulation
-        self.write_root_pose_to_sim(root_state[:, :7], env_ids=env_ids)
-        self.write_root_velocity_to_sim(root_state[:, 7:], env_ids=env_ids)
-
     def write_vertex_positions_to_sim(self, vertex_positions: torch.Tensor, env_ids: Sequence[int] | None = None):
         """Set the root pose over selected environment indices into the simulation.
 
@@ -579,11 +399,17 @@ class UipcObject(AssetBase):
         omni.log.info(f"UIPC body initialized at: {self.cfg.prim_path}.")
         omni.log.info(f"Number of instances: {self.num_instances}")
 
+        # container for data access
+        if type(self.constitution) == StableNeoHookean:
+            self._data: UipcObjectDeformableData = UipcObjectDeformableData(self._uipc_sim, self, self.device)
+        elif type(self.constitution) == AffineBodyConstitution:
+            self._data: UipcObjectRigidData = UipcObjectRigidData(self._uipc_sim, self, self.device)
+
         # create buffers
         self._create_buffers()
         # process configuration
         self._process_cfg()
-        # update the rigid body data
+        # update the uipc_object data
         self.update(0.0)
         
         # add this object to the list of all uipc objects in the world

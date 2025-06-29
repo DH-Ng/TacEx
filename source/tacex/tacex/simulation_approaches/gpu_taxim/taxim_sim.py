@@ -44,7 +44,6 @@ class TaximSimulator(GelSightSimulator):
         else: 
             self._device = self.cfg.device
             
-
         self._taxim: Taxim = Taxim(calib_folder=calib_folder, device=self._device)
         # update Taxim settings via settings from cfg class
         # print(self._taxim.width)
