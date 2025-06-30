@@ -12,6 +12,8 @@ from isaaclab.sensors import FrameTransformer, FrameTransformerCfg
 from .sim import MarkerMotion
 from ..gelsight_simulator import GelSightSimulator
 from ..gpu_taxim import TaximSimulator
+from ..gpu_taxim.sim import TaximTorch
+
 from ...gelsight_sensor import GelSightSensor
 
 if TYPE_CHECKING:
@@ -25,6 +27,21 @@ class FOTSMarkerSimulator(GelSightSimulator):
     """
     cfg: FOTSMarkerSimulatorCfg
 
+    def __init__(self, sensor: GelSightSensor, cfg: FOTSMarkerSimulatorCfg):
+        self.sensor = sensor
+
+        # todo make size adaptable? I mean with env_ids. This way we would always simulate everythings
+        self._indentation_depth = torch.zeros((self.sensor._num_envs), device=self.sensor._device)
+        """Indentation depth, i.e. how deep the object is pressed into the gelpad.
+        Values are in mm.
+
+        Indentation depth is equal to the maximum pressing depth of the object in the gelpad.
+        It is used for shifting the height map for the Taxim simulation.
+        """
+
+        super().__init__(sensor=sensor, cfg=cfg)
+
+
     def _initialize_impl(self):
         if self.cfg.device is None:
             # use same device as simulation
@@ -35,27 +52,19 @@ class FOTSMarkerSimulator(GelSightSimulator):
         # use Taxim for gpu based operations
         if ((self.sensor.optical_simulator is not None)
             and (type(self.sensor.optical_simulator) is TaximSimulator)):
-            self._taxim = self.sensor.optical_simulator._taxim
+            self._taxim: TaximTorch = self.sensor.optical_simulator._taxim
         else:
             raise RuntimeError("Currently FOTS simulation approach has to be used in combination with GPU-Taxim as optical-simulator.")
 
-        # todo make height map size adaptable? Only simulate where depth > 0. This way we wouldnt always simulate everythings
-        self._indentation_depth = torch.zeros((self.sensor._num_envs), device=self._device)
-        """Indentation depth, i.e. how deep the object is pressed into the gelpad.
-        Values are in mm.
-
-        Indentation depth is equal to the maximum pressing depth of the object in the gelpad.
-        It is used for shifting the height map for the Taxim simulation.
-        """
-
-        bg_img = self._taxim._bg_proc.permute(1, 2, 0).cpu().numpy()
+        # tactile rgb image without indentation
+        bg_img = self._taxim.background_img.movedim(0, 2).cpu().numpy()
         self.marker_motion_sim = MarkerMotion(
             frame0_blur=bg_img,
             mm2pix=self.cfg.mm_to_pixel,
             num_markers_col=self.cfg.marker_params.num_markers_col, #20, #11
             num_markers_row=self.cfg.marker_params.num_markers_row, #15, #9
-            tactile_img_height=self.cfg.tactile_img_res[0], # 480 #TODO fix, so that resolution is always WxH (e.g for Taxim thats kidna messed up)
-            tactile_img_width=self.cfg.tactile_img_res[1], # 640
+            tactile_img_width=self.cfg.tactile_img_res[0], # default 480
+            tactile_img_height=self.cfg.tactile_img_res[1], # default 640
             lamb=[0.00125,0.0021,0.0038], #[0.00125,0.00021,0.00038],
             x0=self.cfg.marker_params.x0,
             y0=self.cfg.marker_params.y0
@@ -74,29 +83,30 @@ class FOTSMarkerSimulator(GelSightSimulator):
             self.sensor._data.output["traj"].append([])
         self.theta = torch.zeros((self._num_envs), device=self._device)
 
+
         # use IsaacLab FrameTransformer for keeping track of relative positon/rotation
         self.frame_transformer: FrameTransformer = FrameTransformer(self.cfg.frame_transformer_cfg)
-        
+            
         # need to initialize manually
         self.frame_transformer._initialize_impl() 
         self.frame_transformer._is_initialized = True
-        print(self.frame_transformer)
-    
+        print("Frame transformer for FOTS: ", self.frame_transformer)
+
     def marker_motion_simulation(self):
         self.frame_transformer.update(dt=0)
         self._indentation_depth = self.sensor._indentation_depth
-        height_map = self.sensor._data.output["height_map"]
+        height_map = self.sensor._data.output["height_map"] # height map has shape (height, width) cause row-column format
 
         # up/downscale height map if camera res different than tactile img res
-        if height_map.shape != self.cfg.tactile_img_res:
-            height_map = F.resize(height_map, self.cfg.tactile_img_res)
+        if height_map.shape != (self.cfg.tactile_img_res[1], self.cfg.tactile_img_res[0]):
+            height_map = F.resize(height_map, (self.cfg.tactile_img_res[1], self.cfg.tactile_img_res[0]))
 
         if self._device == "cpu":
             height_map = height_map.cpu()
             self._indentation_depth = self.sensor._indentation_depth.cpu()
 
-        height_map_shifted = self._taxim._get_shifted_height_map(self._indentation_depth, height_map)
-        deformed_gel, contact_mask = self._taxim._compute_gel_pad_deformation(height_map_shifted)
+        height_map_shifted = self._taxim._TaximTorch__get_shifted_height_map(self._indentation_depth, height_map)
+        deformed_gel, contact_mask = self._taxim._TaximTorch__compute_gel_pad_deformation(height_map_shifted)
         deformed_gel = deformed_gel.max() - deformed_gel
 
        
@@ -125,7 +135,8 @@ class FOTSMarkerSimulator(GelSightSimulator):
 
                 #self.sensor._data.output["traj"][h].append([rel_pos[0], rel_pos[1], theta])
                 # print("")
-
+                
+                # traj = contaxt data (x,y,theta)
                 self.sensor._data.output["traj"][h].append([mean[1], mean[0], theta])
                 
                 #todo vectorize with pytorch 

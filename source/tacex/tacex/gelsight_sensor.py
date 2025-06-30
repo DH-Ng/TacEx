@@ -70,9 +70,6 @@ class GelSightSensor(SensorBase):
 
         # Flag to check that sensor is spawned.
         self._is_spawned = False
-
-        #todo remove
-        self.test = 0
     
     def __del__(self):
         """Unsubscribes from callbacks."""
@@ -84,7 +81,7 @@ class GelSightSensor(SensorBase):
     #     # message for class
     #     return (
     #         f"Gelsight Mini @ '{self.cfg.prim_path}': \n"
-    #         f"\tdata types   : {list(self._data.output.keys())} \n"
+    #         f"\tdata types   : {list(self._data.output)} \n"
     #         f"\tupdate period (s): {self.cfg.update_period}\n"
     #         f"\tframe        : {self.frame}\n"
     #         f"\camera resolution        : {self.camera_resolution}\n"
@@ -162,15 +159,15 @@ class GelSightSensor(SensorBase):
         #     #TODO should I compute press depth after interpolation or before?
         #     self._data.output["height_map"] = resized
 
-        if "camera_depth" in self._data.output.keys():
+        if "camera_depth" in self._data.output:
             self._data.output["camera_depth"][env_ids] = 0
 
         # simulate optical/marker output, but without indentation
-        if (self.optical_simulator is not None) and ("tactile_rgb" in self._data.output.keys()) :
+        if (self.optical_simulator is not None) and ("tactile_rgb" in self._data.output) :
             self._data.output["tactile_rgb"][:] = self.optical_simulator.optical_simulation()
             self.optical_simulator.reset()
 
-        if (self.marker_motion_simulator is not None) and ("marker_motion" in self._data.output.keys()):
+        if (self.marker_motion_simulator is not None) and ("marker_motion" in self._data.output):
             # height_map_shifted = self.taxim._get_shifted_height_map(self._indentation_depth, self._data.output["height_map"])
             self._data.output["marker_motion"][:] = self.marker_motion_simulator.marker_motion_simulation() #TODO adjust mm2pix value 19.58 #/19.58
             # (yy_init_pos, xx_init_pos), i.e. along height x width of tactile img
@@ -285,19 +282,19 @@ class GelSightSensor(SensorBase):
                 )
 
         # create buffers for output
-        if "camera_depth" in self._data.output.keys():
+        if "camera_depth" in self._data.output:
             self._data.output["camera_depth"] = torch.zeros(
                 (self._num_envs, self.camera_resolution[1], self.camera_resolution[0], 1), 
                 device=self.cfg.device
             )
 
-        if "tactile_rgb" in self._data.output.keys():
+        if "tactile_rgb" in self._data.output:
             self._data.output["tactile_rgb"] = torch.zeros(
                 (self._num_envs, self.cfg.optical_sim_cfg.tactile_img_res[1], self.cfg.optical_sim_cfg.tactile_img_res[0], 3), 
                 device=self.cfg.device
             )
 
-        if "marker_motion" in self._data.output.keys():
+        if "marker_motion" in self._data.output:
             self._data.output["marker_motion"]= torch.zeros(
                 (
                     self._num_envs,
@@ -350,14 +347,14 @@ class GelSightSensor(SensorBase):
             # -- pressing depth
             self._indentation_depth[:] = self.compute_indentation_depth_func() # type: ignore #todo uncomment
 
-        if "camera_depth" in self._data.output.keys():
+        if "camera_depth" in self._data.output:
             self._get_camera_depth()
             
-        if (self.optical_simulator is not None) and ("tactile_rgb" in self._data.output.keys()) :
+        if (self.optical_simulator is not None) and ("tactile_rgb" in self._data.output) :
             # self.optical_simulator.height_map = self._data.output["height_map"]
             self._data.output["tactile_rgb"][:] = self.optical_simulator.optical_simulation()
 
-        if (self.marker_motion_simulator is not None) and ("marker_motion" in self._data.output.keys()):
+        if (self.marker_motion_simulator is not None) and ("marker_motion" in self._data.output):
             self._data.output["marker_motion"][:] = self.marker_motion_simulator.marker_motion_simulation()
 
 
@@ -400,22 +397,23 @@ class GelSightSensor(SensorBase):
                     # create image provider
                     self._img_providers[str(i)] = omni.ui.ByteImageProvider() # default format omni.ui.TextureFormat.RGBA8_UNORM
                 
-                if "camera_depth" in self._data.output.keys():
+                output_types = self._data.output
+                if "camera_depth" in output_types:
                     frame = self._data.output["camera_depth"][i].cpu().numpy()
                     # # image is channel first, convert to channel last
                     # frame = np.moveaxis(frame, 0, -1)
                     # convert to 3 channel image, to later turn it into 4 channel RGBA for Isaac Widget
                     frame = np.dstack((frame, frame, frame)).astype(np.uint8)
                     
-                if "tactile_rgb" in self._data.output.keys():
+                if "tactile_rgb" in output_types:
                     # get tactile image
                     frame = self.data.output["tactile_rgb"][i].cpu().numpy()*255
                     #frame = cv2.normalize(frame, None, alpha = 0, beta = 255, norm_type = cv2.NORM_MINMAX, dtype = cv2.CV_32F)
                     # frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
                     # cv2.imwrite(f"tact_rgb{self._frame[i]}.jpg", frame)
                 
-                if "marker_motion" in self._data.output.keys():
-                    if not "tactile_rgb" in self._data.output.keys():
+                if "marker_motion" in output_types:
+                    if not "tactile_rgb" in output_types:
                         frame = np.zeros(self.marker_motion_simulator.cfg.tactile_img_res).astype(np.uint8) 
 
                     # like the `_generate` function of FOTS MarkerMotion sim

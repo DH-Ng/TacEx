@@ -50,6 +50,8 @@ class TaximSimulator(GelSightSimulator):
         # self._taxim.width = self.cfg.tactile_img_res[0]
         # self._taxim.height = self.cfg.tactile_img_res[1]
         
+        #-- note Taxim sim uses (channels, height, width) format
+
         # tactile rgb image without indentation
         self.background_img = self._taxim.background_img
         #  up/downscale height map if different than tactile img res

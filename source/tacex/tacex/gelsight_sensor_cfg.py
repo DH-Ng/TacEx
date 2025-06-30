@@ -26,7 +26,7 @@ class GelSightSensorCfg(SensorBaseCfg):
         """Configs for the Camera of the GelSight sensor."""
         prim_path_appendix: str = "/Camera",
         update_period: float = 0,
-        resolution: Tuple[int] = (160, 120),
+        resolution: Tuple[int] = (120, 160),
         data_types: list[str] = ["depth"],
         clipping_range: Tuple[float] = (0,1),
     sensor_camera_cfg: SensorCameraCfg = SensorCameraCfg()

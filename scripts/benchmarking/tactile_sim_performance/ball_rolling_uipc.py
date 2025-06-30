@@ -257,8 +257,8 @@ class BallRollingEnvCfg(DirectRLEnvCfg):
         ),
         device = "cuda",
         debug_vis=True, # for rendering sensor output in the gui
-        marker_motion_sim_cfg=None,
-        data_types=["tactile_rgb"], #marker_motion
+        # marker_motion_sim_cfg=None,
+        data_types=["tactile_rgb", "marker_motion"], #marker_motion
     )
 
     # settings for optical sim - update Taxim cfg
@@ -268,10 +268,27 @@ class BallRollingEnvCfg(DirectRLEnvCfg):
         tactile_img_res=(480,640),
     )
     # update FOTS cfg
-    # gsmini.marker_motion_sim_cfg = gsmini.marker_motion_sim_cfg.replace(
-    #     device="cuda",
-    #     tactile_img_res=(32, 32),
-    # )
+    marker_cfg = FRAME_MARKER_CFG.copy()
+    marker_cfg.markers["frame"].scale = (0.01, 0.01, 0.01)
+    marker_cfg.prim_path = "/Visuals/FrameTransformer"
+    
+    gsmini.marker_motion_sim_cfg = gsmini.marker_motion_sim_cfg.replace(
+        device="cuda",
+        tactile_img_res=(480, 640),
+        frame_transformer_cfg = FrameTransformerCfg(
+            prim_path="/World/envs/env_.*/Robot/gelsight_mini_case", #"/World/envs/env_.*/Robot/gelsight_mini_case",
+            # you have to make sure that the asset frame center is correct, otherwise wrong shear/twist motions
+            source_frame_offset=OffsetCfg(
+                # pos=(0.0, 0.0, 0.)
+                rot=(0.0, 0.92388, -0.38268, 0.0) # values for the robot used here
+            ),
+            target_frames=[
+                FrameTransformerCfg.FrameCfg(prim_path="/World/envs/env_.*/ball")
+            ],
+            debug_vis=True,
+            visualizer_cfg=marker_cfg,
+        )
+    )
 
     ik_controller_cfg = DifferentialIKControllerCfg(command_type="pose", use_relative_mode=False, ik_method="dls")
 
