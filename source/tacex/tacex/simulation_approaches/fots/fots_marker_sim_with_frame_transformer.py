@@ -39,7 +39,6 @@ class FOTSMarkerSimulator(GelSightSimulator):
         # use IsaacLab FrameTransformer for keeping track of relative positon/rotation
         self.frame_transformer: FrameTransformer = FrameTransformer(self.cfg.frame_transformer_cfg)
             
-
     def _initialize_impl(self):
         if self.cfg.device is None:
             # use same device as simulation

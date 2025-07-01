@@ -282,21 +282,24 @@ class GelSightSensor(SensorBase):
         #     sensor_prim_path = self.prim_path
         
         # initialize sim approaches
-        self.optical_simulator._initialize_impl()
-        self.marker_motion_simulator._initialize_impl()
+        if self.optical_simulator is not None:
+            self.optical_simulator._initialize_impl()
+        
+        if self.marker_motion_simulator is not None:
+            self.marker_motion_simulator._initialize_impl()
 
         # create buffers for output
-        if "camera_depth" in self._data.output:
+        if "camera_depth" in self.cfg.data_types:
             self._data.output["camera_depth"] = torch.zeros(
                 (self._num_envs, self.camera_resolution[1], self.camera_resolution[0], 1), 
                 device=self.cfg.device
             )
-        if "tactile_rgb" in self._data.output:
+        if "tactile_rgb" in self.cfg.data_types:
             self._data.output["tactile_rgb"] = torch.zeros(
                 (self._num_envs, self.cfg.optical_sim_cfg.tactile_img_res[1], self.cfg.optical_sim_cfg.tactile_img_res[0], 3), 
                 device=self.cfg.device
             )
-        if "marker_motion" in self._data.output:
+        if "marker_motion" in self.cfg.data_types:
             self._data.output["marker_motion"]= torch.zeros(
                 (
                     self._num_envs,
@@ -351,11 +354,11 @@ class GelSightSensor(SensorBase):
         if "camera_depth" in self._data.output:
             self._get_camera_depth()
             
-        if (self.optical_simulator is not None) and ("tactile_rgb" in self._data.output) :
+        if (self.optical_simulator is not None) and ("tactile_rgb" in self.cfg.data_types):
             # self.optical_simulator.height_map = self._data.output["height_map"]
             self._data.output["tactile_rgb"][:] = self.optical_simulator.optical_simulation()
 
-        if (self.marker_motion_simulator is not None) and ("marker_motion" in self._data.output):
+        if (self.marker_motion_simulator is not None) and ("marker_motion" in self.cfg.data_types):
             self._data.output["marker_motion"][:] = self.marker_motion_simulator.marker_motion_simulation()
 
 
@@ -377,13 +380,13 @@ class GelSightSensor(SensorBase):
             # need to create the attribute for the debug_vis here since it depends on self._prim_view
             for prim in self._prim_view.prims:
                 # creates USD attribut for each data type, which can be found in the Isaac GUI under "Raw Usd Properties -> "Extra Properties"
-                if "camera_depth" in self._data.output:
+                if "camera_depth" in self.cfg.data_types:
                     attr = prim.CreateAttribute("debug_camera_depth", Sdf.ValueTypeNames.Bool)
                     attr.Set(False)
-                if "tactile_rgb" in self._data.output:
+                if "tactile_rgb" in self.cfg.data_types:
                     attr = prim.CreateAttribute("debug_tactile_rgb", Sdf.ValueTypeNames.Bool)
                     attr.Set(False)
-                if "marker_motion" in self._data.output:
+                if "marker_motion" in self.cfg.data_types:
                     attr = prim.CreateAttribute("debug_marker_motion", Sdf.ValueTypeNames.Bool)
                     attr.Set(False)
                         
