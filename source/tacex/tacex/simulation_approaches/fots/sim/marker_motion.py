@@ -125,7 +125,7 @@ class MarkerMotion():
         return img
 
     def _motion_callback(self, init_marker_x_pos, init_marker_y_pos, depth_map, contact_mask, traj):
-        # extract whoch markers are in contact
+        # extract which markers are in contact
         for i in range(self.num_markers_col):
             for j in range(self.num_markers_row):
                 y_pos = int(init_marker_y_pos[j, i]) # row-wise defined

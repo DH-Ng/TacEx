@@ -31,9 +31,9 @@ class GelSightSimulator(ABC):
         else: 
             self._device = self.cfg.device
         
-        self._num_envs = self.sensor._num_envs
+        # self._num_envs = self.sensor._num_envs
         
-        self._initialize_impl()
+        # self._initialize_impl()
 
     @abstractmethod
     def _initialize_impl(self):
@@ -61,3 +61,27 @@ class GelSightSimulator(ABC):
     @abstractmethod
     def reset(self):
         raise NotImplementedError
+
+    """
+    Debug visualization
+    """
+    
+    def _set_debug_vis_impl(self, debug_vis: bool):
+        """Set debug visualization into visualization objects.
+
+        This function is responsible for creating the visualization objects if they don't exist
+        and input ``debug_vis`` is True. If the visualization objects exist, the function should
+        set their visibility into the stage.
+        """
+        raise NotImplementedError(f"Debug visualization is not implemented for {self.__class__.__name__}.")
+
+    def _debug_vis_callback(self, event):
+        """Callback for debug visualization.
+
+        This function calls the visualization objects and sets the data to visualize into them.
+        """
+        raise NotImplementedError(f"Debug visualization is not implemented for {self.__class__.__name__}.")
+
+    """
+    Internal simulation callbacks.
+    """

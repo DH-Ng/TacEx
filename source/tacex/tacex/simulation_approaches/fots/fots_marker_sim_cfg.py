@@ -6,7 +6,7 @@ from isaaclab.utils import class_to_dict, to_camel_case, configclass
 from isaaclab.sensors import FrameTransformerCfg, OffsetCfg
 
 from ..gelsight_simulator_cfg import GelSightSimulatorCfg
-from .fots_marker_sim import FOTSMarkerSimulator
+from .fots_marker_sim_with_frame_transformer import FOTSMarkerSimulator
 
 """Configuration for a tactile RGB simulation with Taxim."""
 @configclass
@@ -19,7 +19,7 @@ class FOTSMarkerSimulatorCfg(GelSightSimulatorCfg):
     
     with_shadow: bool = False
 
-    tactile_img_res: tuple = (320, 240)
+    tactile_img_res: tuple = (240, 320)
     """Resolution of the Tactile Image.
     
     Can be different from the Sensor Camera.

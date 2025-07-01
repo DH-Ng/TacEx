@@ -53,15 +53,15 @@ gym.register(
     },
 )
 
-#isaaclab -p ./scripts/reinforcement_learning/skrl/train.py --task TacEx-Ball-Rolling-Tactile-Depth_Map-v0 --num_envs 1000 --enable_cameras
-# from .depth_map_env import BallRollingDepthMapEnv, BallRollingDepthMapEnvCfg 
-# gym.register(
-#     id="TacEx-Ball-Rolling-Tactile-Depth_Map-v0",
-#     entry_point=f"{__name__}.depth_map_env:BallRollingDepthMapEnv",
-#     disable_env_checker=True,
-#     kwargs={
-#         "env_cfg_entry_point": BallRollingDepthMapEnvCfg,
-#         "skrl_cfg_entry_point": f"{agents.__name__}:skrl_ppo_camera_cfg.yaml",
-#         "skrl_sac_cfg_entry_point": f"{agents.__name__}:skrl_sac_cfg.yaml",
-#     },
-# )
+from .ball_rolling_tactile_rgb_uipc import BallRollingTactileRGBUipcEnv, BallRollingTactileRGBUipcCfg 
+gym.register(
+    id="TacEx-Ball-Rolling-Tactile-RGB-Uipc-v0",
+    entry_point=f"{__name__}.ball_rolling_tactile_rgb_uipc:BallRollingTactileRGBUipcEnv",
+    disable_env_checker=True,
+    kwargs={
+        "env_cfg_entry_point": BallRollingTactileRGBUipcCfg,
+        "skrl_cfg_entry_point": f"{agents.__name__}:skrl_ppo_tactile_rgb_cfg.yaml",
+        # "skrl_cfg_entry_point": f"{agents.__name__}:skrl_ppo_cfg.yaml",
+        "skrl_sac_cfg_entry_point": f"{agents.__name__}:skrl_sac_cfg.yaml",
+    },
+)
