@@ -221,6 +221,7 @@ class BallRollingTactileRGBUipcCfg(DirectRLEnvCfg):
         # logger_level="Info"
         ground_height=0.0025,
         contact=UipcSimCfg.Contact(
+            default_friction_ratio=0.5,
             d_hat=0.0005
         )
     )
@@ -307,7 +308,7 @@ class BallRollingTactileRGBUipcCfg(DirectRLEnvCfg):
             # epsilon_r=0.01
         ),
         constitution_cfg=UipcObjectCfg.StableNeoHookeanCfg(
-            youngs_modulus=0.1,
+            youngs_modulus=100.0,
         ) #UipcObjectCfg.AffineBodyConstitutionCfg() #
     )
 
@@ -320,10 +321,12 @@ class BallRollingTactileRGBUipcCfg(DirectRLEnvCfg):
             edge_length_r=1/5,
             # epsilon_r=0.01
         ),
-        constitution_cfg=UipcObjectCfg.StableNeoHookeanCfg(),
+        constitution_cfg=UipcObjectCfg.StableNeoHookeanCfg(
+            youngs_modulus=10
+        ),
     )
     gelpad_attachment_cfg=UipcIsaacAttachmentsCfg(
-        constraint_strength_ratio=100.0,
+        constraint_strength_ratio=200000.0,
         body_name="gelsight_mini_case",
         debug_vis=False,
     )
@@ -798,9 +801,9 @@ class BallRollingTactileRGBUipcEnv(UipcRLEnv):
         self._total_episode_rew[env_ids] = 0.0
 
         # reset uipc objects #todo implement that properly
-        self.object.write_vertex_positions_to_sim(vertex_positions=self.object.init_vertex_pos)
         self._uipc_gelpad.write_vertex_positions_to_sim(vertex_positions=self._uipc_gelpad.init_vertex_pos)
-        
+        self.object.write_vertex_positions_to_sim(vertex_positions=self.object.init_vertex_pos)
+
 
     #MARK: rewards
     def _get_rewards(self) -> torch.Tensor:        

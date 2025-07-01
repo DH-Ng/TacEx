@@ -170,7 +170,7 @@ class BallRollingEnvCfg(DirectRLEnvCfg):
                 max_angular_velocity=1000.0,
                 max_linear_velocity=1000.0,
                 max_depenetration_velocity=5.0,
-                kinematic_enabled=True,
+                kinematic_enabled=False,
                 disable_gravity=False,
             )
         )
@@ -206,7 +206,6 @@ class BallRollingEnvCfg(DirectRLEnvCfg):
             clipping_range = (0.024, 0.034),
         ),
         device = "cuda",
-        tactile_img_res = (480, 640),
         debug_vis=True, # for being able to see sensor output in the gui
         #optical_sim_cfg=None,
         # update Taxim cfg
@@ -217,12 +216,12 @@ class BallRollingEnvCfg(DirectRLEnvCfg):
             pyramid_kernel_size = [51, 21, 11, 5], #[11, 11, 11, 11, 11, 5], 
             kernel_size = 5,
             marker_params = FOTSMarkerSimulatorCfg.MarkerParams(
-                num_markers_col=25, #11,
-                num_markers_row=20, #9,
-                x0=26,
-                y0=15,
-                dx=29,
-                dy=26
+                num_markers_col=20, #11,
+                num_markers_row=25, #9,
+                x0=15,
+                y0=26,
+                dx=26,
+                dy=29
             ),
             tactile_img_res = (480, 640),
             device = "cuda",
@@ -736,7 +735,7 @@ def run_simulator(env: BallRollingEnv):
         #     f"GPU Compute:{system_utilization_analytics[2]}% | "
         #     f"GPU Memory: {system_utilization_analytics[3]:.2f}% |"
         # )
-        print("")
+        # print("")
         
 
     env.close()

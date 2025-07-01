@@ -178,3 +178,4 @@ class FOTSMarkerSimulator(GelSightSimulator):
     def reset(self):
         self._indentation_depth = torch.zeros((self._num_envs), device=self._device)
         self.init_marker_pos = (self.marker_motion_sim.init_marker_x_pos, self.marker_motion_sim.init_marker_y_pos)
+    

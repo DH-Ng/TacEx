@@ -205,9 +205,16 @@ class GelSightSensor(SensorBase):
         # need to create the attribute for the debug_vis here since it depends on self._view
         if self.cfg.debug_vis:
             for prim in self._view.prims:
-                # creates an USD attribut, which can be found in the Isaac GUI under "Raw Usd Properties -> "Extra Properties"
-                attr = prim.CreateAttribute("show_tactile_image", Sdf.ValueTypeNames.Bool)
-                attr.Set(False)
+                # creates USD attribut for each data type, which can be found in the Isaac GUI under "Raw Usd Properties -> "Extra Properties"
+                if "camera_depth" in self._data.output:
+                    attr = prim.CreateAttribute("debug_camera_depth", Sdf.ValueTypeNames.Bool)
+                    attr.Set(False)
+                if "tactile_rgb" in self._data.output:
+                    attr = prim.CreateAttribute("debug_tactile_rgb", Sdf.ValueTypeNames.Bool)
+                    attr.Set(False)
+                if "marker_motion" in self._data.output:
+                    attr = prim.CreateAttribute("debug_marker_motion", Sdf.ValueTypeNames.Bool)
+                    attr.Set(False)
 
         # Create all env_ids buffer
         self._ALL_INDICES = torch.arange(self._num_envs, device=self._device, dtype=torch.long)
@@ -287,20 +294,18 @@ class GelSightSensor(SensorBase):
                 (self._num_envs, self.camera_resolution[1], self.camera_resolution[0], 1), 
                 device=self.cfg.device
             )
-
         if "tactile_rgb" in self._data.output:
             self._data.output["tactile_rgb"] = torch.zeros(
                 (self._num_envs, self.cfg.optical_sim_cfg.tactile_img_res[1], self.cfg.optical_sim_cfg.tactile_img_res[0], 3), 
                 device=self.cfg.device
             )
-
         if "marker_motion" in self._data.output:
             self._data.output["marker_motion"]= torch.zeros(
                 (
                     self._num_envs,
                     self.cfg.marker_motion_sim_cfg.marker_params.num_markers_row, 
                     self.cfg.marker_motion_sim_cfg.marker_params.num_markers_col,
-                    2 # two, because each marker at (row,col) has position value (x,y)
+                    2 # two, because each marker at (row,col) has position value (y,x)
                 ), 
                 device=self.cfg.device
             )
@@ -374,9 +379,19 @@ class GelSightSensor(SensorBase):
         # note: parent only deals with callbacks. not their visibility
         if debug_vis:
             if not hasattr(self, "_windows"):
-                # list of windows that show the simulated tactile images, if the attribute of the Sensor asset is turned on
+                # dict of windows that show the simulated tactile images, if the attribute of the sensor asset is turned on
                 self._windows = {}
                 self._img_providers = {}
+                #todo check if there is a more efficient implementation than dict of dicts
+                if "camera_depth" in self.cfg.data_types:
+                    self._windows["camera_depth"] = {}
+                    self._img_providers["camera_depth"] = {}
+                if "tactile_rgb" in self.cfg.data_types:
+                    self._windows["tactile_rgb"] = {}
+                    self._img_providers["tactile_rgb"] = {}
+                if "marker_motion" in self.cfg.data_types:
+                    self._windows["marker_motion"] = {}
+                    self._img_providers["marker_motion"] = {}
         else:
             # if hasattr(self, "frame_visualizer"):
             #     self.frame_visualizer.set_visibility(False)
@@ -384,37 +399,79 @@ class GelSightSensor(SensorBase):
 
     def _debug_vis_callback(self, event):    
         if self._view is None:
-            return    
+            return
+                
         # Update the GUI windows
         for i, prim in enumerate(self._view.prims):
-            # creates an attribut, which can be found in the GUI under "Raw Usd Properties -> "Extra Properties"
-            show_img = prim.GetAttribute("show_tactile_image").Get()
-            if show_img==True:
-                if not (str(i) in self._windows.keys()):
-                    # create a window
-                    window = omni.ui.Window(self._view.prim_paths[i], height=480, width=320)
-                    self._windows[str(i)] = window
-                    # create image provider
-                    self._img_providers[str(i)] = omni.ui.ByteImageProvider() # default format omni.ui.TextureFormat.RGBA8_UNORM
-                
-                output_types = self._data.output
-                if "camera_depth" in output_types:
+
+            if "camera_depth" in self._data.output:
+                show_img = prim.GetAttribute("debug_camera_depth").Get()
+                if show_img==True:
+                    if not (str(i) in self._windows["camera_depth"]):
+                        # create a window
+                        window = omni.ui.Window(self._view.prim_paths[i], height=640, width=480)
+                        self._windows["camera_depth"][str(i)] = window
+                        # create image provider
+                        self._img_providers["camera_depth"][str(i)] = omni.ui.ByteImageProvider() # default format omni.ui.TextureFormat.RGBA8_UNORM
+
                     frame = self._data.output["camera_depth"][i].cpu().numpy()
                     # # image is channel first, convert to channel last
                     # frame = np.moveaxis(frame, 0, -1)
                     # convert to 3 channel image, to later turn it into 4 channel RGBA for Isaac Widget
                     frame = np.dstack((frame, frame, frame)).astype(np.uint8)
-                    
-                if "tactile_rgb" in output_types:
-                    # get tactile image
+                    frame = cv2.normalize(frame, None, alpha = 0, beta = 255, norm_type = cv2.NORM_MINMAX, dtype = cv2.CV_32F)
+
+                    # update image of the window
+                    frame = frame.astype(np.uint8)
+                    frame = cv2.cvtColor(frame, cv2.COLOR_RGB2RGBA) #cv.COLOR_BGR2RGBA) COLOR_RGB2RGBA
+                    height, width, channels = frame.shape
+                    with self._windows["camera_depth"][str(i)].frame:
+                        #self._img_providers[str(i)].set_data_array(frame, [width, height, channels]) #method signature: (numpy.ndarray[numpy.uint8], (width, height))
+                        self._img_providers["camera_depth"][str(i)].set_bytes_data(frame.flatten().data, [width, height]) #method signature: (numpy.ndarray[numpy.uint8], (width, height))
+                        image = omni.ui.ImageWithProvider(self._img_providers["camera_depth"][str(i)]) #, fill_policy=omni.ui.IwpFillPolicy.IWP_PRESERVE_ASPECT_FIT -> fill_policy by default: specifying the width and height of the item causes the image to be scaled to that size
+                elif str(i) in self._windows["camera_depth"]:
+                    # remove window/img_provider from dictionary and destroy them
+                    self._windows["camera_depth"].pop(str(i)).destroy()
+                    self._img_providers["camera_depth"].pop(str(i)).destroy()
+
+            if "tactile_rgb" in self._data.output:
+                show_img = prim.GetAttribute("debug_tactile_rgb").Get()
+                if show_img==True:
+                    if not (str(i) in self._windows["tactile_rgb"]):
+                        # create a window
+                        window = omni.ui.Window(self._view.prim_paths[i], height=640, width=480)
+                        self._windows["tactile_rgb"][str(i)] = window
+                        # create image provider
+                        self._img_providers["tactile_rgb"][str(i)] = omni.ui.ByteImageProvider() # default format omni.ui.TextureFormat.RGBA8_UNORM
+
                     frame = self.data.output["tactile_rgb"][i].cpu().numpy()*255
-                    #frame = cv2.normalize(frame, None, alpha = 0, beta = 255, norm_type = cv2.NORM_MINMAX, dtype = cv2.CV_32F)
-                    # frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-                    # cv2.imwrite(f"tact_rgb{self._frame[i]}.jpg", frame)
-                
-                if "marker_motion" in output_types:
-                    if not "tactile_rgb" in output_types:
-                        frame = np.zeros(self.marker_motion_simulator.cfg.tactile_img_res).astype(np.uint8) 
+                    frame = cv2.normalize(frame, None, alpha = 0, beta = 255, norm_type = cv2.NORM_MINMAX, dtype = cv2.CV_32F)
+                    
+                    # update image of the window                    
+                    frame = frame.astype(np.uint8)
+                    frame = cv2.cvtColor(frame, cv2.COLOR_RGB2RGBA) #cv.COLOR_BGR2RGBA) COLOR_RGB2RGBA
+                    height, width, channels = frame.shape
+
+                    with self._windows["tactile_rgb"][str(i)].frame:
+                        #self._img_providers[str(i)].set_data_array(frame, [width, height, channels]) #method signature: (numpy.ndarray[numpy.uint8], (width, height))
+                        self._img_providers["tactile_rgb"][str(i)].set_bytes_data(frame.flatten().data, [width, height]) #method signature: (numpy.ndarray[numpy.uint8], (width, height))
+                        image = omni.ui.ImageWithProvider(self._img_providers["tactile_rgb"][str(i)]) #, fill_policy=omni.ui.IwpFillPolicy.IWP_PRESERVE_ASPECT_FIT -> fill_policy by default: specifying the width and height of the item causes the image to be scaled to that size
+                elif str(i) in self._windows["tactile_rgb"]:
+                    # remove window/img_provider from dictionary and destroy them
+                    self._windows["tactile_rgb"].pop(str(i)).destroy()
+                    self._img_providers["tactile_rgb"].pop(str(i)).destroy()
+            
+            if "marker_motion" in self._data.output:
+                show_img = prim.GetAttribute("debug_marker_motion").Get()
+                if show_img==True:
+                    if not (str(i) in self._windows["marker_motion"]):
+                        # create a window
+                        window = omni.ui.Window(self._view.prim_paths[i], height=640, width=480)
+                        self._windows["marker_motion"][str(i)] = window
+                        # create image provider
+                        self._img_providers["marker_motion"][str(i)] = omni.ui.ByteImageProvider() # default format omni.ui.TextureFormat.RGBA8_UNORM
+
+                    frame = np.zeros((self.marker_motion_simulator.cfg.tactile_img_res[1],self.marker_motion_simulator.cfg.tactile_img_res[0])).astype(np.uint8) 
 
                     # like the `_generate` function of FOTS MarkerMotion sim
                     marker_data = self.data.output["marker_motion"][i]
@@ -443,8 +500,6 @@ class GelSightSensor(SensorBase):
                             # pt2 = (column+int(arrow_scale*(column-init_column)), row+int(arrow_scale*(row-init_row)))
                             pt2 = (x_pos, y_pos)
                             cv2.arrowedLine(frame, pt1, pt2, color, 2,  tipLength=0.1)
-                    frame = cv2.normalize(frame, None, alpha = 0, beta = 255, norm_type = cv2.NORM_MINMAX, dtype = cv2.CV_32F)
-                    # cv2.imwrite(f"tact_rgb{self._frame[i]}.jpg", frame)
                     # visualize contact center with red cross
                     # if len(self._data.output["traj"][i]) > 1:     
                     #     traj = []
@@ -454,22 +509,22 @@ class GelSightSensor(SensorBase):
 
                         # should = self.should_be.cpu().numpy()[0]
                         # cv2.circle(frame,(should[1], should[0]), 4, (0,255,0), -1)
-                    #frame = cv2.normalize(frame, None, alpha = 0, beta = 255, norm_type = cv2.NORM_MINMAX, dtype = cv2.CV_32F).astype(np.uint8)                
+                    frame = cv2.normalize(frame, None, alpha = 0, beta = 255, norm_type = cv2.NORM_MINMAX, dtype = cv2.CV_32F)
 
-                frame = frame.astype(np.uint8)
-                frame = cv2.cvtColor(frame, cv2.COLOR_RGB2RGBA) #cv.COLOR_BGR2RGBA) COLOR_RGB2RGBA
-                height, width, channels = frame.shape
+                    # update image of the window
+                    frame = frame.astype(np.uint8)
+                    frame = cv2.cvtColor(frame, cv2.COLOR_RGB2RGBA) #cv.COLOR_BGR2RGBA) COLOR_RGB2RGBA
+                    height, width, channels = frame.shape
 
-                # update image of the window
-                with self._windows[str(i)].frame:
-                    #self._img_providers[str(i)].set_data_array(frame, [width, height, channels]) #method signature: (numpy.ndarray[numpy.uint8], (width, height))
-                    self._img_providers[str(i)].set_bytes_data(frame.flatten().data, [width, height]) #method signature: (numpy.ndarray[numpy.uint8], (width, height))
-                    image = omni.ui.ImageWithProvider(self._img_providers[str(i)]) #, fill_policy=omni.ui.IwpFillPolicy.IWP_PRESERVE_ASPECT_FIT -> fill_policy by default: specifying the width and height of the item causes the image to be scaled to that size
+                    with self._windows["marker_motion"][str(i)].frame:
+                        #self._img_providers[str(i)].set_data_array(frame, [width, height, channels]) #method signature: (numpy.ndarray[numpy.uint8], (width, height))
+                        self._img_providers["marker_motion"][str(i)].set_bytes_data(frame.flatten().data, [width, height]) #method signature: (numpy.ndarray[numpy.uint8], (width, height))
+                        image = omni.ui.ImageWithProvider(self._img_providers["marker_motion"][str(i)]) #, fill_policy=omni.ui.IwpFillPolicy.IWP_PRESERVE_ASPECT_FIT -> fill_policy by default: specifying the width and height of the item causes the image to be scaled to that size
+                elif str(i) in self._windows["marker_motion"]:
+                    # remove window/img_provider from dictionary and destroy them
+                    self._windows["marker_motion"].pop(str(i)).destroy()
+                    self._img_providers["marker_motion"].pop(str(i)).destroy()
 
-            elif str(i) in self._windows.keys():
-                # remove window/img_provider from dictionary and destroy them
-                self._windows.pop(str(i)).destroy()
-                self._img_providers.pop(str(i)).destroy()
     """ 
     Private Helper methods
     """
@@ -553,6 +608,7 @@ class GelSightSensor(SensorBase):
         # plt.show()
         print("saving img")
         plt.savefig(f"height_map{index}.png")
+
     """
     Internal simulation callbacks.
     """
