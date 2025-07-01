@@ -51,8 +51,7 @@ class GelSightSensor(SensorBase):
     def __init__(self, cfg: GelSightSensorCfg):
         self.cfg = cfg
 
-        # initialize base class
-        super().__init__(self.cfg)
+        self._prim_view = None
 
         # sensor camera
         self.camera = None
@@ -70,7 +69,31 @@ class GelSightSensor(SensorBase):
 
         # Flag to check that sensor is spawned.
         self._is_spawned = False
-    
+
+        # initialize classes for GelSight simulation approaches for simulating GelSight sensor output
+        if self.cfg.optical_sim_cfg is not None:
+            # initialize class we set in the cfg class of the sim approach
+            self.optical_simulator = self.cfg.optical_sim_cfg.simulation_approach_class(
+                sensor = self,
+                cfg = self.cfg.optical_sim_cfg,
+            )
+            
+        if self.cfg.marker_motion_sim_cfg is not None:
+            if ((self.optical_simulator is not None) and 
+                (self.cfg.optical_sim_cfg.simulation_approach_class == self.cfg.marker_motion_sim_cfg.simulation_approach_class)):
+                # if same class for optical and marker sim, then use same obj
+                self.marker_motion_simulator = self.optical_simulator
+            else:
+                self.marker_motion_simulator = self.cfg.marker_motion_sim_cfg.simulation_approach_class(
+                    sensor = self,
+                    cfg = self.cfg.marker_motion_sim_cfg
+                )
+
+        self._prim_view = XFormPrim(prim_paths_expr=self.cfg.prim_path, name=f"{self.cfg.prim_path}", usd=False)
+        
+        # initialize base class
+        super().__init__(self.cfg)
+
     def __del__(self):
         """Unsubscribes from callbacks."""
         # unsubscribe callbacks
@@ -124,6 +147,10 @@ class GelSightSensor(SensorBase):
         """
         return self._indentation_depth
 
+    @property
+    def prim_view(self):
+        return self._prim_view
+    
     """
     Operations
     """
@@ -185,36 +212,22 @@ class GelSightSensor(SensorBase):
     #MARK: _init_impl      
     def _initialize_impl(self):
         """Initializes the sensor handles and internal buffers."""
+        print(f"Initializing GelSight Sensor {self.cfg.prim_path}...")
+
         # Initialize parent class
         super()._initialize_impl()
-
+        
+        self._prim_view.initialize()
+        # Check that sizes are correct
+        if self._prim_view.count != self._num_envs:
+            raise RuntimeError(
+                f"Number of sensor prims in the view ({self._prim_view.count}) does not match"
+                f" the number of environments ({self._num_envs})."
+            )
+    
         # set device, if specified (per default the same as the simulation)
         if self.cfg.device is not None:
             self._device = self.cfg.device
-
-        prim_paths_expr = self.cfg.prim_path
-        print(f"Initializing GelSight Sensor {prim_paths_expr}...")
-        self._view = XFormPrim(prim_paths_expr=prim_paths_expr, name=f"{prim_paths_expr}", usd=False)
-        self._view.initialize()
-        # Check that sizes are correct
-        if self._view.count != self._num_envs:
-            raise RuntimeError(
-                f"Number of sensor prims in the view ({self._view.count}) does not match"
-                f" the number of environments ({self._num_envs})."
-            )
-        # need to create the attribute for the debug_vis here since it depends on self._view
-        if self.cfg.debug_vis:
-            for prim in self._view.prims:
-                # creates USD attribut for each data type, which can be found in the Isaac GUI under "Raw Usd Properties -> "Extra Properties"
-                if "camera_depth" in self._data.output:
-                    attr = prim.CreateAttribute("debug_camera_depth", Sdf.ValueTypeNames.Bool)
-                    attr.Set(False)
-                if "tactile_rgb" in self._data.output:
-                    attr = prim.CreateAttribute("debug_tactile_rgb", Sdf.ValueTypeNames.Bool)
-                    attr.Set(False)
-                if "marker_motion" in self._data.output:
-                    attr = prim.CreateAttribute("debug_marker_motion", Sdf.ValueTypeNames.Bool)
-                    attr.Set(False)
 
         # Create all env_ids buffer
         self._ALL_INDICES = torch.arange(self._num_envs, device=self._device, dtype=torch.long)
@@ -222,10 +235,10 @@ class GelSightSensor(SensorBase):
         self._frame = torch.zeros(self._num_envs, device=self._device, dtype=torch.long)
 
         self._indentation_depth = torch.zeros((self._num_envs), device=self._device)
-
+        
         if self.cfg.sensor_camera_cfg is not None:
             self.camera_cfg: TiledCameraCfg = TiledCameraCfg(
-                    prim_path= prim_paths_expr + self.cfg.sensor_camera_cfg.prim_path_appendix, 
+                    prim_path= self.cfg.prim_path + self.cfg.sensor_camera_cfg.prim_path_appendix, 
                     update_period= self.cfg.sensor_camera_cfg.update_period,
                     height=self.cfg.sensor_camera_cfg.resolution[1],
                     width=self.cfg.sensor_camera_cfg.resolution[0],
@@ -240,7 +253,7 @@ class GelSightSensor(SensorBase):
             
             # use normal camera
             # self.camera_cfg: CameraCfg = CameraCfg(
-            #         prim_path= prim_paths_expr + self.cfg.sensor_camera_cfg.prim_path_appendix, 
+            #         prim_path= self.cfg.prim_path + self.cfg.sensor_camera_cfg.prim_path_appendix, 
             #         update_period= self.cfg.sensor_camera_cfg.update_period,
             #         height= self.cfg.sensor_camera_cfg.resolution[1],
             #         width= self.cfg.sensor_camera_cfg.resolution[0],
@@ -267,26 +280,10 @@ class GelSightSensor(SensorBase):
         #     if not self._is_spawned:
         #         raise RuntimeError("Initializing the camera failed! Please provide a valid argument for `prim_path`.")
         #     sensor_prim_path = self.prim_path
-
-
-        # initialize classes for GelSight simulation approaches for simulating GelSight sensor output
-        if self.cfg.optical_sim_cfg is not None:
-            # initialize class we set in the cfg class of the sim approach
-            self.optical_simulator = self.cfg.optical_sim_cfg.simulation_approach_class(
-                sensor = self,
-                cfg = self.cfg.optical_sim_cfg,
-            )
-            
-        if self.cfg.marker_motion_sim_cfg is not None:
-            if ((self.optical_simulator is not None) and 
-                (self.cfg.optical_sim_cfg.simulation_approach_class == self.cfg.marker_motion_sim_cfg.simulation_approach_class)):
-                # if same class for optical and marker sim, then use same obj
-                self.marker_motion_simulator = self.optical_simulator
-            else:
-                self.marker_motion_simulator = self.cfg.marker_motion_sim_cfg.simulation_approach_class(
-                    sensor = self,
-                    cfg = self.cfg.marker_motion_sim_cfg
-                )
+        
+        # initialize sim approaches
+        self.optical_simulator._initialize_impl()
+        self.marker_motion_simulator._initialize_impl()
 
         # create buffers for output
         if "camera_depth" in self._data.output:
@@ -348,7 +345,6 @@ class GelSightSensor(SensorBase):
         if self.compute_indentation_depth_func is not None:
             # -- height_map
             self._get_height_map()
-
             # -- pressing depth
             self._indentation_depth[:] = self.compute_indentation_depth_func() # type: ignore #todo uncomment
 
@@ -378,6 +374,19 @@ class GelSightSensor(SensorBase):
         """
         # note: parent only deals with callbacks. not their visibility
         if debug_vis:
+            # need to create the attribute for the debug_vis here since it depends on self._prim_view
+            for prim in self._prim_view.prims:
+                # creates USD attribut for each data type, which can be found in the Isaac GUI under "Raw Usd Properties -> "Extra Properties"
+                if "camera_depth" in self._data.output:
+                    attr = prim.CreateAttribute("debug_camera_depth", Sdf.ValueTypeNames.Bool)
+                    attr.Set(False)
+                if "tactile_rgb" in self._data.output:
+                    attr = prim.CreateAttribute("debug_tactile_rgb", Sdf.ValueTypeNames.Bool)
+                    attr.Set(False)
+                if "marker_motion" in self._data.output:
+                    attr = prim.CreateAttribute("debug_marker_motion", Sdf.ValueTypeNames.Bool)
+                    attr.Set(False)
+                        
             if not hasattr(self, "_windows"):
                 # dict of windows that show the simulated tactile images, if the attribute of the sensor asset is turned on
                 self._windows = {}
@@ -386,30 +395,27 @@ class GelSightSensor(SensorBase):
                 if "camera_depth" in self.cfg.data_types:
                     self._windows["camera_depth"] = {}
                     self._img_providers["camera_depth"] = {}
-                if "tactile_rgb" in self.cfg.data_types:
-                    self._windows["tactile_rgb"] = {}
-                    self._img_providers["tactile_rgb"] = {}
-                if "marker_motion" in self.cfg.data_types:
-                    self._windows["marker_motion"] = {}
-                    self._img_providers["marker_motion"] = {}
-        else:
-            # if hasattr(self, "frame_visualizer"):
-            #     self.frame_visualizer.set_visibility(False)
-            pass
+        
+            if "tactile_rgb" in self.cfg.data_types:
+                self.optical_simulator._set_debug_vis_impl(debug_vis)
+
+            if "marker_motion" in self.cfg.data_types:
+                self.marker_motion_simulator._set_debug_vis_impl(debug_vis)
+
 
     def _debug_vis_callback(self, event):    
-        if self._view is None:
+        if self._prim_view is None:
             return
                 
         # Update the GUI windows
-        for i, prim in enumerate(self._view.prims):
+        for i, prim in enumerate(self._prim_view.prims): #! bad that we iterate through all prims multiple times (once per sim data type)
 
-            if "camera_depth" in self._data.output:
+            if "camera_depth" in self.cfg.data_types:
                 show_img = prim.GetAttribute("debug_camera_depth").Get()
                 if show_img==True:
                     if not (str(i) in self._windows["camera_depth"]):
                         # create a window
-                        window = omni.ui.Window(self._view.prim_paths[i], height=640, width=480)
+                        window = omni.ui.Window(self._prim_view.prim_paths[i], height=640, width=480)
                         self._windows["camera_depth"][str(i)] = window
                         # create image provider
                         self._img_providers["camera_depth"][str(i)] = omni.ui.ByteImageProvider() # default format omni.ui.TextureFormat.RGBA8_UNORM
@@ -433,98 +439,13 @@ class GelSightSensor(SensorBase):
                     # remove window/img_provider from dictionary and destroy them
                     self._windows["camera_depth"].pop(str(i)).destroy()
                     self._img_providers["camera_depth"].pop(str(i)).destroy()
-
-            if "tactile_rgb" in self._data.output:
-                show_img = prim.GetAttribute("debug_tactile_rgb").Get()
-                if show_img==True:
-                    if not (str(i) in self._windows["tactile_rgb"]):
-                        # create a window
-                        window = omni.ui.Window(self._view.prim_paths[i], height=640, width=480)
-                        self._windows["tactile_rgb"][str(i)] = window
-                        # create image provider
-                        self._img_providers["tactile_rgb"][str(i)] = omni.ui.ByteImageProvider() # default format omni.ui.TextureFormat.RGBA8_UNORM
-
-                    frame = self.data.output["tactile_rgb"][i].cpu().numpy()*255
-                    frame = cv2.normalize(frame, None, alpha = 0, beta = 255, norm_type = cv2.NORM_MINMAX, dtype = cv2.CV_32F)
-                    
-                    # update image of the window                    
-                    frame = frame.astype(np.uint8)
-                    frame = cv2.cvtColor(frame, cv2.COLOR_RGB2RGBA) #cv.COLOR_BGR2RGBA) COLOR_RGB2RGBA
-                    height, width, channels = frame.shape
-
-                    with self._windows["tactile_rgb"][str(i)].frame:
-                        #self._img_providers[str(i)].set_data_array(frame, [width, height, channels]) #method signature: (numpy.ndarray[numpy.uint8], (width, height))
-                        self._img_providers["tactile_rgb"][str(i)].set_bytes_data(frame.flatten().data, [width, height]) #method signature: (numpy.ndarray[numpy.uint8], (width, height))
-                        image = omni.ui.ImageWithProvider(self._img_providers["tactile_rgb"][str(i)]) #, fill_policy=omni.ui.IwpFillPolicy.IWP_PRESERVE_ASPECT_FIT -> fill_policy by default: specifying the width and height of the item causes the image to be scaled to that size
-                elif str(i) in self._windows["tactile_rgb"]:
-                    # remove window/img_provider from dictionary and destroy them
-                    self._windows["tactile_rgb"].pop(str(i)).destroy()
-                    self._img_providers["tactile_rgb"].pop(str(i)).destroy()
-            
-            if "marker_motion" in self._data.output:
-                show_img = prim.GetAttribute("debug_marker_motion").Get()
-                if show_img==True:
-                    if not (str(i) in self._windows["marker_motion"]):
-                        # create a window
-                        window = omni.ui.Window(self._view.prim_paths[i], height=640, width=480)
-                        self._windows["marker_motion"][str(i)] = window
-                        # create image provider
-                        self._img_providers["marker_motion"][str(i)] = omni.ui.ByteImageProvider() # default format omni.ui.TextureFormat.RGBA8_UNORM
-
-                    frame = np.zeros((self.marker_motion_simulator.cfg.tactile_img_res[1],self.marker_motion_simulator.cfg.tactile_img_res[0])).astype(np.uint8) 
-
-                    # like the `_generate` function of FOTS MarkerMotion sim
-                    marker_data = self.data.output["marker_motion"][i]
-                    # position values are in pix
-                    x_pos_of_all_markers = marker_data[:,:,0].cpu().numpy() # = columns, shape (num_markers_row, num_markers_col)
-                    y_pos_of_all_markers  = marker_data[:,:,1].cpu().numpy() # = row
-                    color = (255, 255, 255)
-
-                    num_markers_row = x_pos_of_all_markers.shape[0]
-                    num_markers_col = x_pos_of_all_markers.shape[1]
-                    for k in range(num_markers_col):
-                        for j in range(num_markers_row):
-                            init_x_pos = int(self.marker_motion_simulator.init_marker_pos[0][j,k])    # get initial x position of marker [j,k]
-                            init_y_pos = int(self.marker_motion_simulator.init_marker_pos[1][j,k]) # get initial y position of marker [j,k]
-                            x_pos = int(x_pos_of_all_markers[j, k]) # x is column-wise definied
-                            y_pos = int(y_pos_of_all_markers[j, k]) # y row-wise
-                            if ((x_pos >= frame.shape[1])
-                                or (x_pos < 0)
-                                or (y_pos >= frame.shape[0])
-                                or (y_pos < 0)):
-                                continue
-                            # cv2.circle(frame,(column,row), 6, (255,255,255), 1, lineType=8)
-
-                            arrow_scale = 0.001 #10 #0.0001 #0.25     
-                            pt1 = (init_x_pos, init_y_pos)
-                            # pt2 = (column+int(arrow_scale*(column-init_column)), row+int(arrow_scale*(row-init_row)))
-                            pt2 = (x_pos, y_pos)
-                            cv2.arrowedLine(frame, pt1, pt2, color, 2,  tipLength=0.1)
-                    # visualize contact center with red cross
-                    # if len(self._data.output["traj"][i]) > 1:     
-                    #     traj = []
-                    #     traj.append(self._data.output["traj"][i][0])            
-                    #     cv2.circle(frame,(int(traj[0][0]/self.taxim.sensor_params.pixmm + frame.shape[0]/2), int(traj[0][1]/self.taxim.sensor_params.pixmm + frame.shape[1]/2)), 5, (255,0,0), -1) 
-                    #     # cv2.circle(frame,(int(traj[0][0]/self.taxim.sensor_params.pixmm + 320), int(traj[0][1]/self.taxim.sensor_params.pixmm + 240)), 5, (255,0,0), -1) 
-
-                        # should = self.should_be.cpu().numpy()[0]
-                        # cv2.circle(frame,(should[1], should[0]), 4, (0,255,0), -1)
-                    frame = cv2.normalize(frame, None, alpha = 0, beta = 255, norm_type = cv2.NORM_MINMAX, dtype = cv2.CV_32F)
-
-                    # update image of the window
-                    frame = frame.astype(np.uint8)
-                    frame = cv2.cvtColor(frame, cv2.COLOR_RGB2RGBA) #cv.COLOR_BGR2RGBA) COLOR_RGB2RGBA
-                    height, width, channels = frame.shape
-
-                    with self._windows["marker_motion"][str(i)].frame:
-                        #self._img_providers[str(i)].set_data_array(frame, [width, height, channels]) #method signature: (numpy.ndarray[numpy.uint8], (width, height))
-                        self._img_providers["marker_motion"][str(i)].set_bytes_data(frame.flatten().data, [width, height]) #method signature: (numpy.ndarray[numpy.uint8], (width, height))
-                        image = omni.ui.ImageWithProvider(self._img_providers["marker_motion"][str(i)]) #, fill_policy=omni.ui.IwpFillPolicy.IWP_PRESERVE_ASPECT_FIT -> fill_policy by default: specifying the width and height of the item causes the image to be scaled to that size
-                elif str(i) in self._windows["marker_motion"]:
-                    # remove window/img_provider from dictionary and destroy them
-                    self._windows["marker_motion"].pop(str(i)).destroy()
-                    self._img_providers["marker_motion"].pop(str(i)).destroy()
-
+        
+        if "tactile_rgb" in self.cfg.data_types:
+            self.optical_simulator._debug_vis_callback(event)
+        
+        if "marker_motion" in self.cfg.data_types:
+            self.marker_motion_simulator._debug_vis_callback(event)
+        
     """ 
     Private Helper methods
     """
@@ -533,17 +454,17 @@ class GelSightSensor(SensorBase):
     #     """Create buffers for storing data."""
     #     # create the data object
     #     # -- pose of the cameras
-    #     self._data.pos_w = torch.zeros((self._view.count, 3), device=self._device)
-    #     self._data.quat_w_world = torch.zeros((self._view.count, 4), device=self._device)
+    #     self._data.pos_w = torch.zeros((self._prim_view.count, 3), device=self._device)
+    #     self._data.quat_w_world = torch.zeros((self._prim_view.count, 4), device=self._device)
     #     # -- intrinsic matrix
-    #     self._data.intrinsic_matrices = torch.zeros((self._view.count, 3, 3), device=self._device)
+    #     self._data.intrinsic_matrices = torch.zeros((self._prim_view.count, 3, 3), device=self._device)
     #     self._data.image_shape = self.image_shape
     #     # -- output data
     #     # lazy allocation of data dictionary
     #     # since the size of the output data is not known in advance, we leave it as None
     #     # the memory will be allocated when the buffer() function is called for the first time.
-    #     self._data.output = TensorDict({}, batch_size=self._view.count, device=self.device)
-    #     self._data.info = [{name: None for name in self.cfg.data_types} for _ in range(self._view.count)]
+    #     self._data.output = TensorDict({}, batch_size=self._prim_view.count, device=self.device)
+    #     self._data.info = [{name: None for name in self.cfg.data_types} for _ in range(self._prim_view.count)]
 
     #TODO implement properly
     # def _update_poses(self, env_ids: Sequence[int]):
@@ -560,7 +481,7 @@ class GelSightSensor(SensorBase):
     #         raise RuntimeError("Camera prim is None. Please call 'sim.play()' first.")
 
     #     # get the poses from the view
-    #     poses, quat = self._view.get_world_poses(env_ids)
+    #     poses, quat = self._prim_view.get_world_poses(env_ids)
     #     self._data.pos_w[env_ids] = poses
     #     self._data.quat_w_world[env_ids] = convert_orientation_convention(quat, origin="opengl", target="world")
     
@@ -618,7 +539,7 @@ class GelSightSensor(SensorBase):
         # call parent
         super()._invalidate_initialize_callback(event)
         # set all existing views to None to invalidate them
-        self._view = None
+        self._prim_view = None
 
         self.camera._invalidate_initialize_callback(event)
         self.camera.__del__()

@@ -258,7 +258,7 @@ class BallRollingEnvCfg(DirectRLEnvCfg):
         device = "cuda",
         debug_vis=True, # for rendering sensor output in the gui
         # marker_motion_sim_cfg=None,
-        data_types=["tactile_rgb", "marker_motion"], #marker_motion
+        data_types=["tactile_rgb", "marker_motion", "camera_depth"], #marker_motion
     )
 
     # settings for optical sim - update Taxim cfg

@@ -3,6 +3,10 @@ from __future__ import annotations
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+import cv2
+import omni.usd
+import numpy as np
+
 import torch
 import torchvision.transforms.functional as F
 
@@ -23,15 +27,6 @@ class TaximSimulator(GelSightSimulator):
     def __init__(self, sensor: GelSightSensor, cfg: TaximSimulatorCfg):
         self.sensor = sensor
 
-        # todo make size adaptable? I mean with env_ids. This way we would always simulate everythings
-        self._indentation_depth = torch.zeros((self.sensor._num_envs), device=self.sensor._device)
-        """Indentation depth, i.e. how deep the object is pressed into the gelpad.
-        Values are in mm.
-
-        Indentation depth is equal to the maximum pressing depth of the object in the gelpad.
-        It is used for shifting the height map for the Taxim simulation.
-        """
-
         super().__init__(sensor=sensor, cfg=cfg)
 
 
@@ -43,7 +38,21 @@ class TaximSimulator(GelSightSimulator):
             self._device = self.sensor.device
         else: 
             self._device = self.cfg.device
-            
+
+        self._num_envs = self.sensor._num_envs    
+        # todo make size adaptable? I mean with env_ids. This way we would always simulate everythings
+        self._indentation_depth = torch.zeros((self.sensor._num_envs), device=self.sensor._device)
+        """Indentation depth, i.e. how deep the object is pressed into the gelpad.
+        Values are in mm.
+
+        Indentation depth is equal to the maximum pressing depth of the object in the gelpad.
+        It is used for shifting the height map for the Taxim simulation.
+        """
+        self.tactile_rgb_img = torch.zeros(
+            (self.sensor._num_envs, self.cfg.tactile_img_res[1], self.cfg.tactile_img_res[0], 3),
+            device=self._device, 
+        )
+
         self._taxim: Taxim = Taxim(calib_folder=calib_folder, device=self._device)
         # update Taxim settings via settings from cfg class
         # print(self._taxim.width)
@@ -59,11 +68,8 @@ class TaximSimulator(GelSightSimulator):
             self.background_img = F.resize(self.background_img, (self.cfg.tactile_img_res[1], self.cfg.tactile_img_res[0]))
         # last dim should be channels for isaac
         self.background_img = self.background_img.movedim(0, 2)
-    
-        self.tactile_rgb_img = torch.zeros(
-            (self._num_envs, self.cfg.tactile_img_res[1], self.cfg.tactile_img_res[0], 3),
-            device=self._device, 
-        )
+
+        # use background as initial tactile_rgb_img
         self.tactile_rgb_img[:] = self.background_img
 
         # if camera resolution is different than the tactile RGB res, scale img
@@ -125,3 +131,63 @@ class TaximSimulator(GelSightSimulator):
     def reset(self):
         self._indentation_depth = torch.zeros((self._num_envs), device=self._device)
         self.tactile_rgb_img[:] = self.background_img
+
+    def _set_debug_vis_impl(self, debug_vis: bool):
+        """ Creates an USD attribute for the sensor asset, which can visualize the tactile image.
+        
+        Select the GelSight sensor case whose output you want to see in the Isaac Sim GUI, 
+        i.e. the `gelsight_mini_case` Xform (not the mesh!).
+        Scroll down in the properties panel to "Raw Usd Properties" and click "Extra Properties".
+        There is an attribute called "show_tactile_image". 
+        Toggle it on to show the sensor output in the GUI.
+
+        If only optical simulation is used, then only an optical img is displayed.
+        If only the marker simulatios is used, then only an image displaying the marker positions is displayed.
+        If both, optical and marker simulation, are used, then the images are overlayed.
+        """
+        # note: parent only deals with callbacks. not their visibility
+        if debug_vis:
+            if not hasattr(self, "_debug_windows"):
+                # dict of windows that show the simulated tactile images, if the attribute of the sensor asset is turned on
+                self._debug_windows = {}
+                self._debug_img_providers = {}
+                #todo check if we can make implementation more efficient than dict of dicts
+                if "tactile_rgb" in self.sensor.cfg.data_types:
+                    self._debug_windows = {}
+                    self._debug_img_providers = {}
+        else:
+            pass
+    
+    def _debug_vis_callback(self, event):    
+        if self.sensor._prim_view is None:
+            return
+                
+        # Update the GUI windows
+        for i, prim in enumerate(self.sensor.prim_view.prims):
+            if "tactile_rgb" in self.sensor.cfg.data_types:
+                show_img = prim.GetAttribute("debug_tactile_rgb").Get()
+                if show_img==True:
+                    if not (str(i) in self._debug_windows):
+                        # create a window
+                        window = omni.ui.Window(self.sensor._prim_view.prim_paths[i]+"/taxim_rgb", height=640, width=480)
+                        self._debug_windows[str(i)] = window
+                        # create image provider
+                        self._debug_img_providers[str(i)] = omni.ui.ByteImageProvider() # default format omni.ui.TextureFormat.RGBA8_UNORM
+
+                    frame = self.sensor.data.output["tactile_rgb"][i].cpu().numpy()*255
+                    frame = cv2.normalize(frame, None, alpha = 0, beta = 255, norm_type = cv2.NORM_MINMAX, dtype = cv2.CV_32F)
+                    
+                    # update image of the window                    
+                    frame = frame.astype(np.uint8)
+                    frame = cv2.cvtColor(frame, cv2.COLOR_RGB2RGBA) #cv.COLOR_BGR2RGBA) COLOR_RGB2RGBA
+                    height, width, channels = frame.shape
+
+                    with self._debug_windows[str(i)].frame:
+                        #self._img_providers[str(i)].set_data_array(frame, [width, height, channels]) #method signature: (numpy.ndarray[numpy.uint8], (width, height))
+                        self._debug_img_providers[str(i)].set_bytes_data(frame.flatten().data, [width, height]) #method signature: (numpy.ndarray[numpy.uint8], (width, height))
+                        image = omni.ui.ImageWithProvider(self._debug_img_providers[str(i)]) #, fill_policy=omni.ui.IwpFillPolicy.IWP_PRESERVE_ASPECT_FIT -> fill_policy by default: specifying the width and height of the item causes the image to be scaled to that size
+                elif str(i) in self._debug_windows:
+                    # remove window/img_provider from dictionary and destroy them
+                    self._debug_windows.pop(str(i)).destroy()
+                    self._debug_img_providers.pop(str(i)).destroy()
+            

@@ -41,6 +41,7 @@ class GelSightSensorCfg(SensorBaseCfg):
         - each marker is specified by (row_number, col_number) and has a pos (x,y)
     
     """
+    
     optical_sim_cfg: GelSightSimulatorCfg = None # freely choose what class, but can also be left None
     """Cfg class of the optical simulator you want to use."""
 
