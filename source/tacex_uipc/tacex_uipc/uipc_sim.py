@@ -17,7 +17,7 @@ except:
     draw = None
 
 import uipc
-from uipc import view
+from uipc import view, builtin
 from uipc import Vector3, Transform, Quaternion, AngleAxis
 from uipc import Logger, Timer
 from uipc.core import Engine, World, Scene, SceneIO
@@ -227,38 +227,16 @@ class UipcSim():
         # for updating render meshes
         self.sio = SceneIO(self.scene)
 
-        # compute the global vertex offset accross the systems
-        fem_system = self._system_vertex_offsets["uipc::backend::cuda::FiniteElementMethod"]
-        abd_system = self._system_vertex_offsets["uipc::backend::cuda::AffineBodyDynamics"]
-        
-        #todo figure out how we always get the correct order -> for now we just assume something(ground?) first, then ABD and then FEM system
-        #? another idea might be to use the coindices mapping from global_vertex_manager and use it to create mapping for local -> global
-        # +1 for total count, like uipc does -> first system is the interABD system I suppose? #todo check if really the case, once docs are updated
-        #? or is it just due to the ground?
-        self._system_vertex_offsets["uipc::backend::cuda::GlobalVertexManager"].append(1)
-
-        # second system is the abd system
-        global_abd_system = [idx+self._system_vertex_offsets["uipc::backend::cuda::GlobalVertexManager"][-1] for idx in abd_system[1:]]
-        self._system_vertex_offsets["uipc::backend::cuda::GlobalVertexManager"] += global_abd_system
-        print("after abd ", self._system_vertex_offsets["uipc::backend::cuda::GlobalVertexManager"])        
-        
-        # add offset from previous system (ABD) to the next system (FEM)
-        global_fem_system = [idx+self._system_vertex_offsets["uipc::backend::cuda::GlobalVertexManager"][-1] for idx in fem_system[1:]]
-        self._system_vertex_offsets["uipc::backend::cuda::GlobalVertexManager"] += global_fem_system
-        
-        print("after fem ", self._system_vertex_offsets["uipc::backend::cuda::GlobalVertexManager"])
-
-        #! ehh, pretty complicated/convoluted I would say, can we simplify this?
         # for each obj, compute the global_system_id -> used to infer the objects vertex_offset in the global system
         for uipc_obj in self.uipc_objects:
-            if uipc_obj._system_name == "uipc::backend::cuda::AffineBodyDynamics":
-                global_id = uipc_obj.local_system_id + 1 # +1, cause uipc global offsets start with 0,1, and comes ABD-sys, FEM-sys offsets #todo adjust, once we find out why it starts with 0,1
-            
-            if uipc_obj._system_name == "uipc::backend::cuda::FiniteElementMethod":# since FEM system comes after ABD syste,
-                global_id = uipc_obj.local_system_id + len(abd_system) # fem system offsets are behind the number of objects in the abd system in the global system
-            
-            print(f"{uipc_obj.cfg.prim_path} has global id {global_id}")
-            uipc_obj.global_system_id = global_id
+            geo_slot = uipc_obj.geo_slot_list[0]
+            geo = geo_slot.geometry()
+            gvo = geo.meta().find(builtin.global_vertex_offset)
+            global_vertex_offset = int(gvo.view()[0])
+            self._system_vertex_offsets["uipc::backend::cuda::GlobalVertexManager"].append(global_vertex_offset)
+
+            uipc_obj.global_system_id = len(self._system_vertex_offsets["uipc::backend::cuda::GlobalVertexManager"])-1
+            print(f"{uipc_obj.cfg.prim_path} has global id {uipc_obj.global_system_id}")
 
         # initialize callbacks
         self.isaac_sim: sim_utils.SimulationContext = sim_utils.SimulationContext.instance()

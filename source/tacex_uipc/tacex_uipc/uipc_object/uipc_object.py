@@ -139,6 +139,7 @@ class UipcObject(AssetBase):
         self.stage = usdrt.Usd.Stage.Attach(omni.usd.get_context().get_stage_id())
         
         self.uipc_scene_objects = []
+        self.geo_slot_list = []
 
         self.uipc_meshes = []
         # setup tet meshes for uipc
@@ -350,6 +351,8 @@ class UipcObject(AssetBase):
         if env_ids is None:
             env_ids = slice(None)
             physx_env_ids = self._ALL_INDICES
+        
+
         # # note: we need to do this here since tensors are not set into simulation until step.
         # # set into internal buffers
         # self._data.root_state_w[env_ids, :7] = root_pose.clone()
@@ -359,13 +362,18 @@ class UipcObject(AssetBase):
         # # set into simulation
         # self.root_physx_view.set_transforms(root_poses_xyzw, indices=physx_env_ids)
         print("")
-        print(f"Write vertex pos for {self.cfg.prim_path} with id {self.obj_id}")
-        
-        global_vertex_offset = self._uipc_sim._system_vertex_offsets["uipc::backend::cuda::GlobalVertexManager"][self.global_system_id-1]
+        print(f"Write vertex pos for {self.cfg.prim_path} with obj id [{self.obj_id}]")
+
+        print("num geo_slots ", len(self.geo_slot_list))
+        print("global sys id ", self.global_system_id)
+        geo_slot = self.geo_slot_list[0]
+        geo = geo_slot.geometry()
+        gvo = geo.meta().find(builtin.global_vertex_offset)
+        print(f'global Vertex Offset: {gvo.view()}')
+        global_vertex_offset = int(gvo.view()[0])
         local_vertex_offset = self._uipc_sim._system_vertex_offsets[self._system_name][self.local_system_id-1]
         print("system ", self._system_name)
         print("local sys id ", self.local_system_id)
-        print("global vertex offset ", global_vertex_offset)
         print("local vertex offset ", local_vertex_offset)
         print("vertex count ", self._vertex_count)
         print("")
@@ -389,6 +397,7 @@ class UipcObject(AssetBase):
         obj_geo_slot, _ = obj.geometries().create(mesh)
         self.obj_id = obj_geo_slot.id()
         print(f"obj id of {self.cfg.prim_path}: {self.obj_id} ")
+        self.geo_slot_list.append(obj_geo_slot)
 
         # save initial world vertex positions        
         geom = self._uipc_sim.scene.geometries()

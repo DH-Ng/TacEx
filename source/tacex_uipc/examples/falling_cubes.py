@@ -144,10 +144,10 @@ def main():
 
     tet_cube_asset_path = pathlib.Path(__file__).parent.resolve() / "assets" / "cube.usd"
 
-    num_cubes = 4 #30
+    num_cubes = 5 #30
     cubes = []
     for i in range(num_cubes):
-        if i % 2 == 0:
+        if i % 2 == 1:
             constitution_type = UipcObjectCfg.AffineBodyConstitutionCfg(kinematic=True)
         else:
             constitution_type = UipcObjectCfg.StableNeoHookeanCfg()
@@ -196,6 +196,8 @@ def main():
 
     total_uipc_sim_time = 0.0
     total_uipc_render_time = 0.0
+
+    num_resets = 0
     # Simulate physics
     while simulation_app.is_running():
         sim.render()
@@ -250,7 +252,12 @@ def main():
             print("====================================================================================")
 
             step = 1
-          
+            num_resets += 1
+        
+        if num_resets == 5:
+            print("Stopping [Falling Cubes] example.")
+            break
+        
 if __name__ == "__main__":
     # run the main function
     main()
