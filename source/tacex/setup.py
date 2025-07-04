@@ -14,12 +14,16 @@ EXTENSION_TOML_DATA = toml.load(os.path.join(EXTENSION_PATH, "config", "extensio
 INSTALL_REQUIRES = [
     # NOTE: Add dependencies
     "debugpy", # for debugging scripts that are run from the terminal, e.g. RL training scripts
+    # "torch==2.5.1", 
+    # "torchvision==0.20.1",
     #f"torch_scatter @ file://localhost{EXTENSION_PATH}/install_requirements/torch_scatter-2.1.2+pt24cu118-cp310-cp310-linux_x86_64.whl", 
-    # f"torch_scatter @ https://data.pyg.org/whl/torch-2.5.0%2Bcu118/torch_scatter-2.1.2%2Bpt25cu118-cp310-cp310-linux_x86_64.whl", # needed for gpu taxim
-    f"torch_scatter @ https://data.pyg.org/whl/torch-2.5.0%2Bcu121/torch_scatter-2.1.2%2Bpt25cu121-cp310-cp310-linux_x86_64.whl", # needed for gpu taxim
+    f"torch_scatter @ https://data.pyg.org/whl/torch-2.5.0%2Bcu118/torch_scatter-2.1.2%2Bpt25cu118-cp310-cp310-linux_x86_64.whl", # needed for gpu taxim
+    # f"torch_scatter", # @ https://data.pyg.org/whl/torch-2.5.0%2Bcu121/torch_scatter-2.1.2%2Bpt25cu121-cp310-cp310-linux_x86_64.whl", # needed for gpu taxim
     "psutil",
     "nvidia-ml-py",
 ]
+
+# PYTORCH_INDEX_URL = ["https://download.pytorch.org/whl/cu121"]
 
 # Installation operation
 setup(
@@ -32,6 +36,7 @@ setup(
     description=EXTENSION_TOML_DATA["package"]["description"],
     keywords=EXTENSION_TOML_DATA["package"]["keywords"],
     install_requires=INSTALL_REQUIRES,
+    # dependency_links=PYTORCH_INDEX_URL,
     license="MIT",
     include_package_data=True,
     python_requires=">=3.10",
