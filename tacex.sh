@@ -34,7 +34,6 @@ is_docker() {
     [[ "$(hostname)" == *"."* ]]
 }
 
-# extract isaac sim path
 extract_isaacsim_path() {
     # Use the sym-link path to Isaac Sim directory
     local isaac_path=${ISAACLAB_PATH}/_isaac_sim
@@ -276,8 +275,8 @@ while [[ $# -gt 0 ]]; do
     # read the key
     case "$1" in
         -i|--install)
-            # install the python packages in IsaacLab/source directory
-            echo "[INFO] Installing extensions inside the Isaac Lab repository..."
+            # install the python packages in tacex/source directory
+            echo "[INFO] Installing extensions inside the TacEx repository..."
             python_exe=$(extract_python_exe)
             # recursively look into directories and install them
             # this does not check dependencies between extensions
@@ -303,7 +302,7 @@ while [[ $# -gt 0 ]]; do
             # install the learning frameworks specified
             # ${python_exe} -m pip install -e ${TACEX_PATH}/source/isaaclab_rl["${framework_name}"]
             # ${python_exe} -m pip install -e ${TACEX_PATH}/source/isaaclab_mimic["${framework_name}"]
-
+            
             # check if we are inside a docker container or are building a docker image
             # in that case don't setup VSCode since it asks for EULA agreement which triggers user interaction
             if is_docker; then
