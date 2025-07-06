@@ -72,6 +72,10 @@ class UipcRLEnv(DirectRLEnv):
         else:
             raise RuntimeError("Simulation context already exists. Cannot create a new one.")
 
+        # make sure torch is running on the correct device
+        if "cuda" in self.device:
+            torch.cuda.set_device(self.device)
+
         self.uipc_sim: UipcSim = UipcSim(self.cfg.uipc_sim)
 
         # print useful information
@@ -105,6 +109,16 @@ class UipcRLEnv(DirectRLEnv):
         else:
             self.viewport_camera_controller = None
 
+        # create event manager
+        # note: this is needed here (rather than after simulation play) to allow USD-related randomization events
+        #   that must happen before the simulation starts. Example: randomizing mesh scale
+        if self.cfg.events:
+            self.event_manager = EventManager(self.cfg.events, self)
+
+            # apply USD-related randomization events
+            if "prestartup" in self.event_manager.available_modes:
+                self.event_manager.apply(mode="prestartup")
+
         # play the simulator to activate physics handles
         # note: this activates the physics simulation view that exposes TensorAPIs
         # note: when started in extension mode, first call sim.reset_async() and then initialize the managers
@@ -118,15 +132,6 @@ class UipcRLEnv(DirectRLEnv):
                 self.scene.update(dt=self.physics_dt)
         
         self.uipc_sim.setup_sim()
-
-        # -- event manager used for randomization
-        if self.cfg.events:
-            self.event_manager = EventManager(self.cfg.events, self)
-            print("[INFO] Event Manager: ", self.event_manager)
-
-        # make sure torch is running on the correct device
-        if "cuda" in self.device:
-            torch.cuda.set_device(self.device)
 
         # check if debug visualization is has been implemented by the environment
         source_code = inspect.getsource(self._set_debug_vis_impl)
@@ -171,10 +176,13 @@ class UipcRLEnv(DirectRLEnv):
 
         # perform events at the start of the simulation
         if self.cfg.events:
+            print("[INFO] Event Manager: ", self.event_manager)
+
             if "startup" in self.event_manager.available_modes:
                 self.event_manager.apply(mode="startup")
 
-        # -- set the framerate of the gym video recorder wrapper so that the playback speed of the produced video matches the simulation
+        # set the framerate of the gym video recorder wrapper so that the playback speed of the produced
+        # video matches the simulation
         self.metadata["render_fps"] = 1 / self.step_dt
 
         # print the environment information
@@ -295,7 +303,7 @@ class UipcRLEnv(DirectRLEnv):
         action = action.to(self.device)
         # add action noise
         if self.cfg.action_noise_model:
-            action = self._action_noise_model.apply(action)
+            action = self._action_noise_model(action)
 
         # process actions
         self._pre_physics_step(action)
