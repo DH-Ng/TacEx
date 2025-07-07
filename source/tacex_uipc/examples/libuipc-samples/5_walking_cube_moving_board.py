@@ -69,10 +69,9 @@ def setup_base_scene(sim: sim_utils.SimulationContext):
     )
     cfg_light_dome.func("/World/lightDome", cfg_light_dome, translation=(1, 10, 0))
 
-def setup_libuipc_scene(uipc_sim: UipcSim):
+def setup_libuipc_scene(scene):
     trimesh_path = str(pathlib.Path(__file__).parent.resolve() / "trimesh")
     tetmesh_path = str(pathlib.Path(__file__).parent.resolve() / "tet_meshes")
-    scene = uipc_sim.scene
 
     # friction ratio and contact resistance
     scene.contact_tabular().default_model(0.2, 1e9)
@@ -195,12 +194,11 @@ def main():
     )
     uipc_sim = UipcSim(uipc_cfg)
 
-    setup_libuipc_scene(uipc_sim)
-    
-    uipc_sim.init_libuipc_scene_rendering()
+    setup_libuipc_scene(uipc_sim.scene)
     
     # init liubipc world etc.
     uipc_sim.setup_sim()
+    uipc_sim.init_libuipc_scene_rendering()
 
     # Now we are ready!
     print("[INFO]: Setup complete...")

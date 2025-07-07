@@ -69,10 +69,10 @@ def setup_base_scene(sim: sim_utils.SimulationContext):
     )
     cfg_light_dome.func("/World/lightDome", cfg_light_dome, translation=(1, 10, 0))
 
-def setup_libuipc_scene(uipc_sim: UipcSim):
+def setup_libuipc_scene(scene):
     snh = StableNeoHookean()
     spc = SoftPositionConstraint()
-    tet_object = uipc_sim.scene.objects().create('tet_object')
+    tet_object = scene.objects().create('tet_object')
     Vs = np.array([[0,1,0],
                    [0,0,1],
                    [-np.sqrt(3)/2, 0, -0.5],
@@ -87,7 +87,7 @@ def setup_libuipc_scene(uipc_sim: UipcSim):
     spc.apply_to(tet, 100) # constraint strength ratio
     tet_object.geometries().create(tet)
 
-    animator = uipc_sim.scene.animator()
+    animator = scene.animator()
 
     def animate_tet(info:Animation.UpdateInfo): # animation function
         geo_slots:list[GeometrySlot] = info.geo_slots()
@@ -135,11 +135,11 @@ def main():
     )
     uipc_sim = UipcSim(uipc_cfg)
 
-    setup_libuipc_scene(uipc_sim)
+    setup_libuipc_scene(uipc_sim.scene)
     
-    uipc_sim.init_libuipc_scene_rendering()
     # init liubipc world etc.
     uipc_sim.setup_sim()
+    uipc_sim.init_libuipc_scene_rendering()
    
     # Now we are ready!
     print("[INFO]: Setup complete...")

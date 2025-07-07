@@ -25,13 +25,11 @@ import numpy as np
 import isaaclab.sim as sim_utils
 from isaaclab.utils.timer import Timer
 
-from pxr import Gf, Sdf, Usd, UsdGeom
+from pxr import UsdGeom
 import omni.usd
-import usdrt
 
 import uipc
-from uipc.core import Engine, World, Scene
-from uipc.geometry import tetmesh, label_surface, label_triangle_orient, flip_inward_triangles, extract_surface
+from uipc.geometry import tetmesh, label_surface, label_triangle_orient, flip_inward_triangles
 from uipc.constitution import AffineBodyConstitution
 from uipc.unit import MPa, GPa
 
@@ -61,8 +59,7 @@ def setup_base_scene(sim: sim_utils.SimulationContext):
     )
     cfg_light_dome.func("/World/lightDome", cfg_light_dome, translation=(1, 10, 0))
 
-def setup_libuipc_scene(uipc_sim: UipcSim):
-    scene = uipc_sim.scene
+def setup_libuipc_scene(scene):
 
     # create constitution and contact model
     abd = AffineBodyConstitution()
@@ -134,11 +131,11 @@ def main():
     )
     uipc_sim = UipcSim(uipc_cfg)
 
-    setup_libuipc_scene(uipc_sim)
+    setup_libuipc_scene(uipc_sim.scene)
     
-    uipc_sim.init_libuipc_scene_rendering()
     # init liubipc world etc.
     uipc_sim.setup_sim()
+    uipc_sim.init_libuipc_scene_rendering()
 
     # Now we are ready!
     print("[INFO]: Setup complete...")

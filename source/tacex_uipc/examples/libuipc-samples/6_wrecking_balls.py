@@ -99,9 +99,7 @@ def setup_base_scene(sim: sim_utils.SimulationContext):
     )
     cfg_light_dome.func("/World/lightDome", cfg_light_dome, translation=(1, 10, 0))
 
-def setup_libuipc_scene(uipc_sim: UipcSim):
-    scene = uipc_sim.scene
-
+def setup_libuipc_scene(scene):
     tetmesh_dir = str(pathlib.Path(__file__).parent.resolve() / "tet_meshes")
 
     def process_surface(sc: SimplicialComplex):
@@ -207,11 +205,11 @@ def main():
     )
     uipc_sim = UipcSim(uipc_cfg)
 
-    setup_libuipc_scene(uipc_sim)
-    
-    uipc_sim.init_libuipc_scene_rendering()
+    setup_libuipc_scene(uipc_sim.scene)
+
     # init liubipc world etc.
-    uipc_sim.setup_sim()
+    uipc_sim.setup_sim()    
+    uipc_sim.init_libuipc_scene_rendering()
 
     # Now we are ready!
     print("[INFO]: Setup complete...")
@@ -231,28 +229,30 @@ def main():
         sim.render()
 
         if sim.is_playing():
+            if step==500:
+                break
+            print("")
+            print("====================================================================================")
+            print("====================================================================================")
+            print("Step number ", step)
             if recover_sim:
-                if step==1000:
-                    break
-
                 if (uipc_sim.world.recover(uipc_sim.world.frame() + 1)):
                     uipc_sim.world.retrieve()
                     print("Replaying frame ", uipc_sim.world.frame() + 1)
                 else:
-                    print("")
-                    print("====================================================================================")
-                    print("====================================================================================")
-                    print("Step number ", step)
                     with Timer("[INFO]: Time taken for uipc sim step", name="uipc_step"):
-                        uipc_sim.step()
-                        uipc_sim.world.dump()   
+                        uipc_sim.step()  
                     total_uipc_sim_time += Timer.get_timer_info("uipc_step")
+                    uipc_sim.world.dump() 
+            else:
+                with Timer("[INFO]: Time taken for uipc sim step", name="uipc_step"):
+                    uipc_sim.step()
+                total_uipc_sim_time += Timer.get_timer_info("uipc_step")
 
             with Timer("[INFO]: Time taken for rendering", name="render_update"):
                 uipc_sim.update_render_meshes()
                 sim.render()
             total_uipc_render_time += Timer.get_timer_info("render_update")
-
             # get time reports
             uipc_sim.get_sim_time_report()
             

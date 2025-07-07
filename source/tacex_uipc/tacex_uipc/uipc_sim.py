@@ -149,6 +149,8 @@ class UipcSim():
         elif self.cfg.logger_level == "Info":
             Logger.set_level(Logger.Info)
 
+        pathlib.Path(self.cfg.workspace).mkdir(parents=True, exist_ok=True)
+
         self.engine: Engine = Engine(backend_name=self.cfg.device, workspace=self.cfg.workspace)
         self.world: World = World(self.engine)
 
