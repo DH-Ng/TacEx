@@ -21,6 +21,7 @@ INSTALL_REQUIRES = [
     # f"torch_scatter", # @ https://data.pyg.org/whl/torch-2.5.0%2Bcu121/torch_scatter-2.1.2%2Bpt25cu121-cp310-cp310-linux_x86_64.whl", # needed for gpu taxim
     "psutil",
     "nvidia-ml-py",
+    "pre-commit"
 ]
 
 # PYTORCH_INDEX_URL = ["https://download.pytorch.org/whl/cu121"]

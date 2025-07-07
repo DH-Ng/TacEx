@@ -223,7 +223,7 @@ class BallRollingEnvCfg(DirectRLEnvCfg):
     gelpad_attachment_cfg=UipcIsaacAttachmentsCfg(
         constraint_strength_ratio=100.0,
         body_name="gelsight_mini_case",
-        debug_vis=False,
+        debug_vis=True,
         compute_attachment_data=True
     )
 
@@ -448,16 +448,6 @@ class BallRollingEnv(UipcRLEnv):
     def _reset_idx(self, env_ids: torch.Tensor | None):
         super()._reset_idx(env_ids)
 
-        # obj_pos = self.object.data.default_root_state[env_ids] 
-        # obj_pos[:, :3] += self.scene.env_origins[env_ids]
-        # # obj_pos[:, :2] += sample_uniform(
-        # #     self.cfg.obj_pos_randomization_range[0], 
-        # #     self.cfg.obj_pos_randomization_range[1],
-        # #     (len(env_ids), 2), 
-        # #     self.device
-        # # )
-        # self.object.write_root_state_to_sim(obj_pos, env_ids=env_ids)
-
         # reset robot state 
         joint_pos = (
             self._robot.data.default_joint_pos[env_ids]
@@ -618,11 +608,14 @@ def run_simulator(env: BallRollingEnv):
         env.scene.write_data_to_sim()
         env.sim.step(render=False)
 
-        if env.step_count >= 500:
-            if env.step_count == 500:
-                print("UIPC sim starting!")
-            # env.scene.update(dt=env.physics_dt)
-            # env.uipc_sim.step()
+        # if env.step_count >= 500:
+        #     if env.step_count == 500:
+        #         print("UIPC sim starting!")
+        #     # env.scene.update(dt=env.physics_dt)
+        #     # env.uipc_sim.step()
+        # env.scene.update(dt=env.physics_dt)
+        # env.attachment._compute_aim_positions()
+        # env.uipc_sim.step()
         physics_end = time.time()
         ###
 

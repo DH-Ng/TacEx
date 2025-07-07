@@ -28,13 +28,10 @@ The directory structure follows the recommended structure (kinda) and is as foll
 
 You can use the following snippet to refer to the assets:
 
-
 ```python
 from tacex_assets import TACEX_ASSETS_DATA_DIR
 # ANYmal-C
-ANYMAL_C_USD_PATH = f"{TACEX_ASSETS_DATA_DIR}/Robots/ANYbotics/ANYmal-C/anymal_c.usd"
-# ANYmal-D
-ANYMAL_D_USD_PATH = f"{TACEX_ASSETS_DATA_DIR}/Robots/ANYbotics/ANYmal-D/anymal_d.usd"
+ball = f"{TACEX_ASSETS_DATA_DIR}/Props/ball_wood.usd"
 ``` 
 
 

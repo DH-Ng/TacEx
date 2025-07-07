@@ -25,7 +25,7 @@ from isaaclab.utils import configclass
 from isaaclab.utils.math import transform_points
 import isaaclab.utils.math as math_utils
 
-from isaaclab.assets import AssetBase, AssetBaseCfg, RigidObject
+from isaaclab.assets import AssetBase, AssetBaseCfg, RigidObject, Articulation
 
 from uipc.constitution import SoftPositionConstraint
 from uipc import view
@@ -71,13 +71,13 @@ class UipcIsaacAttachments():
     cfg: UipcIsaacAttachmentsCfg
 
     #todo code init properly
-    def __init__(self, cfg: UipcIsaacAttachmentsCfg, uipc_object: UipcObject, isaaclab_rigid_object: RigidObject) -> None: 
+    def __init__(self, cfg: UipcIsaacAttachmentsCfg, uipc_object: UipcObject, isaaclab_rigid_object: RigidObject | Articulation) -> None: 
         # check that the config is valid
         cfg.validate()
         self.cfg = cfg.copy()
 
         self.uipc_object: UipcObject = uipc_object
-        self.isaaclab_rigid_object: RigidObject = isaaclab_rigid_object
+        self.isaaclab_rigid_object: RigidObject | Articulation = isaaclab_rigid_object
         
         self.rigid_body_id = None # used to query the position of the rigid body
 
@@ -293,7 +293,7 @@ class UipcIsaacAttachments():
                     # compute offsets from object position to attachment points 
                     offset = v - obj_pos
                     offset = torch.tensor(offset, device="cuda:0").float()
-                    offset = math_utils.quat_rotate_inverse(obj_orientation[0].reshape((1,4)), offset.reshape((1,3)))[0]
+                    offset = math_utils.quat_apply_inverse(obj_orientation[0].reshape((1,4)), offset.reshape((1,3)))[0]
                     offset = offset.cpu().numpy()
                     attachment_offsets.append(offset)
 
@@ -309,12 +309,12 @@ class UipcIsaacAttachments():
 
         # self._create_attachment_data_attributes(isaac_mesh_path, self.objects_gipc, idx, attachment_points_positions, attachment_offsets)
 
-        # draw attachment data
-        draw.draw_points(attachment_points_positions, [(255,0,0,0.5)]*attachment_points_positions.shape[0], [30]*attachment_points_positions.shape[0]) # the new positions
-        obj_center = obj_position[0]
+        # # draw attachment data
+        # draw.draw_points(attachment_points_positions, [(255,0,0,0.5)]*attachment_points_positions.shape[0], [30]*attachment_points_positions.shape[0]) # the new positions
+        # obj_center = obj_position[0]
 
-        for j in range(0, attachment_points_positions.shape[0]):
-            draw.draw_lines([obj_center], [attachment_points_positions[j,:]], [(255,255,0,0.5)], [10])
+        # for j in range(0, attachment_points_positions.shape[0]):
+        #     draw.draw_lines([obj_center], [attachment_points_positions[j,:]], [(255,255,0,0.5)], [10])
 
         return attachment_offsets, idx, matching_prims    
        
@@ -354,8 +354,30 @@ class UipcIsaacAttachments():
         animator.insert(self.uipc_object.uipc_scene_objects[0], animate_tet)
 
     def _compute_aim_positions(self, dt=0):
-        pose = self.isaaclab_rigid_object.data.body_state_w[:, self.rigid_body_id, 0:7].clone()
-                
+        # make sure we have the newest data
+        
+        if type(self.isaaclab_rigid_object) is Articulation:
+            # this only works when rigid body is an articulation
+            # self.isaaclab_rigid_object._physics_sim_view.update_articulations_kinematic()
+            # read data from simulation
+            poses = self.isaaclab_rigid_object._root_physx_view.get_link_transforms().clone()
+            poses[..., 3:7] = math_utils.convert_quat(poses[..., 3:7], to="wxyz")
+            pose = poses[:, self.rigid_body_id, 0:7].clone()
+        elif type(self.isaaclab_rigid_object) is RigidObject:
+            # only works with rigid body
+            pose = self.isaaclab_rigid_object._root_physx_view.root_state_w.view(-1, 1, 13)
+            pose = pose[:, self.rigid_body_id, 0:7].clone()
+        else:
+            raise RuntimeError("Need an Articulation or a RigidBody object for the Isaac X UIPC attachment.")
+        #- doing this is undesirable -> need to update the scene to get newest data
+        # pose = self.isaaclab_rigid_object.data.body_state_w[:, self.rigid_body_id, 0:7].clone()
+        
+        self.obj_pose = pose
+
+        obj_pos = pose[:, 0, :3].cpu().numpy().flatten().reshape(-1,3)
+        self._draw.clear_points()
+        draw.draw_points(obj_pos, [(0,255,0,0.5)]*obj_pos.shape[0], [50]*obj_pos.shape[0]) # the new positions
+
         attachment_offsets = torch.tensor(self.attachment_offsets.reshape((self._num_instances, self.num_attachment_points_per_obj, 3)), device=self.device).float()
         # only access pose of a single body (thats why idx=0 in second dim)
         aim_pos = transform_points(attachment_offsets, pos=pose[:, 0, 0:3], quat=pose[:, 0, 3:]) #todo give over batch of pos and quat for each instance (i.e. pos has shape N,3 and quat N,4)
@@ -366,15 +388,6 @@ class UipcIsaacAttachments():
         #      lin_vel = scene["robot"].data.body_state_w[:, robot_entity_cfg.body_ids[1], 7:10]
         #      lin_vel = lin_vel.cpu().numpy()
         #      lin_vel = np.tile(lin_vel, len(attachment_points)).reshape(len(attachment_points),3)
-
-        # draw.clear_points()
-        # draw.draw_points(self.aim_positions, [(255,0,0,0.5)]*self.aim_positions.shape[0], [30]*self.aim_positions.shape[0]) # the new positions
-        # draw.clear_lines()
-        # for i in range(self._num_instances):
-        #     obj_center = pose[i, 0, 0:3]
-        #     for j in range(i, self._num_instances*self.num_attachment_points_per_obj):
-        #         draw.draw_lines([obj_center.cpu().numpy()], [self.aim_positions[j]], [(255,255,0,0.5)], [10])
-
 
         return self.aim_positions     
     
@@ -424,13 +437,14 @@ class UipcIsaacAttachments():
         
         # # draw attachment data
         # self._draw.clear_points()
-        # self._draw.clear_lines()
+        self._draw.clear_lines()
 
-        # drawing with in the debug method leads to render delay
-        # self._draw.draw_points(self.aim_positions, [(255,0,0,0.5)]*self.aim_positions.shape[0], [30]*self.aim_positions.shape[0]) # the new positions
+        #drawing with the debug method leads to render delay
+        self._draw.draw_points(self.aim_positions, [(255,0,0,0.5)]*self.aim_positions.shape[0], [30]*self.aim_positions.shape[0]) # the new positions
         # pose = self.isaaclab_rigid_object.data.body_state_w[:, self.rigid_body_id, 0:7].clone()
-
-        # for i in range(self._num_instances):
-        #     obj_center = pose[i, 0, 0:3]
-        #     for j in range(i, self._num_instances*self.num_attachment_points_per_obj):
-        #         self._draw.draw_lines([obj_center.cpu().numpy()], [self.aim_positions[j]], [(255,255,0,0.5)], [10])
+        pose = self.obj_pose.clone()
+        
+        for i in range(self._num_instances):
+            obj_center = pose[i, 0, 0:3]
+            for j in range(i, self._num_instances*self.num_attachment_points_per_obj):
+                self._draw.draw_lines([obj_center.cpu().numpy()], [self.aim_positions[j]], [(255,255,0,0.5)], [10])
