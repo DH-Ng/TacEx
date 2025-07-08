@@ -219,7 +219,7 @@ class UipcIsaacAttachments():
             # create a subscriber for the post update event if it doesn't exist
             if self._debug_vis_handle is None:
                 app_interface = omni.kit.app.get_app_interface()
-                self._debug_vis_handle = app_interface.get_post_update_event_stream().create_subscription_to_pop(
+                self._debug_vis_handle = app_interface.get_pre_update_event_stream().create_subscription_to_pop( #get_post_update_event_stream get_pre_update_event_stream
                     lambda event, obj=weakref.proxy(self): obj._debug_vis_callback(event)
                 )
         else:
@@ -374,9 +374,9 @@ class UipcIsaacAttachments():
         
         self.obj_pose = pose
 
-        obj_pos = pose[:, 0, :3].cpu().numpy().flatten().reshape(-1,3)
-        self._draw.clear_points()
-        draw.draw_points(obj_pos, [(0,255,0,0.5)]*obj_pos.shape[0], [50]*obj_pos.shape[0]) # the new positions
+        # obj_pos = pose[:, 0, :3].cpu().numpy().flatten().reshape(-1,3)
+        # self._draw.clear_points()
+        # draw.draw_points(obj_pos, [(0,255,0,0.5)]*obj_pos.shape[0], [50]*obj_pos.shape[0]) # the new positions
 
         attachment_offsets = torch.tensor(self.attachment_offsets.reshape((self._num_instances, self.num_attachment_points_per_obj, 3)), device=self.device).float()
         # only access pose of a single body (thats why idx=0 in second dim)
@@ -435,16 +435,22 @@ class UipcIsaacAttachments():
         if self.aim_positions.shape[0] == 0:
             return
         
+        # self._compute_aim_positions()
+
         # # draw attachment data
         # self._draw.clear_points()
         self._draw.clear_lines()
 
         #drawing with the debug method leads to render delay
-        self._draw.draw_points(self.aim_positions, [(255,0,0,0.5)]*self.aim_positions.shape[0], [30]*self.aim_positions.shape[0]) # the new positions
+        self._draw.draw_points(self.aim_positions, [(255,0,0,0.5)]*self.aim_positions.shape[0], [60]*self.aim_positions.shape[0]) # the new positions
         # pose = self.isaaclab_rigid_object.data.body_state_w[:, self.rigid_body_id, 0:7].clone()
         pose = self.obj_pose.clone()
         
         for i in range(self._num_instances):
-            obj_center = pose[i, 0, 0:3]
+            obj_center = pose[i, 0, 0:3].cpu().numpy()
+            # self._draw.clear_points()
+            # print("Obj_center_debug ", obj_center)
+            # draw.draw_points([obj_center], [(255,255,0,0.5)]*obj_center.shape[0], [50]*obj_center.shape[0]) # the new positions
+            # print("")
             for j in range(i, self._num_instances*self.num_attachment_points_per_obj):
-                self._draw.draw_lines([obj_center.cpu().numpy()], [self.aim_positions[j]], [(255,255,0,0.5)], [10])
+                self._draw.draw_lines([obj_center], [self.aim_positions[j]], [(255,255,0,0.5)], [10])

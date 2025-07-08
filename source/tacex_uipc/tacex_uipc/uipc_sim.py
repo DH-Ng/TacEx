@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, Tuple, Union, List, TYPE_CHECKING
 import pathlib
+import weakref
 
 from isaaclab.utils import configclass
 import isaaclab.sim as sim_utils
@@ -9,6 +10,7 @@ import isaaclab.sim as sim_utils
 import usdrt
 from pxr import Gf, Sdf, Usd, UsdGeom
 import omni.usd
+import usdrt.Usd
 
 try:
     from isaacsim.util.debug_draw import _debug_draw
@@ -28,6 +30,7 @@ from uipc.geometry import tetmesh, extract_surface
 from tacex_uipc.utils import MeshGenerator
 
 import numpy as np
+import warp as wp
 
 if TYPE_CHECKING:
     from tacex_uipc import UipcObject
@@ -220,12 +223,24 @@ class UipcSim():
         self._fabric_meshes = []
         self.uipc_objects: List[UipcObject] = []
 
+        self._update_mesh_handle = None
+
+        self.stage = usdrt.Usd.Stage.Attach(omni.usd.get_context().get_stage_id())
+
+    def __del__(self):
+        """Unsubscribe from the callbacks."""
+        # clear debug visualization
+        if self._debug_vis_handle:
+            self._debug_vis_handle.unsubscribe()
+            self._debug_vis_handle = None
+
     def setup_sim(self):
         self.world.init(self.scene)
         self.world.retrieve()
 
         # trans = geo_slot.geometry().transforms().view()
         # print("init trans ", trans)
+
         # for updating render meshes
         self.sio = SceneIO(self.scene)
 
@@ -242,13 +257,22 @@ class UipcSim():
 
         # initialize callbacks
         self.isaac_sim: sim_utils.SimulationContext = sim_utils.SimulationContext.instance()
-        self.isaac_sim.add_physics_callback("upic_step", self.step)
+        self.isaac_sim.add_physics_callback("uicp_step", self.step)
 
-        # doesnt really help I think, cause we want the mesh update to happen before we render
-        # self.isaac_sim.add_render_callback("upic_render_mesh_update", self.update_render_meshes)
+        # app_interface = omni.kit.app.get_app_interface()
+        # self._update_mesh_handle = app_interface.get_pre_update_event_stream().create_subscription_to_pop( #get_post_update_event_stream get_pre_update_event_stream
+        #     lambda event, obj=weakref.proxy(self): obj.update_render_meshes(event)
+        # )
 
-        # using #self.isaac_sim.add_physics_callback("upic_render_mesh_update", self.update_render_meshes)
-        # -> also didnt help
+        # Use Screnegraph API for fast mesh updates
+        self.selection = self.stage.SelectPrims(
+            require_attrs=[
+                (usdrt.Sdf.ValueTypeNames.Point3fArray, usdrt.UsdGeom.Tokens.points, usdrt.Usd.Access.Overwrite)
+            ],
+            require_prim_type="Mesh",
+            device=self.isaac_sim.device,
+        )
+        print(f"Found {self.selection.GetCount()} meshes for mesh updates.")
 
     def step(self, dt=0):
         self.world.advance()
@@ -271,24 +295,44 @@ class UipcSim():
     def update_render_meshes(self, dt=0):
         all_trimesh_points = self.sio.simplicial_surface(2).positions().view().reshape(-1,3)
         #triangles = self.sio.simplicial_surface(2).triangles().topo().view()
-        for i, fabric_prim in enumerate(self._fabric_meshes):
-            trimesh_points = all_trimesh_points[self._surf_vertex_offsets[i]:self._surf_vertex_offsets[i+1]]
-            #draw.draw_points(trimesh_points, [(0,0,255,0.5)]*trimesh_points.shape[0], [30]*trimesh_points.shape[0])
-            
-            fabric_mesh_points = fabric_prim.GetAttribute("points")
-            fabric_mesh_points.Set(usdrt.Vt.Vec3fArray(trimesh_points))
+        # for i, fabric_prim in enumerate(self._fabric_meshes):
+        #     trimesh_points = all_trimesh_points[self._surf_vertex_offsets[i]:self._surf_vertex_offsets[i+1]]
 
-        # draw.clear_points()
-        # points = np.array(all_trimesh_points)
-        # draw.draw_points(points, [(255,0,255,0.5)]*points.shape[0], [30]*points.shape[0])
+        #     fabric_mesh_points = fabric_prim.GetAttribute("points")
+        #     fabric_mesh_points.Set(usdrt.Vt.Vec3fArray(trimesh_points))
+        
+        points_attr = wp.fabricarray(self.selection.__fabric_arrays_interface__, usdrt.UsdGeom.Tokens.points)
+        wp.launch(
+            self.set_points, 
+            dim=points_attr.size, 
+            inputs=[
+                points_attr, 
+                wp.from_numpy(all_trimesh_points, dtype=wp.vec3, device=self.isaac_sim.device), 
+                wp.from_numpy(np.array(self._surf_vertex_offsets), dtype=wp.int32, device=self.isaac_sim.device),
+            ], 
+            device=self.isaac_sim.device
+        )
+        #! Currently there is a 1 frame delay between the points we set and whats rendered in Isaac
+        #! if you draw the points and let it render, you see that the mesh is lagging behind the points
+        draw.clear_points()
+        points = np.array(all_trimesh_points)
+        draw.draw_points(points, [(255,0,255,0.5)]*points.shape[0], [30]*points.shape[0])
 
         if self.isaac_sim is not None:
-            # self.isaac_sim.forward() # this doesnt really help, I think
-
-            # additional render call to somewhat mitigate render delay #todo search for better to fix this
-            #? render delay might be solved in newest Isaac Ver with FabricSceneDelegate?
+            # additional render call to somewhat mitigate render delay 
             self.isaac_sim.render()
-            
+
+    ### Warp kernels
+    @wp.kernel(enable_backward=False)
+    def set_points(points_attr: wp.fabricarrayarray(dtype=wp.vec3f), 
+                   new_points_values: wp.array(dtype=wp.vec3), 
+                   surf_vert_offsets: wp.array(dtype=wp.int32)):
+        i = wp.tid()
+        print("surf_offset")
+        print(surf_vert_offsets[i])
+        print(surf_vert_offsets[i+1])
+        #! slicing doesnt work yet in warp
+        points_attr[i, 0] = new_points_values[surf_vert_offsets[i]:surf_vert_offsets[i+1]]
 
     @staticmethod
     def get_sim_time_report(as_json: bool = False):

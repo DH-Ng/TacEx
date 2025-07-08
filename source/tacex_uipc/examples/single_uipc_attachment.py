@@ -603,26 +603,18 @@ def run_simulator(env: BallRollingEnv):
 
         # perform physics step
         physics_start = time.time()
+        
         env._pre_physics_step(None)
         env._apply_action()
         env.scene.write_data_to_sim()
         env.sim.step(render=False)
 
-        # if env.step_count >= 500:
-        #     if env.step_count == 500:
-        #         print("UIPC sim starting!")
-        #     # env.scene.update(dt=env.physics_dt)
-        #     # env.uipc_sim.step()
-        # env.scene.update(dt=env.physics_dt)
-        # env.attachment._compute_aim_positions()
-        # env.uipc_sim.step()
         physics_end = time.time()
         ###
 
         env.uipc_sim.update_render_meshes()
-
-        # render scene for cameras (used by sensor)
-        # env.render()
+        
+        # render scene
         env.sim.render()
 
         positions, orientations = env.goal_prim_view.get_world_poses() 
