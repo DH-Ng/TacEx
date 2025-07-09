@@ -313,8 +313,28 @@ class BallRollingEnvCfg(DirectRLEnvCfg):
         device="cuda",
         tactile_img_res=(32, 32),
     )
+    gsmini_right = GelSightMiniCfg(
+        prim_path="/World/envs/env_.*/Robot/gelsight_mini_case_right",
+        sensor_camera_cfg = GelSightMiniCfg.SensorCameraCfg(
+            prim_path_appendix = "/Camera",
+            update_period= 0,
+            resolution = (32,32), #(120, 160),
+            data_types = ["depth"],
+            clipping_range = (0.024, 0.034),
+        ),
+        device = "cuda",
+        debug_vis=True, # for rendering sensor output in the gui
+        # update Taxim cfg
+        marker_motion_sim_cfg=None,
+        data_types=["tactile_rgb"], #marker_motion
+    )
+    # settings for optical sim
+    gsmini_right.optical_sim_cfg = gsmini_left.optical_sim_cfg.replace(
+        with_shadow=False,
+        device="cuda",
+        tactile_img_res=(32, 32),
+    )
 
-    # gsmini_right.
 
     ik_controller_cfg = DifferentialIKControllerCfg(command_type="pose", use_relative_mode=False, ik_method="dls")
 
@@ -403,6 +423,9 @@ class BallRollingEnv(DirectRLEnv):
 
         self.gsmini_left = GelSightSensor(self.cfg.gsmini_left)
         self.scene.sensors["gsmini_left"] = self.gsmini_left
+
+        self.gsmini_right = GelSightSensor(self.cfg.gsmini_right)
+        self.scene.sensors["gsmini_right"] = self.gsmini_right
 
         plate = RigidObject(self.cfg.plate)
 
@@ -665,6 +688,7 @@ def run_simulator(env: BallRollingEnv):
         ### update sensors again to measure tactile sim time separately
         tactile_sim_start = time.time()
         env.gsmini_left.update(dt=env.physics_dt, force_recompute=True)
+        env.gsmini_right.update(dt=env.physics_dt, force_recompute=True)
         # tactile_rgb = env.gsmini_left.data.output["tactile_rgb"]
         tactile_sim_end = time.time()
         ###
