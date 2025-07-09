@@ -10,4 +10,4 @@ from .uipc_interactive_scene import UipcInteractiveScene
 from .direct_uipc_rl_env import *
 
 # Register UI extensions.
-from .ui_extension_example import *
+from .ui_extension import *

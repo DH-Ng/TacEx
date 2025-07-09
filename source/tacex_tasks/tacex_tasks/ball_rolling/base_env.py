@@ -510,7 +510,7 @@ class BallRollingEnv(DirectRLEnv):
     def _reset_idx(self, env_ids: torch.Tensor | None):
         super()._reset_idx(env_ids)
 
-        # spawn robot at random position
+        
         obj_pos = self.object.data.default_root_state[env_ids] 
         obj_pos[:, :3] += self.scene.env_origins[env_ids]
         obj_pos[:, :2] += sample_uniform(

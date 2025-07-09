@@ -77,8 +77,12 @@ class UipcIsaacAttachments():
         self.cfg = cfg.copy()
 
         self.uipc_object: UipcObject = uipc_object
+        # check if prim of uipc_object has rigid body API applied to it, if yes -> throw error
+        if UsdPhysics.RigidBodyAPI(self.uipc_object._prim_view.prims[0]):
+            raise RuntimeWarning(f"Prim {self.uipc_object.cfg.prim_path} of UIPC object is a Isaac Rigid Body. This (usually) leads to unwanted behavior (e.g. when part of articulation).")
+
         self.isaaclab_rigid_object: RigidObject | Articulation = isaaclab_rigid_object
-        
+
         self.rigid_body_id = None # used to query the position of the rigid body
 
         self.uipc_object_vertex_indices = []
@@ -329,7 +333,7 @@ class UipcIsaacAttachments():
         self._create_animation()
 
         sim: sim_utils.SimulationContext = sim_utils.SimulationContext.instance()
-        sim.add_physics_callback(f"{self.isaaclab_rigid_object.cfg.prim_path}_uipc_attachment_update", self._compute_aim_positions)
+        sim.add_physics_callback(f"{self.uipc_object.cfg.prim_path}_X_{self.isaaclab_rigid_object.cfg.prim_path}_attachment_update", self._compute_aim_positions)
 
     def _create_animation(self):
         animator = self.uipc_object._uipc_sim.scene.animator()

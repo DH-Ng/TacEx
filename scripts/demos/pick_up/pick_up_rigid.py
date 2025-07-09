@@ -3,7 +3,7 @@ import argparse
 from isaaclab.app import AppLauncher
 
 # add argparse arguments
-parser = argparse.ArgumentParser(description="Control Franka, which is equipped with one GelSight Mini Sensor, by moving the Frame in the GUI")
+parser = argparse.ArgumentParser(description="Control Franka, which is equipped with two GelSight Mini sensors, by moving the Frame in the GUI")
 parser.add_argument("--num_envs", type=int, default=1, help="Number of environments to spawn.")
 parser.add_argument("--sys", type=bool, default=True, help="Whether to track system utilization.")
 parser.add_argument("--debug_vis", default=True, action="store_true", help="Whether to render tactile images in the# append AppLauncher cli args")
@@ -141,32 +141,32 @@ class CustomEnvWindow(BaseEnvWindow):
                     tooltip="Specifies the position of the right finger of the franka."                    
                 )[0]
 
-                objects_dropdown_cfg = {
-                    "label": "Objects",
-                    "type": "dropdown",
-                    "default_val": 0,
-                    "items": self.objects,
-                    "tooltip": "Select an action for the gripper",
-                    "on_clicked_fn": None,
-                }
-                self.ui_window_elements["object_dropdown"] = ui_utils.dropdown_builder(**objects_dropdown_cfg)
+                # objects_dropdown_cfg = {
+                #     "label": "Objects",
+                #     "type": "dropdown",
+                #     "default_val": 0,
+                #     "items": self.objects,
+                #     "tooltip": "Select an action for the gripper",
+                #     "on_clicked_fn": None,
+                # }
+                # self.ui_window_elements["object_dropdown"] = ui_utils.dropdown_builder(**objects_dropdown_cfg)
 
-                gripper_action_dropdown_cfg = {
-                    "label": "Gripper Action",
-                    "type": "dropdown",
-                    "default_val": 0,
-                    "items": self.gripper_actions,
-                    "tooltip": "Select an action for the gripper",
-                    "on_clicked_fn": None,
-                }
-                self.ui_window_elements["action_dropdown"] = ui_utils.dropdown_builder(**gripper_action_dropdown_cfg)
+                # gripper_action_dropdown_cfg = {
+                #     "label": "Gripper Action",
+                #     "type": "dropdown",
+                #     "default_val": 0,
+                #     "items": self.gripper_actions,
+                #     "tooltip": "Select an action for the gripper",
+                #     "on_clicked_fn": None,
+                # }
+                # self.ui_window_elements["action_dropdown"] = ui_utils.dropdown_builder(**gripper_action_dropdown_cfg)
             
-                self.ui_window_elements["action_button"] = ui_utils.btn_builder(
-                    type="button",
-                    text="Apply Action",
-                    tooltip="Sends the above selected action to the robot.",
-                    on_clicked_fn=self._apply_gripper_action
-                )
+                # self.ui_window_elements["action_button"] = ui_utils.btn_builder(
+                #     type="button",
+                #     text="Apply Action",
+                #     tooltip="Sends the above selected action to the robot.",
+                #     on_clicked_fn=self._apply_gripper_action
+                # )
 
                 self.ui_window_elements["reset_button"] = ui_utils.btn_builder(
                     type="button",
@@ -466,7 +466,7 @@ class BallRollingEnv(DirectRLEnv):
     def _reset_idx(self, env_ids: torch.Tensor | None):
         super()._reset_idx(env_ids)
 
-        # spawn robot at random position
+        
         obj_pos = self.object.data.default_root_state[env_ids] 
         obj_pos[:, :3] += self.scene.env_origins[env_ids]
         # obj_pos[:, :2] += sample_uniform(

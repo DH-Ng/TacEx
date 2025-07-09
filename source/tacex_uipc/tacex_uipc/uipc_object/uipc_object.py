@@ -455,7 +455,7 @@ class UipcObject(AssetBase):
         #self._data.default_root_state = default_root_state.repeat(self.num_instances, 1)
 
     def _create_constitutions(self, mesh):
-        # create constitutions    
+        # create constitutions
         constitution_types = {
             UipcObjectCfg.AffineBodyConstitutionCfg: AffineBodyConstitution,
             UipcObjectCfg.StableNeoHookeanCfg: StableNeoHookean,
