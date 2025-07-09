@@ -223,8 +223,6 @@ class UipcSim():
         self._fabric_meshes = []
         self.uipc_objects: List[UipcObject] = []
 
-        self._update_mesh_handle = None
-
         self.stage = usdrt.Usd.Stage.Attach(omni.usd.get_context().get_stage_id())
 
     def __del__(self):
@@ -258,22 +256,7 @@ class UipcSim():
         # initialize callbacks
         self.isaac_sim: sim_utils.SimulationContext = sim_utils.SimulationContext.instance()
         self.isaac_sim.add_physics_callback("uicp_step", self.step)
-
-        # app_interface = omni.kit.app.get_app_interface()
-        # self._update_mesh_handle = app_interface.get_pre_update_event_stream().create_subscription_to_pop( #get_post_update_event_stream get_pre_update_event_stream
-        #     lambda event, obj=weakref.proxy(self): obj.update_render_meshes(event)
-        # )
-
-        # Use Screnegraph API for fast render mesh updates
-        self.selection = self.stage.SelectPrims(
-            require_attrs=[
-                (usdrt.Sdf.ValueTypeNames.Point3fArray, usdrt.UsdGeom.Tokens.points, usdrt.Usd.Access.Overwrite)
-            ],
-            require_prim_type="Mesh",
-            device=self.isaac_sim.device,
-        )
-        print(f"Found {self.selection.GetCount()} meshes for mesh updates.")
-
+    
     def step(self, dt=0):
         self.world.advance()
         self.world.retrieve()
@@ -292,92 +275,24 @@ class UipcSim():
         self.world.retrieve()
         self.update_render_meshes()
 
-    # def update_render_meshes(self, dt=0):
-    #     all_trimesh_points = self.sio.simplicial_surface(2).positions().view().reshape(-1,3)
-    #     #triangles = self.sio.simplicial_surface(2).triangles().topo().view()
-    #     for i, fabric_prim in enumerate(self._fabric_meshes):
-    #         trimesh_points = all_trimesh_points[self._surf_vertex_offsets[i]:self._surf_vertex_offsets[i+1]]
-
-    #         fabric_mesh_points = fabric_prim.GetAttribute("points")
-    #         fabric_mesh_points.Set(usdrt.Vt.Vec3fArray(trimesh_points))
-    #     #! Currently there is a 1 frame delay between the points we set and whats rendered in Isaac
-    #     #! if you draw the points and let it render, you see that the mesh is lagging behind the points
-    #     draw.clear_points()
-    #     points = np.array(all_trimesh_points)
-    #     draw.draw_points(points, [(255,0,255,0.5)]*points.shape[0], [30]*points.shape[0])
-
-    #     if self.isaac_sim is not None:
-    #         # additional render call to somewhat mitigate render delay 
-    #         self.isaac_sim.render()
-
     def update_render_meshes(self, dt=0):
         all_trimesh_points = self.sio.simplicial_surface(2).positions().view().reshape(-1,3)
         #triangles = self.sio.simplicial_surface(2).triangles().topo().view()
-        # for i, fabric_prim in enumerate(self._fabric_meshes):
-        #     trimesh_points = all_trimesh_points[self._surf_vertex_offsets[i]:self._surf_vertex_offsets[i+1]]
+        for i, fabric_prim in enumerate(self._fabric_meshes):
+            trimesh_points = all_trimesh_points[self._surf_vertex_offsets[i]:self._surf_vertex_offsets[i+1]]
 
-        #     fabric_mesh_points = fabric_prim.GetAttribute("points")
-        #     fabric_mesh_points.Set(usdrt.Vt.Vec3fArray(trimesh_points))
-        all_points_in_warp = wp.from_numpy(all_trimesh_points, dtype=wp.vec3f, device=self.isaac_sim.device).flatten()
-
-        points_attr = wp.fabricarray(self.selection.__fabric_arrays_interface__, usdrt.UsdGeom.Tokens.points)
-        wp.launch(
-            self.set_points, 
-            dim=points_attr.size, 
-            inputs=[
-                points_attr, 
-                all_points_in_warp.ptr, 
-                wp.from_numpy(np.array(self._surf_vertex_offsets), dtype=wp.int32, device=self.isaac_sim.device),
-            ], 
-            device=self.isaac_sim.device
-        )
-
+            fabric_mesh_points = fabric_prim.GetAttribute("points")
+            fabric_mesh_points.Set(usdrt.Vt.Vec3fArray(trimesh_points))
         #! Currently there is a 1 frame delay between the points we set and whats rendered in Isaac
         #! if you draw the points and let it render, you see that the mesh is lagging behind the points
-        draw.clear_points()
-        points = np.array(all_trimesh_points)
-        draw.draw_points(points, [(255,0,255,0.5)]*points.shape[0], [30]*points.shape[0])
+        # draw.clear_points()
+        # points = np.array(all_trimesh_points)
+        # draw.draw_points(points, [(255,0,255,0.5)]*points.shape[0], [30]*points.shape[0])
 
         if self.isaac_sim is not None:
             # additional render call to somewhat mitigate render delay 
             self.isaac_sim.render()
 
-    ### Warp kernels
-    # source for pointer stuff: https://github.com/NVIDIA/warp/issues/818, https://github.com/NVIDIA/warp/blob/717c3d28553d036ffb392d6b929f01a47759095e/warp/tests/test_array.py#L2921
-    @wp.kernel(enable_backward=False)
-    def set_points(
-        points_attr: wp.fabricarrayarray(dtype=wp.vec3f), 
-        new_points_ptr: wp.uint64, 
-        surf_vert_offsets: wp.array(dtype=wp.int32)
-        ):
-        i = wp.tid()
-        print("surf_offset")
-        print(surf_vert_offsets[i])
-        print(surf_vert_offsets[i+1])
-        #! slicing doesnt work yet in warp
-        # points_attr[i, 0] = new_points_values[surf_vert_offsets[i]:surf_vert_offsets[i+1]]
-
-        point_count = surf_vert_offsets[i+1]-surf_vert_offsets[i]
-        print("point_count")
-        print(point_count)
-
-        size_of_float32 = 8
-
-        view = wp.array(
-            ptr=new_points_ptr, #+wp.uint64(surf_vert_offsets[i]*size_of_float32*3)
-            shape=(point_count, 3),
-            dtype=wp.float32,
-        )
-        # above returns vector, need to wrap it into array 
-        # view.view(wp.float32)
-        print(view)
-
-        print("shape of view")
-        print(view.shape)
-
-        print(points_attr)
-        # points_attr[i].view(wp.vec3f) = view
-                
     @staticmethod
     def get_sim_time_report(as_json: bool = False):
         if as_json:
