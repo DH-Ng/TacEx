@@ -23,10 +23,14 @@ import carb
 import torch
 import numpy as np
 
-from isaacsim.core.utils.stage import get_current_stage
-from isaacsim.core.utils.torch.transformations import tf_combine, tf_inverse, tf_vector
 from isaacsim.core.prims import XFormPrim
-from pxr import UsdGeom
+from isaacsim.core.api.objects import VisualCuboid
+import omni.ui
+
+from contextlib import suppress
+with suppress(ImportError):
+    # isaacsim.gui is not available when running in headless mode.
+    import isaacsim.gui.components.ui_utils as ui_utils
 
 import isaaclab.sim as sim_utils
 from isaaclab.actuators.actuator_cfg import ImplicitActuatorCfg
@@ -51,14 +55,11 @@ from isaaclab.sensors import FrameTransformer, FrameTransformerCfg
 from isaaclab.sensors.frame_transformer.frame_transformer_cfg import OffsetCfg
 from isaaclab.envs import ViewerCfg
 
-from isaaclab.markers import POSITION_GOAL_MARKER_CFG  # isort: skip
-from isaaclab.markers import CUBOID_MARKER_CFG  # isort: skip
-
 from isaaclab.controllers.differential_ik_cfg import DifferentialIKControllerCfg
 from isaaclab.controllers.differential_ik import DifferentialIKController
 import isaaclab.utils.math as math_utils
 
-from tacex_assets.robots.franka.franka_gsmini_single_adapter_rigid import FRANKA_PANDA_ARM_GSMINI_SINGLE_ADAPTER_HIGH_PD_CFG
+from tacex_assets.robots.franka.franka_gsmini_gripper_rigid import FRANKA_PANDA_ARM_GSMINI_GRIPPER_HIGH_PD_CFG
 from tacex_assets import TACEX_ASSETS_DATA_DIR
 from tacex_assets.sensors.gelsight_mini.gelsight_mini_cfg import GelSightMiniCfg
 
@@ -85,12 +86,110 @@ class CustomEnvWindow(BaseEnvWindow):
         """
         # initialize base window
         super().__init__(env, window_name)
+
+        # track the current object for the gripper (not the robot itself)
+        self.current_object = "ball"    # ball is the default object
+        self.objects = ["cube", "cylinder", "ball"]
+        self.gripper_actions =  ["Reach", "Lift", "Reach + Lift"]
+        self.current_gripper_action = "Reach"
+        self.left_finger_pos = 0.0
+        self.right_finger_pos = 0.0
+
+        # flags for simulation code
+        self.reset = False 
+
         # add custom UI elements
         with self.ui_window_elements["main_vstack"]:
             with self.ui_window_elements["debug_frame"]:
                 with self.ui_window_elements["debug_vstack"]:
                     # add command manager visualization
                     self._create_debug_vis_ui_element("targets", self.env)
+
+        with self.ui_window_elements["main_vstack"]:
+            self._build_control_frame()
+            # collapse some frames which we don't need
+            self.ui_window_elements["debug_frame"].collapsed = True
+            self.ui_window_elements["sim_frame"].collapsed = True
+
+    def _build_control_frame(self):
+        self.ui_window_elements["action_frame"] = omni.ui.CollapsableFrame(
+            title="Gripping Demo Script",
+            width=omni.ui.Fraction(1),
+            height=0,
+            collapsed=False,
+            style=ui_utils.get_style(),
+            horizontal_scrollbar_policy=omni.ui.ScrollBarPolicy.SCROLLBAR_AS_NEEDED,
+            vertical_scrollbar_policy=omni.ui.ScrollBarPolicy.SCROLLBAR_ALWAYS_ON,
+        )
+        with self.ui_window_elements["action_frame"]:
+            self.ui_window_elements["action_vstack"] = omni.ui.VStack(spacing=5, height=50)
+            with self.ui_window_elements["action_vstack"]:
+                self.ui_window_elements["left_finger_pos"] = ui_utils.combo_floatfield_slider_builder(
+                    label="Left Finger Position",
+                    default_val=0.,   # open per default -> its open at joint pos 0 
+                    min=0.0,
+                    max=0.04,
+                    step=0.001, 
+                    tooltip="Specifies the position of the left finger of the franka."                    
+                )[0]    # we just want to access the value model and not the floatslider 
+                self.ui_window_elements["right_finger_pos"] = ui_utils.combo_floatfield_slider_builder(
+                    label="Right Finger Position",
+                    default_val=0.0,
+                    min=0.0,
+                    max=0.04,
+                    step=0.001, 
+                    tooltip="Specifies the position of the right finger of the franka."                    
+                )[0]
+
+                objects_dropdown_cfg = {
+                    "label": "Objects",
+                    "type": "dropdown",
+                    "default_val": 0,
+                    "items": self.objects,
+                    "tooltip": "Select an action for the gripper",
+                    "on_clicked_fn": None,
+                }
+                self.ui_window_elements["object_dropdown"] = ui_utils.dropdown_builder(**objects_dropdown_cfg)
+
+                gripper_action_dropdown_cfg = {
+                    "label": "Gripper Action",
+                    "type": "dropdown",
+                    "default_val": 0,
+                    "items": self.gripper_actions,
+                    "tooltip": "Select an action for the gripper",
+                    "on_clicked_fn": None,
+                }
+                self.ui_window_elements["action_dropdown"] = ui_utils.dropdown_builder(**gripper_action_dropdown_cfg)
+            
+                self.ui_window_elements["action_button"] = ui_utils.btn_builder(
+                    type="button",
+                    text="Apply Action",
+                    tooltip="Sends the above selected action to the robot.",
+                    on_clicked_fn=self._apply_gripper_action
+                )
+
+                self.ui_window_elements["reset_button"] = ui_utils.btn_builder(
+                    type="button",
+                    text="Reset Env",
+                    tooltip="Resets the environment, i.e. the objects are spawned back at their initial position.",
+                    on_clicked_fn=self._reset_env
+                )
+                         
+    ###
+    # Functions for ui elements
+    ###    
+    def _apply_gripper_action(self):
+        #print("Applying the action")
+        self.new_action = True
+        
+        current_obj_idx = self.ui_window_elements["object_dropdown"].get_item_value_model().get_value_as_int() # dropdown options are returned as numbers -> index in list
+        self.current_object = self.objects[current_obj_idx]
+        
+        current_action_idx = self.ui_window_elements["action_dropdown"].get_item_value_model().get_value_as_int() # dropdown options are returned as numbers -> index in list
+        self.current_gripper_action = self.gripper_actions[current_action_idx]
+    
+    def _reset_env(self):
+        self.reset = True
 
 
 @configclass
@@ -174,10 +273,10 @@ class BallRollingEnvCfg(DirectRLEnvCfg):
 
     ball = RigidObjectCfg(
         prim_path="/World/envs/env_.*/ball",
-        init_state=RigidObjectCfg.InitialStateCfg(pos=[0.5, 0.0, 0.015]),
+        init_state=RigidObjectCfg.InitialStateCfg(pos=[0.5, 0.0, 0.035]),
         spawn=sim_utils.UsdFileCfg(
             usd_path=f"{TACEX_ASSETS_DATA_DIR}/Props/ball_wood.usd",
-            #scale=(0.8, 0.8, 0.8),
+            scale=(2.5, 2.5, 2.5),
             rigid_props=sim_utils.RigidBodyPropertiesCfg(
                 solver_position_iteration_count=16,
                 solver_velocity_iteration_count=1,
@@ -190,22 +289,11 @@ class BallRollingEnvCfg(DirectRLEnvCfg):
         )
     )
 
-    robot: ArticulationCfg = FRANKA_PANDA_ARM_GSMINI_SINGLE_ADAPTER_HIGH_PD_CFG.replace(
+    robot: ArticulationCfg = FRANKA_PANDA_ARM_GSMINI_GRIPPER_HIGH_PD_CFG.replace(
         prim_path="/World/envs/env_.*/Robot",
-        # init_state=ArticulationCfg.InitialStateCfg(
-        #     # joint_pos={
-        #     #     "panda_joint1": 0.0,
-        #     #     "panda_joint2": 0.43,
-        #     #     "panda_joint3": 0.0,
-        #     #     "panda_joint4": -2.37,
-        #     #     "panda_joint5": 0.0,
-        #     #     "panda_joint6": 2.79,
-        #     #     "panda_joint7": 0.741,
-        #     # },
-        # ),
     )
-    gsmini = GelSightMiniCfg(
-        prim_path="/World/envs/env_.*/Robot/gelsight_mini_case",
+    gsmini_left = GelSightMiniCfg(
+        prim_path="/World/envs/env_.*/Robot/gelsight_mini_case_left",
         sensor_camera_cfg = GelSightMiniCfg.SensorCameraCfg(
             prim_path_appendix = "/Camera",
             update_period= 0,
@@ -220,21 +308,13 @@ class BallRollingEnvCfg(DirectRLEnvCfg):
         data_types=["tactile_rgb"], #marker_motion
     )
     # settings for optical sim
-    gsmini.optical_sim_cfg = gsmini.optical_sim_cfg.replace(
+    gsmini_left.optical_sim_cfg = gsmini_left.optical_sim_cfg.replace(
         with_shadow=False,
         device="cuda",
         tactile_img_res=(32, 32),
     )
 
-    # frame for setting goal position
-    frame = AssetBaseCfg(
-        prim_path="/World/envs/env_.*/goal_frame",
-        init_state=AssetBaseCfg.InitialStateCfg(pos=[0.5, 0, 0.15], rot=[0, 1, 0, 0]),
-        spawn=sim_utils.UsdFileCfg(
-            usd_path=f"{ISAAC_NUCLEUS_DIR}/Props/UIElements/frame_prim.usd",
-            scale=(0.025, 0.025, 0.025),
-        ),
-    )    
+    # gsmini_right.
 
     ik_controller_cfg = DifferentialIKControllerCfg(command_type="pose", use_relative_mode=False, ik_method="dls")
 
@@ -264,6 +344,9 @@ class BallRollingEnv(DirectRLEnv):
         # save only the first body index
         self._body_idx = body_ids[0]
         self._body_name = body_names[0]
+
+        # Index of fingers -> first id is left, second id is right finger
+        self._finger_joint_ids, self._finger_joint_names = self._robot.find_joints(["panda_finger.*"])
         
         # For a fixed base robot, the frame index is one less than the body index.
         # This is because the root body is not included in the returned Jacobians.
@@ -271,7 +354,7 @@ class BallRollingEnv(DirectRLEnv):
         # self._jacobi_joint_ids = self._joint_ids # we take every joint
         
         # ee offset w.r.t panda hand -> based on the asset
-        self._offset_pos = torch.tensor([0.0, 0.0, 0.131], device=self.device).repeat(self.num_envs, 1)
+        self._offset_pos = torch.tensor([0.0, 0.0, 0.11841], device=self.device).repeat(self.num_envs, 1)
         self._offset_rot = torch.tensor([1.0, 0.0, 0.0, 0.0], device=self.device).repeat(self.num_envs, 1)  
         ####################################################################
 
@@ -281,7 +364,7 @@ class BallRollingEnv(DirectRLEnv):
 
         self.step_count = 0
 
-        self.frame_prim_view = None
+        self.goal_prim_view = None
 
         # add handle for debug visualization (this is set to a valid handle inside set_debug_vis)
         self.set_debug_vis(self.cfg.debug_vis)
@@ -308,7 +391,7 @@ class BallRollingEnv(DirectRLEnv):
                     prim_path="/World/envs/env_.*/Robot/panda_hand",
                     name="end_effector",
                     offset=OffsetCfg(
-                        pos=(0.0, 0.0, 0.131), #0.1034
+                        pos=(0.0, 0.0, 0.11841), 
                     ),
                 ),
             ],
@@ -318,8 +401,8 @@ class BallRollingEnv(DirectRLEnv):
         self._ee_frame = FrameTransformer(ee_frame_cfg)
         self.scene.sensors["ee_frame"] = self._ee_frame
 
-        self.gsmini = GelSightSensor(self.cfg.gsmini)
-        self.scene.sensors["gsmini"] = self.gsmini
+        self.gsmini_left = GelSightSensor(self.cfg.gsmini_left)
+        self.scene.sensors["gsmini_left"] = self.gsmini_left
 
         plate = RigidObject(self.cfg.plate)
 
@@ -332,13 +415,14 @@ class BallRollingEnv(DirectRLEnv):
             orientation=ground.init_state.rot
         )
 
-        frame = self.cfg.frame
-        frame.spawn.func(
-            frame.prim_path,
-            frame.spawn,
-            translation=frame.init_state.pos,
-            orientation=frame.init_state.rot
+        VisualCuboid(
+            prim_path="/World/envs/env_0/goal",
+            size=0.01,
+            position=np.array([0.5, 0.0, 0.15]),
+            orientation=np.array([0, 1, 0, 0]),
+            color=np.array([255.0, 0.0, 0.0])
         )
+
 
         # add lights
         light_cfg = sim_utils.DomeLightCfg(intensity=2000.0, color=(0.75, 0.75, 0.75))
@@ -347,9 +431,6 @@ class BallRollingEnv(DirectRLEnv):
     #MARK: pre-physics step calls
         
     def _pre_physics_step(self, actions: torch.Tensor):
-        # update movement pattern according to the ball position
-        ball_pos = self.object.data.root_link_pos_w - self.scene.env_origins
-
         self._ik_controller.set_command(self.ik_commands)
 
     def _apply_action(self):
@@ -363,6 +444,11 @@ class BallRollingEnv(DirectRLEnv):
             joint_pos_des = self._ik_controller.compute(ee_pos_curr_b, ee_quat_curr_b, jacobian, joint_pos)
         else:
             joint_pos_des = joint_pos.clone()
+
+        # set finger position -> only have 1 robot
+        joint_pos_des[0, self._finger_joint_ids[0]] = self._window.ui_window_elements["left_finger_pos"].get_value_as_float()
+        joint_pos_des[0, self._finger_joint_ids[1]] = self._window.ui_window_elements["right_finger_pos"].get_value_as_float()
+        
         self._robot.set_joint_position_target(joint_pos_des)
 
         self.step_count += 1
@@ -539,10 +625,24 @@ def run_simulator(env: BallRollingEnv):
 
     env.reset()
 
-    env.frame_prim_view = XFormPrim(prim_paths_expr=env.cfg.frame.prim_path, name=f"{env.cfg.frame.prim_path}", usd=True)
+    env.goal_prim_view = XFormPrim(prim_paths_expr="/World/envs/env_.*/goal", name="goals", usd=True)
         
     # Simulation loop
     while simulation_app.is_running():
+
+        if env._window.reset: # hacky way of getting the ui information, but it works
+            print("-" * 80)
+            print("[INFO]: Resetting environment...")
+            # toggle flags
+            env._window.reset = False
+            env._window.new_action = False  
+            env.reset()
+            
+            # let the gripper be open
+            #finger_joint_pos = torch.tensor([[0.04, 0.04]], device=env.device)
+            # make sure that the ui value is consistent
+            env._window.ui_window_elements["left_finger_pos"].set_value(0.0)
+            env._window.ui_window_elements["right_finger_pos"].set_value(0.0)
 
         # perform physics step
         physics_start = time.time()
@@ -553,7 +653,7 @@ def run_simulator(env: BallRollingEnv):
         physics_end = time.time()
         ###
 
-        positions, orientations = env.frame_prim_view.get_world_poses() 
+        positions, orientations = env.goal_prim_view.get_world_poses() 
         env.ik_commands[:, :3] = positions - env.scene.env_origins
         env.ik_commands[:, 3:] = orientations
 
@@ -564,8 +664,8 @@ def run_simulator(env: BallRollingEnv):
 
         ### update sensors again to measure tactile sim time separately
         tactile_sim_start = time.time()
-        env.gsmini.update(dt=env.physics_dt, force_recompute=True)
-        # tactile_rgb = env.gsmini.data.output["tactile_rgb"]
+        env.gsmini_left.update(dt=env.physics_dt, force_recompute=True)
+        # tactile_rgb = env.gsmini_left.data.output["tactile_rgb"]
         tactile_sim_end = time.time()
         ###
 
@@ -600,7 +700,7 @@ def main():
     # override configurations with non-hydra CLI arguments
     env_cfg.scene.num_envs = args_cli.num_envs if args_cli.num_envs is not None else env_cfg.scene.num_envs
     env_cfg.sim.device = args_cli.device if args_cli.device is not None else env_cfg.sim.device
-    env_cfg.gsmini.debug_vis = args_cli.debug_vis 
+    env_cfg.gsmini_left.debug_vis = args_cli.debug_vis 
 
     experiment = BallRollingEnv(env_cfg)
 

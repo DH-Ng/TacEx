@@ -23,14 +23,8 @@ import carb
 import torch
 import numpy as np
 
-from isaacsim.core.utils.stage import get_current_stage
-from isaacsim.core.utils.torch.transformations import tf_combine, tf_inverse, tf_vector
 from isaacsim.core.prims import XFormPrim
 from isaacsim.core.api.objects import VisualCuboid
-
-from pxr import UsdGeom, Usd
-import pxr
-import omni.usd
 
 import isaaclab.sim as sim_utils
 from isaaclab.actuators.actuator_cfg import ImplicitActuatorCfg
@@ -55,14 +49,11 @@ from isaaclab.sensors import FrameTransformer, FrameTransformerCfg
 from isaaclab.sensors.frame_transformer.frame_transformer_cfg import OffsetCfg
 from isaaclab.envs import ViewerCfg
 
-from isaaclab.markers import POSITION_GOAL_MARKER_CFG  # isort: skip
-from isaaclab.markers import CUBOID_MARKER_CFG  # isort: skip
-
 from isaaclab.controllers.differential_ik_cfg import DifferentialIKControllerCfg
 from isaaclab.controllers.differential_ik import DifferentialIKController
 import isaaclab.utils.math as math_utils
 
-from tacex_assets.robots.franka.franka_gsmini_single_adapter_uipc import FRANKA_PANDA_ARM_GSMINI_SINGLE_ADAPTER_HIGH_PD_CFG
+from tacex_assets.robots.franka.franka_gsmini_single_adapter_rigid import FRANKA_PANDA_ARM_GSMINI_SINGLE_ADAPTER_HIGH_PD_CFG
 from tacex_assets import TACEX_ASSETS_DATA_DIR
 from tacex_assets.sensors.gelsight_mini.gelsight_mini_cfg import GelSightMiniCfg
 
@@ -76,10 +67,6 @@ import datetime
 from pathlib import Path
 import json
 import platform
-
-from tacex_uipc import UipcSim, UipcSimCfg, UipcObject, UipcObjectCfg, UipcRLEnv
-from tacex_uipc import UipcIsaacAttachments, UipcIsaacAttachmentsCfg
-from tacex_uipc.utils import TetMeshCfg
 
 class CustomEnvWindow(BaseEnvWindow):
     """Window manager for the RL environment."""
@@ -122,7 +109,7 @@ class BallRollingEnvCfg(DirectRLEnvCfg):
         dt=1/60, 
         render_interval=decimation,
         physx=PhysxCfg(
-            enable_ccd=True, # for more stable ball_rolling
+            enable_ccd=True, # needed for more stable ball_rolling
             # bounce_threshold_velocity=10000,
         ),
         physics_material=sim_utils.RigidBodyMaterialCfg(
@@ -132,14 +119,6 @@ class BallRollingEnvCfg(DirectRLEnvCfg):
             dynamic_friction=5.0,
             restitution=0.0,
         ),
-    )
-    
-    uipc_sim = UipcSimCfg(
-        # logger_level="Info"
-        ground_height=0.0025,
-        contact=UipcSimCfg.Contact(
-            d_hat=0.0001
-        )
     )
 
     # scene
@@ -188,45 +167,27 @@ class BallRollingEnvCfg(DirectRLEnvCfg):
         )
     )
 
-    mesh_cfg = TetMeshCfg(
-        stop_quality=8,
-        max_its=100,
-        edge_length_r=1/5,
-        # epsilon_r=0.01
-    )
-    ball = UipcObjectCfg(
+    ball = RigidObjectCfg(
         prim_path="/World/envs/env_.*/ball",
-        init_state=AssetBaseCfg.InitialStateCfg(pos=[0.5, 0, 0.15]), #rot=(0.72,-0.3,0.42,-0.45)
+        init_state=RigidObjectCfg.InitialStateCfg(pos=[0.5, 0.0, 0.015]),
         spawn=sim_utils.UsdFileCfg(
-            # usd_path="/workspace/tacex/source/tacex_assets/tacex_assets/data/Sensors/GelSight_Mini/Gelpad_low_res.usd",
             usd_path=f"{TACEX_ASSETS_DATA_DIR}/Props/ball_wood.usd",
-        ),
-        mesh_cfg=mesh_cfg,
-        constitution_cfg=UipcObjectCfg.StableNeoHookeanCfg()
+            #scale=(0.8, 0.8, 0.8),
+            rigid_props=sim_utils.RigidBodyPropertiesCfg(
+                solver_position_iteration_count=16,
+                solver_velocity_iteration_count=1,
+                max_angular_velocity=1000.0,
+                max_linear_velocity=1000.0,
+                max_depenetration_velocity=5.0,
+                kinematic_enabled=False,
+                disable_gravity=False,
+            )
+        )
     )
 
     robot: ArticulationCfg = FRANKA_PANDA_ARM_GSMINI_SINGLE_ADAPTER_HIGH_PD_CFG.replace(
         prim_path="/World/envs/env_.*/Robot",
     )
-    # simulate the gelpad as uipc mesh
-    mesh_cfg = TetMeshCfg(
-        stop_quality=8,
-        max_its=100,
-        edge_length_r=1/15,
-        # epsilon_r=0.01
-    )
-    gelpad_cfg = UipcObjectCfg(
-        prim_path="/World/envs/env_.*/Robot/gelsight_mini_gelpad",
-        mesh_cfg=mesh_cfg,
-        constitution_cfg=UipcObjectCfg.StableNeoHookeanCfg(),
-    )
-    gelpad_attachment_cfg=UipcIsaacAttachmentsCfg(
-        constraint_strength_ratio=100.0,
-        body_name="gelsight_mini_case",
-        debug_vis=True,
-        compute_attachment_data=True
-    )
-
     gsmini = GelSightMiniCfg(
         prim_path="/World/envs/env_.*/Robot/gelsight_mini_case",
         sensor_camera_cfg = GelSightMiniCfg.SensorCameraCfg(
@@ -249,16 +210,6 @@ class BallRollingEnvCfg(DirectRLEnvCfg):
         tactile_img_res=(32, 32),
     )
 
-    # # frame for setting goal position
-    # frame = AssetBaseCfg(
-    #     prim_path="/World/envs/env_.*/goal",
-    #     init_state=AssetBaseCfg.InitialStateCfg(pos=[0.5, 0, 0.15], rot=[0, 1, 0, 0]),
-    #     spawn=sim_utils.UsdFileCfg(
-    #         usd_path=f"{ISAAC_NUCLEUS_DIR}/Props/UIElements/frame_prim.usd",
-    #         scale=(0.025, 0.025, 0.025),
-    #     ),
-    # )    
-
     ik_controller_cfg = DifferentialIKControllerCfg(command_type="pose", use_relative_mode=False, ik_method="dls")
 
     ball_radius = 0.005
@@ -271,12 +222,12 @@ class BallRollingEnvCfg(DirectRLEnvCfg):
     observation_space = 0 
     state_space = 0
 
-class BallRollingEnv(UipcRLEnv):
+class BallRollingEnv(DirectRLEnv):
     cfg: BallRollingEnvCfg
 
     def __init__(self, cfg: BallRollingEnvCfg, render_mode: str | None = None, **kwargs):
         super().__init__(cfg, render_mode, **kwargs)
-               
+
         #### Stuff for IK ##################################################
         # create the differential IK controller
         self._ik_controller = DifferentialIKController(
@@ -296,7 +247,6 @@ class BallRollingEnv(UipcRLEnv):
         # ee offset w.r.t panda hand -> based on the asset
         self._offset_pos = torch.tensor([0.0, 0.0, 0.131], device=self.device).repeat(self.num_envs, 1)
         self._offset_rot = torch.tensor([1.0, 0.0, 0.0, 0.0], device=self.device).repeat(self.num_envs, 1)  
-        # self._offset_rot = torch.tensor([0.0, 0.0, 1.0, 0.0], device=self.device).repeat(self.num_envs, 1)  -> tried to set this, but IK didnt work properly then, not sure what the problem here is (might be due to bad panda_hand placement?)
         ####################################################################
 
         # create buffer to store actions (= ik_commands)
@@ -310,13 +260,12 @@ class BallRollingEnv(UipcRLEnv):
         # add handle for debug visualization (this is set to a valid handle inside set_debug_vis)
         self.set_debug_vis(self.cfg.debug_vis)
         
-        
     def _setup_scene(self):
         self._robot = Articulation(self.cfg.robot)
         self.scene.articulations["robot"] = self._robot
 
-        # self.object = RigidObject(self.cfg.ball)
-        # self.scene.rigid_objects["object"] = self.object
+        self.object = RigidObject(self.cfg.ball)
+        self.scene.rigid_objects["object"] = self.object
 
         # clone, filter, and replicate
         self.scene.clone_environments(copy_from_source=False)
@@ -357,14 +306,6 @@ class BallRollingEnv(UipcRLEnv):
             orientation=ground.init_state.rot
         )
 
-        # frame = self.cfg.frame
-        # frame.spawn.func(
-        #     frame.prim_path,
-        #     frame.spawn,
-        #     translation=frame.init_state.pos,
-        #     orientation=frame.init_state.rot
-        # )
-
         VisualCuboid(
             prim_path="/World/envs/env_0/goal",
             size=0.01,
@@ -373,19 +314,10 @@ class BallRollingEnv(UipcRLEnv):
             color=np.array([255.0, 0.0, 0.0])
         )
 
+
         # add lights
         light_cfg = sim_utils.DomeLightCfg(intensity=2000.0, color=(0.75, 0.75, 0.75))
         light_cfg.func("/World/Light", light_cfg)
-
-        ### UIPC simulation setup
-
-        # gelpad simulated via uipc
-        self._uipc_gelpad = UipcObject(self.cfg.gelpad_cfg, self.uipc_sim)
-        
-        self.ball = UipcObject(self.cfg.ball, self.uipc_sim)
-
-        # create attachment
-        self.attachment = UipcIsaacAttachments(self.cfg.gelpad_attachment_cfg, self._uipc_gelpad, self.scene.articulations["robot"])
 
     #MARK: pre-physics step calls
         
@@ -419,6 +351,17 @@ class BallRollingEnv(UipcRLEnv):
         
     def _reset_idx(self, env_ids: torch.Tensor | None):
         super()._reset_idx(env_ids)
+
+        # spawn robot at random position
+        obj_pos = self.object.data.default_root_state[env_ids] 
+        obj_pos[:, :3] += self.scene.env_origins[env_ids]
+        # obj_pos[:, :2] += sample_uniform(
+        #     self.cfg.obj_pos_randomization_range[0], 
+        #     self.cfg.obj_pos_randomization_range[1],
+        #     (len(env_ids), 2), 
+        #     self.device
+        # )
+        self.object.write_root_state_to_sim(obj_pos, env_ids=env_ids)
 
         # reset robot state 
         joint_pos = (
@@ -575,23 +518,21 @@ def run_simulator(env: BallRollingEnv):
 
         # perform physics step
         physics_start = time.time()
-        
         env._pre_physics_step(None)
         env._apply_action()
         env.scene.write_data_to_sim()
         env.sim.step(render=False)
-
         physics_end = time.time()
         ###
-
-        env.uipc_sim.update_render_meshes()
-        
-        # render scene
-        env.sim.render()
 
         positions, orientations = env.goal_prim_view.get_world_poses() 
         env.ik_commands[:, :3] = positions - env.scene.env_origins
         env.ik_commands[:, 3:] = orientations
+
+        # update isaac buffers() -> also updates sensors
+        env.scene.update(dt=env.physics_dt)
+        # render scene for cameras (used by sensor)
+        env.sim.render()
 
         ### update sensors again to measure tactile sim time separately
         tactile_sim_start = time.time()
@@ -619,7 +560,6 @@ def run_simulator(env: BallRollingEnv):
         #     f"GPU Memory: {system_utilization_analytics[3]:.2f}% |"
         # )
         # print("")
-        env.scene.update(dt=env.physics_dt)
 
     env.close()
     
