@@ -160,7 +160,7 @@ def main():
     print("[INFO]: Setup complete...")
 
     step = 1
-    start_uipc_test = False
+    start_uipc_test = True
 
     total_uipc_sim_time = 0.0
     total_uipc_render_time = 0.0
