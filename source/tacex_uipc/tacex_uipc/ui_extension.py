@@ -264,6 +264,12 @@ def _update_surf_mesh(path):
     MeshGenerator.update_usd_mesh(UsdGeom.Mesh(prim), surf_points=surf_points, triangles=triangles)
     print("Updated Surface Mesh of ", path)
 
+    # # extract surface data of tet mesh 
+    # tet_points = prim.GetAttribute("tet_points").Get()
+    # tet_indices = prim.GetAttribute("tet_indices").Get()
+    # MeshGenerator.update_usd_mesh_pretty(UsdGeom.Mesh(prim), tet_points, tet_indices)
+    # print("Pretty update of surface Mesh of ", path)
+
 def _create_attachment(paths):
     print("paths are ", paths)
 

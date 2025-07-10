@@ -297,3 +297,46 @@ class MeshGenerator():
         except:
             pass
             # print("During update of the surface mesh: No `primvars:st` attribute found.")
+
+    @staticmethod
+    def update_usd_mesh_pretty(prim: UsdGeom.Mesh, tet_points, tet_indices: list[int]):
+        from uipc.geometry import tetmesh, label_surface, label_triangle_orient, flip_inward_triangles, extract_surface
+
+        tet_points = np.array(tet_points)
+        tet_indices = np.array(tet_indices).reshape(-1,4)
+        # tet_surf_indices = np.array(tet_indices).reshape(-1,3)
+
+        # compute mesh
+        mesh = tetmesh(tet_points.copy(), tet_indices.copy())
+        # enable the contact by labeling the surface 
+        label_surface(mesh)
+        label_triangle_orient(mesh) #-> only needed when we want to export the mesh with uipc
+        # flip the triangles inward for better rendering 
+        mesh = flip_inward_triangles(mesh)
+        surf = extract_surface(mesh)
+        
+        surf_points = surf.positions().view().reshape(-1,3)
+        triangles = surf.triangles().topo().view().reshape(-1).tolist()
+        triangles = np.array(triangles).reshape(-1,3)
+
+        prim.GetPointsAttr().Set(surf_points)
+        prim.GetFaceVertexCountsAttr().Set([3] * triangles.shape[0]) # how many vertices each face has (3, cause triangles)
+        prim.GetFaceVertexIndicesAttr().Set(triangles)
+        prim.GetNormalsAttr().Set([]) # set to be empty, cause we use catmullClark and this gives us normals
+        prim.SetNormalsInterpolation(UsdGeom.Tokens.faceVarying)
+        # prim.GetSubdivisionSchemeAttr().Set("catmullClark") #none
+
+        # set color with per face interpolation  
+        colors = [(random.uniform(0.0, 0.0), random.uniform(0.0, 0.75), random.uniform(0.0, 0.75)) for _ in range(triangles.shape[0]*3)] 
+        prim.CreateDisplayColorPrimvar(UsdGeom.Tokens.faceVarying).Set(colors) # num_surf_tri * 3
+        
+        # set uv_coor variable
+        uv_coor = np.indices((int(triangles.shape[0]*1.5),2)).transpose((1,2,0)).reshape((-1,2))
+
+        try:
+            pv_api = UsdGeom.PrimvarsAPI(prim)
+            pv = pv_api.GetPrimvar("primvars:st")
+            pv.SetInterpolation(UsdGeom.Tokens.faceVarying)
+            pv.Set(uv_coor)
+        except:
+            pass
