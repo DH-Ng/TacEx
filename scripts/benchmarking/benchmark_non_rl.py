@@ -64,6 +64,7 @@ from isaacsim.benchmark.services import BaseIsaacBenchmark
 sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), "../.."))
 
 from isaaclab.utils.timer import Timer
+
 from scripts.benchmarks.utils import (
     log_app_start_time,
     log_python_imports_time,
@@ -76,16 +77,15 @@ from scripts.benchmarks.utils import (
 
 imports_time_begin = time.perf_counter_ns()
 
-import gymnasium as gym
-import numpy as np
 import os
-import torch
 from datetime import datetime
 
+import gymnasium as gym
+import isaaclab_tasks  # noqa: F401
+import numpy as np
+import torch
 from isaaclab.envs import DirectMARLEnvCfg, DirectRLEnvCfg, ManagerBasedRLEnvCfg
 from isaaclab.utils.dict import print_dict
-
-import isaaclab_tasks  # noqa: F401
 from isaaclab_tasks.utils.hydra import hydra_task_config
 
 imports_time_end = time.perf_counter_ns()

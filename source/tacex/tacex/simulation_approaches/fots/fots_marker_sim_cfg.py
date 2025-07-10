@@ -1,9 +1,9 @@
-import torch
+from dataclasses import MISSING, dataclass
+from typing import TYPE_CHECKING, Any, Dict, List, Sequence, Tuple, Union
 
-from dataclasses import dataclass, MISSING
-from typing import TYPE_CHECKING, Any, Dict, Sequence, Tuple, Union, List
-from isaaclab.utils import class_to_dict, to_camel_case, configclass
+import torch
 from isaaclab.sensors import FrameTransformerCfg, OffsetCfg
+from isaaclab.utils import class_to_dict, configclass, to_camel_case
 
 from ..gelsight_simulator_cfg import GelSightSimulatorCfg
 from .fots_marker_sim_with_frame_transformer import FOTSMarkerSimulator
@@ -14,21 +14,21 @@ class FOTSMarkerSimulatorCfg(GelSightSimulatorCfg):
     simulation_approach_class: type = FOTSMarkerSimulator
 
     calib_folder_path: str = ""
-    
+
     device: str = None
-    
+
     with_shadow: bool = False
 
     tactile_img_res: tuple = (240, 320)
     """Resolution of the Tactile Image.
-    
+
     Can be different from the Sensor Camera.
     If this is the case, then height map from camera is going to be up/down sampled.
     """
 
     lamb: list[float] = []
     """Parameters for exponential functions used by FOTS for marker simulation"""
-    
+
     # experimental params
     ball_radius = 4.70/2 # mm
     mm_to_pixel = 19.58 # units = pix/mm
@@ -48,9 +48,9 @@ class FOTSMarkerSimulatorCfg(GelSightSimulatorCfg):
         dy: float = 0
     marker_params: MarkerParams = MarkerParams()
 
-    init_marker_pos: tuple = ([[]],[[]]) 
+    init_marker_pos: tuple = ([[]],[[]])
     """Intial Marker positions.
-    
+
     Tuple (xx_init pos, yy_init pos):
     - xx_init = inital position of each marker along the "height" of the tactile img (top-down)
         -> for each marker the initial x pos. Shape: (num_markers_row, num_marker_column)
@@ -62,8 +62,8 @@ class FOTSMarkerSimulatorCfg(GelSightSimulatorCfg):
 
     # #### Camera Data
     # gelpad_to_camera_min_distance: float = MISSING
-    # """Min distance of camera to the gelpad. 
-    # Used for computing the indentation depth out of the 
+    # """Min distance of camera to the gelpad.
+    # Used for computing the indentation depth out of the
     # camera height map.
     # """
 

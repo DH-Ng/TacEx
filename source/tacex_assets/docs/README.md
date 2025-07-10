@@ -9,11 +9,11 @@ For TacEx, we use multiple robots and sensor models:
 - Franka
 - GelSight Mini sensor
 
-The directories `robots` and `sensors` contain python files with the configuration classes for the assets.   
+The directories `robots` and `sensors` contain python files with the configuration classes for the assets.
 
 The `data` directory contains the USD models of the assets.
 The directory structure follows the recommended structure (kinda) and is as follows:
-- `Robots/<Company-Name>/<Robot-Name>/<Sensor-Type>/<Robot-Type>`: The USD files should be inside `<Robot-Type>` directory with the name of the robot. E.g. `Robots/Franka/GelSight_Mini/Gripper` contains USD files for Franka Panda arms with a gripper as endeffector and GelSight Mini's attached to it (here we omitted the robot name for now). 
+- `Robots/<Company-Name>/<Robot-Name>/<Sensor-Type>/<Robot-Type>`: The USD files should be inside `<Robot-Type>` directory with the name of the robot. E.g. `Robots/Franka/GelSight_Mini/Gripper` contains USD files for Franka Panda arms with a gripper as endeffector and GelSight Mini's attached to it (here we omitted the robot name for now).
 >I know, thats a lot of subdir's, but I hope this makes stuff structured. Ofc happy for improvement suggestion :D
 
 - `Props/<Prop-Type>/<Prop-Name>`: The USD files should be inside `<Prop-Name>` directory with the name of the prop. This includes mounts, objects and markers.
@@ -32,8 +32,8 @@ You can use the following snippet to refer to the assets:
 from tacex_assets import TACEX_ASSETS_DATA_DIR
 # ANYmal-C
 ball = f"{TACEX_ASSETS_DATA_DIR}/Props/ball_wood.usd"
-``` 
+```
 
 
-# How to create your own sensor/robot asset 
+# How to create your own sensor/robot asset
 Example for creating an asset for Tactile Simulation - Creating an asset for the GelSight Mini

@@ -54,11 +54,11 @@ simulation_app = app_launcher.app
 
 """Rest everything follows."""
 
-import gymnasium as gym
 import os
-import torch
 
+import gymnasium as gym
 import skrl
+import torch
 from packaging import version
 
 # check for minimum supported skrl version
@@ -75,19 +75,23 @@ if args_cli.ml_framework.startswith("torch"):
 elif args_cli.ml_framework.startswith("jax"):
     from skrl.utils.runner.jax import Runner
 
-from omni.isaac.lab.envs import DirectMARLEnv, multi_agent_to_single_agent
-from omni.isaac.lab.utils.dict import print_dict
+import copy
 
 import omni.isaac.lab_tasks  # noqa: F401
 import tacex_rl.tasks
 
-from omni.isaac.lab_tasks.utils import get_checkpoint_path, load_cfg_from_registry, parse_env_cfg
-from omni.isaac.lab_tasks.utils.wrappers.skrl import SkrlVecEnvWrapper
-
 # required for manual SAC instantiation
 import torch
 import torch.nn as nn
-import copy
+from omni.isaac.lab.envs import DirectMARLEnv, multi_agent_to_single_agent
+from omni.isaac.lab.utils.dict import print_dict
+from omni.isaac.lab_tasks.utils import (
+    get_checkpoint_path,
+    load_cfg_from_registry,
+    parse_env_cfg,
+)
+from omni.isaac.lab_tasks.utils.wrappers.skrl import SkrlVecEnvWrapper
+
 # import the skrl components to build the RL system
 from skrl.agents.torch.sac import SAC, SAC_DEFAULT_CONFIG
 from skrl.envs.loaders.torch import load_isaaclab_env
@@ -132,7 +136,7 @@ class Critic(DeterministicMixin, Model):
 
     def compute(self, inputs, role):
         return self.net(torch.cat([inputs["states"], inputs["taken_actions"]], dim=1)), {}
-    
+
 def _process_cfg(cfg: dict) -> dict:
     """Convert simple types to skrl classes/components
     :param cfg: A configuration dictionary
@@ -218,8 +222,8 @@ def main():
     experiment_cfg["trainer"]["close_environment_at_exit"] = False
     experiment_cfg["agent"]["experiment"]["write_interval"] = 0  # don't log to TensorBoard
     experiment_cfg["agent"]["experiment"]["checkpoint_interval"] = 0  # don't generate checkpoints
-    
-    
+
+
     device = env.device
     # instantiate a memory as rollout buffer (any memory can be used for this)
     memory = RandomMemory(memory_size=15625, num_envs=env.num_envs, device=device)

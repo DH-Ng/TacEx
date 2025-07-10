@@ -5,21 +5,22 @@ from dataclasses import MISSING
 
 import isaacsim.core.utils.prims as prim_utils
 import isaacsim.core.utils.stage as stage_utils
-
-from pxr import Gf, Sdf, Usd, UsdGeom
 import omni.usd
 import usdrt
-
 from isaaclab.sim import converters, schemas
 from isaaclab.sim.spawners import materials
-from isaaclab.sim.spawners.spawner_cfg import DeformableObjectSpawnerCfg, RigidObjectSpawnerCfg, SpawnerCfg
+from isaaclab.sim.spawners.spawner_cfg import (
+    DeformableObjectSpawnerCfg,
+    RigidObjectSpawnerCfg,
+    SpawnerCfg,
+)
+from isaaclab.sim.utils import bind_physics_material, bind_visual_material, clone
 from isaaclab.utils import configclass
 from isaaclab.utils.assets import ISAAC_NUCLEUS_DIR
+from pxr import Gf, Sdf, Usd, UsdGeom
+from tacex_uipc.utils import MeshGenerator, TetMeshCfg
+from uipc.geometry import extract_surface, tetmesh
 
-from isaaclab.sim.utils import bind_physics_material, bind_visual_material, clone
-
-from uipc.geometry import tetmesh, extract_surface
-from tacex_uipc.utils import TetMeshCfg, MeshGenerator
 
 @configclass
 class FileCfg(RigidObjectSpawnerCfg, DeformableObjectSpawnerCfg):
@@ -155,29 +156,29 @@ def create_prim_for_tet_data(prim_path, tet_points_world, tet_indices):
     # spawn a usd mesh in Isaac
     stage = omni.usd.get_context().get_stage()
     prim = UsdGeom.Mesh.Define(stage, prim_path)
-    
+
     # extract surface from uipc computed tet mesh
     uipc_tet_mesh = tetmesh(tet_points_world.copy(), tet_indices.copy())
     surf = extract_surface(uipc_tet_mesh)
     tet_surf_tri = surf.triangles().topo().view().reshape(-1).tolist()
     tet_surf_points_world = surf.positions().view().reshape(-1,3)
-    
+
     MeshGenerator.update_usd_mesh(prim=prim, surf_points=tet_surf_points_world, triangles=tet_surf_tri)
 
 def create_prim_for_uipc_scene_object(uipc_sim, prim_path, uipc_scene_object):
     # spawn a usd mesh in Isaac
     stage = omni.usd.get_context().get_stage()
     prim = UsdGeom.Mesh.Define(stage, prim_path)
-    
+
     # get corresponding simplical complex from uipc_scene
-    obj_id = uipc_scene_object.geometries().ids()[0]     
+    obj_id = uipc_scene_object.geometries().ids()[0]
     simplicial_complex_slot, _ = uipc_sim.scene.geometries().find(obj_id)
-    
+
     # extract_surface
     surf = extract_surface(simplicial_complex_slot.geometry())
     tet_surf_tri = surf.triangles().topo().view().reshape(-1).tolist()
     tet_surf_points_world = surf.positions().view().reshape(-1,3)
-    
+
     MeshGenerator.update_usd_mesh(prim=prim, surf_points=tet_surf_points_world, triangles=tet_surf_tri)
 
     # setup mesh updates via Fabric
@@ -200,7 +201,7 @@ def create_prim_for_uipc_scene_object(uipc_sim, prim_path, uipc_scene_object):
 
     # add fabric meshes to uipc sim class for updating the render meshes
     uipc_sim._fabric_meshes.append(fabric_prim)
-    
+
     # save indices to later find corresponding points of the meshes for rendering
     num_surf_points = tet_surf_points_world.shape[0]
     uipc_sim._surf_vertex_offsets.append(

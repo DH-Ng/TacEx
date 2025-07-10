@@ -3,12 +3,13 @@
 .. code-block:: bash
 
     # Usage
-    isaaclab -p ./examples/falling_cubes.py 
+    isaaclab -p ./examples/falling_cubes.py
 """
 
 
 """Launch Isaac Sim Simulator first."""
 import argparse
+
 from isaaclab.app import AppLauncher
 
 # create argparser
@@ -29,29 +30,28 @@ simulation_app = app_launcher.app
 """Rest everything follows."""
 import pathlib
 
-import omni
-
-from isaacsim.core.prims import XFormPrim
 import isaacsim.core.utils.prims as prims_utils
+import omni
+from isaacsim.core.prims import XFormPrim
 from isaacsim.util.debug_draw import _debug_draw
+
 draw = _debug_draw.acquire_debug_draw_interface()
 
-import isaaclab.sim as sim_utils
-from isaaclab.utils.assets import ISAAC_NUCLEUS_DIR
-from isaaclab.assets import AssetBaseCfg
-from isaaclab.utils.timer import Timer
-
-from pxr import UsdGeom, Usd, Sdf, PhysxSchema, UsdPhysics, Gf, UsdShade, Vt
-
-import numpy as np
 import random
+
+import isaaclab.sim as sim_utils
+import numpy as np
 import warp as wp
+from isaaclab.assets import AssetBaseCfg
+from isaaclab.utils.assets import ISAAC_NUCLEUS_DIR
+from isaaclab.utils.timer import Timer
+from pxr import Gf, PhysxSchema, Sdf, Usd, UsdGeom, UsdPhysics, UsdShade, Vt
+from tacex_uipc import UipcObject, UipcObjectCfg, UipcSim, UipcSimCfg
+from tacex_uipc.utils import TetMeshCfg
 
 # import vtk
-from uipc.core import Engine, World, Scene, SceneIO
+from uipc.core import Engine, Scene, SceneIO, World
 
-from tacex_uipc import UipcSim, UipcSimCfg, UipcObject, UipcObjectCfg
-from tacex_uipc.utils import TetMeshCfg
 
 def design_scene():
     """Designs the scene by spawning ground plane, light, objects and meshes from usd files."""
@@ -68,7 +68,7 @@ def design_scene():
 
     # create a new xform prim for all objects to be spawned under
     prims_utils.define_prim("/World/Objects", "Xform")
-    
+
 
 def change_mat_color(stage, shader_prim_path, color):
     # source: https://forums.developer.nvidia.com/t/randomize-materials-and-textures-based-on-a-probability-extract-path-to-material-and-texture-from-usd/270188/4
@@ -82,7 +82,7 @@ def change_mat_color(stage, shader_prim_path, color):
     # Set the diffuse color to the input color
     shader_prim.GetAttribute('inputs:diffuse_color_constant').Set(color)
     shader_prim.GetAttribute('inputs:diffuse_tint').Set(color)
-     
+
 def main():
     """Main function."""
 
@@ -182,7 +182,7 @@ def main():
 
     # Play the simulator
     sim.reset()
-    
+
     # only after Isaac Sim got resetted (= objects init), otherwise wold init is false
     # because _initialize_impl() of the object is called in the sim.reset() method
     # and setup_scene() relies on objects being _intialized_impl()
@@ -215,14 +215,14 @@ def main():
                 uipc_sim.update_render_meshes()
                 #sim.forward()
                 # sim._update_fabric(0.0, 0.0)
-            
+
             # get time reports
             # uipc_sim.get_sim_time_report()
             total_uipc_sim_time += Timer.get_timer_info("uipc_step")
             total_uipc_render_time += Timer.get_timer_info("render_update")
 
-            step += 1      
-        
+            step += 1
+
         # start UIPC sim after pausing and playing the sim
         if sim.is_playing() is False:
             start_uipc_test = True
@@ -243,21 +243,21 @@ def main():
 
                 uipc_sim.reset()
                 sim.render()
-            
+
             avg_uipc_step_time = total_uipc_sim_time/step
             print(f"Sim step for uipc took in avg {avg_uipc_step_time} per frame.")
-            
+
             avg_uipc_render_time = total_uipc_render_time/step
             print(f"Render update for uipc took in avg {avg_uipc_render_time} per frame.")
             print("====================================================================================")
 
             step = 1
             num_resets += 1
-        
+
         if num_resets == 5:
             print("Stopping [Falling Cubes] example.")
             break
-        
+
 if __name__ == "__main__":
     # run the main function
     main()

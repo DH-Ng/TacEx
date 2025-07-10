@@ -1,6 +1,6 @@
 """Showcase on how to use libuipc with Isaac Sim/Lab.
 
-This example corresponds to 
+This example corresponds to
 https://github.com/spiriMirror/libuipc-samples/blob/main/python/1_hello_libuipc/main.py
 
 
@@ -8,6 +8,7 @@ https://github.com/spiriMirror/libuipc-samples/blob/main/python/1_hello_libuipc/
 
 """Launch Isaac Sim Simulator first."""
 import argparse
+
 from isaaclab.app import AppLauncher
 
 # create argparser
@@ -20,24 +21,26 @@ args_cli = parser.parse_args()
 app_launcher = AppLauncher(args_cli)
 simulation_app = app_launcher.app
 
-import numpy as np
-
 import isaaclab.sim as sim_utils
-from isaaclab.utils.timer import Timer
-
-from pxr import UsdGeom
+import numpy as np
 import omni.usd
-
 import uipc
-from uipc.geometry import tetmesh, label_surface, label_triangle_orient, flip_inward_triangles
-from uipc.constitution import AffineBodyConstitution
-from uipc.unit import MPa, GPa
-
+from isaaclab.utils.timer import Timer
+from pxr import UsdGeom
 from tacex_uipc import UipcSim, UipcSimCfg
+from uipc.constitution import AffineBodyConstitution
+from uipc.geometry import (
+    flip_inward_triangles,
+    label_surface,
+    label_triangle_orient,
+    tetmesh,
+)
+from uipc.unit import GPa, MPa
+
 
 def setup_base_scene(sim: sim_utils.SimulationContext):
     """To make the scene pretty.
-    
+
     """
     # set upAxis to Y to match libuipc-samples
     stage = omni.usd.get_context().get_stage()
@@ -46,7 +49,7 @@ def setup_base_scene(sim: sim_utils.SimulationContext):
     # Design scene by spawning assets
     cfg_ground = sim_utils.GroundPlaneCfg()
     cfg_ground.func(
-        prim_path="/World/defaultGroundPlane", 
+        prim_path="/World/defaultGroundPlane",
         cfg=cfg_ground,
         translation=[0, -1, 0],
         orientation=[0.7071068, -0.7071068, 0, 0]
@@ -101,7 +104,7 @@ def setup_libuipc_scene(scene):
 
     # create objects
     object1 = scene.objects().create("upper_tet")
-    object1.geometries().create(mesh1)  
+    object1.geometries().create(mesh1)
 
     object2 = scene.objects().create("lower_tet")
     object2.geometries().create(mesh2)
@@ -132,7 +135,7 @@ def main():
     uipc_sim = UipcSim(uipc_cfg)
 
     setup_libuipc_scene(uipc_sim.scene)
-    
+
     # init liubipc world etc.
     uipc_sim.setup_sim()
     uipc_sim.init_libuipc_scene_rendering()
@@ -168,8 +171,8 @@ def main():
             total_uipc_sim_time += Timer.get_timer_info("uipc_step")
             total_uipc_render_time += Timer.get_timer_info("render_update")
 
-            step += 1      
-          
+            step += 1
+
 if __name__ == "__main__":
     # run the main function
     main()

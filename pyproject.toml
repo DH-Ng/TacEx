@@ -654,7 +654,7 @@ extraPaths = [
     "/isaac-sim/kit/plugins/bindings-python",
     "/isaac-sim/kit/python/lib/python3.10",
     "/isaac-sim/kit/python/lib/python3.10/site-packages",
-    
+
     "/workspace/isaaclab/source/isaaclab",
     "/workspace/isaaclab/source/isaaclab_assets",
     "/workspace/isaaclab/source/isaaclab_mimic",

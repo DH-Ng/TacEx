@@ -1,53 +1,57 @@
 from __future__ import annotations
 
-from omni import physx
-import scipy.spatial.transform as tf
-from dataclasses import dataclass, MISSING
+import time
 from collections.abc import Sequence
-from typing import Any, Dict, Tuple, Union, List, TYPE_CHECKING
+from dataclasses import MISSING, dataclass
+from pathlib import Path
+from typing import TYPE_CHECKING, Any, Dict, List, Tuple, Union
 
-from omni.physx.scripts import utils
+import cv2
+import isaaclab.sim as sim_utils
 import isaacsim.core.utils.prims as prim_utils
 import isaacsim.core.utils.stage as stage_utils
-import isaaclab.sim as sim_utils
-
+import numpy as np
 import omni.kit.commands
 import omni.usd
-
-from isaacsim.core.prims import XFormPrim
-
-from pxr import Gf, Sdf, Usd, UsdGeom, UsdPhysics, PhysxSchema, UsdShade
-from omni.physx.scripts import deformableUtils, physicsUtils
-
-from pathlib import Path
-import cv2
-from matplotlib import pyplot as plt
-import numpy as np
+import scipy.spatial.transform as tf
 import torch
 import torchvision.transforms.functional as F
+from isaaclab.sensors import (
+    Camera,
+    CameraCfg,
+    SensorBase,
+    SensorBaseCfg,
+    TiledCamera,
+    TiledCameraCfg,
+)
+from isaaclab.utils import class_to_dict, configclass, to_camel_case
+from isaaclab.utils.math import convert_quat
+from isaacsim.core.prims import XFormPrim
+from matplotlib import pyplot as plt
+from omni import physx
+from omni.physx.scripts import deformableUtils, physicsUtils, utils
+from pxr import Gf, PhysxSchema, Sdf, Usd, UsdGeom, UsdPhysics, UsdShade
+
+from .gelsight_sensor_data import GelSightSensorData
+from .simulation_approaches.gelsight_simulator import GelSightSimulator
+
 # from torchvision.transforms import v2
 
-from isaaclab.utils import class_to_dict, to_camel_case, configclass
-from isaaclab.utils.math import convert_quat
 
-from isaaclab.sensors import SensorBase, SensorBaseCfg, Camera, CameraCfg, TiledCamera, TiledCameraCfg
 # from isaaclab.sensors.sensor_base_cfg import SensorBaseCfg
 # from isaaclab.sensors.camera.camera import Camera
 # from isaaclab.sensors.camera.camera_cfg import CameraCfg
 
 
-import time
 
 
-from .simulation_approaches.gelsight_simulator import GelSightSimulator
 
-from .gelsight_sensor_data import GelSightSensorData
 if TYPE_CHECKING:
     from .gelsight_sensor_cfg import GelSightSensorCfg
 
 class GelSightSensor(SensorBase):
     cfg: GelSightSensorCfg
-    
+
     def __init__(self, cfg: GelSightSensorCfg):
         self.cfg = cfg
 
@@ -77,9 +81,9 @@ class GelSightSensor(SensorBase):
                 sensor = self,
                 cfg = self.cfg.optical_sim_cfg,
             )
-            
+
         if self.cfg.marker_motion_sim_cfg is not None:
-            if ((self.optical_simulator is not None) and 
+            if ((self.optical_simulator is not None) and
                 (self.cfg.optical_sim_cfg.simulation_approach_class == self.cfg.marker_motion_sim_cfg.simulation_approach_class)):
                 # if same class for optical and marker sim, then use same obj
                 self.marker_motion_simulator = self.optical_simulator
@@ -90,7 +94,7 @@ class GelSightSensor(SensorBase):
                 )
 
         self._prim_view = XFormPrim(prim_paths_expr=self.cfg.prim_path, name=f"{self.cfg.prim_path}", usd=False)
-        
+
         # initialize base class
         super().__init__(self.cfg)
 
@@ -113,7 +117,7 @@ class GelSightSensor(SensorBase):
     #         # f"\tposition     : {self._data.position} \n"
     #         # f"\torientation  : {self._data.orientation} \n"
     #     )
-    
+
     """
     Properties
     """
@@ -123,26 +127,26 @@ class GelSightSensor(SensorBase):
         # update sensors if needed
         self._update_outdated_buffers()
         return self._data
-    
+
     @property
     def frame(self) -> torch.tensor:
         """Frame number when the measurement took place."""
         return self._frame
-    
+
     @property
-    def tactile_image_shape(self) -> Tuple[int, int]:
+    def tactile_image_shape(self) -> tuple[int, int]:
         """Shape of the simulated tactile RGB image, i.e. (channels, height, width)."""
         return self.cfg.optical_sim_cfg.tactile_img_res[1], self.cfg.optical_sim_cfg.tactile_img_res[0], 3
 
     @property
-    def camera_resolution(self) -> Tuple[int, int]:
+    def camera_resolution(self) -> tuple[int, int]:
         """The resolution (width x height) of the camera used by this sensor."""
         return self.cfg.sensor_camera_cfg.resolution[0], self.cfg.sensor_camera_cfg.resolution[1]  # type: ignore
 
     @property
     def indentation_depth(self):
-        """How deep objects are inside the gel pad of the sensor. 
-        
+        """How deep objects are inside the gel pad of the sensor.
+
         Units: [mm]
         """
         return self._indentation_depth
@@ -150,7 +154,7 @@ class GelSightSensor(SensorBase):
     @property
     def prim_view(self):
         return self._prim_view
-    
+
     """
     Operations
     """
@@ -162,7 +166,7 @@ class GelSightSensor(SensorBase):
         # note: cannot do smart indexing here since we do a for loop over data.
         if env_ids is None:
             env_ids = self._ALL_INDICES # type: ignore
-        
+
         # reset camera
         if self.camera is not None:
             self.camera.reset()
@@ -172,12 +176,12 @@ class GelSightSensor(SensorBase):
         # self._data.orientation = None
         #self._data.image_resolution = self.image_resolution
 
-        self._indentation_depth[env_ids] = 0 
+        self._indentation_depth[env_ids] = 0
 
         # reset height map
         self._data.output["height_map"][env_ids] = 0
         # torch.zeros(
-        #     (env_ids.size(), self.camera_cfg.height, self.camera_cfg.width), 
+        #     (env_ids.size(), self.camera_cfg.height, self.camera_cfg.width),
         #     device=self.cfg.device
         # )
 
@@ -199,24 +203,24 @@ class GelSightSensor(SensorBase):
             self._data.output["marker_motion"][:] = self.marker_motion_simulator.marker_motion_simulation() #TODO adjust mm2pix value 19.58 #/19.58
             # (yy_init_pos, xx_init_pos), i.e. along height x width of tactile img
             self._data.output["init_marker_pos"] = ([0], [0])
-            
+
             self.marker_motion_simulator.reset()
 
         # Reset the frame count
         self._frame[env_ids] = 0
 
- 
+
 ####
 # Implemenation of abstract methods of base sensor class
-#### 
-    #MARK: _init_impl      
+####
+    #MARK: _init_impl
     def _initialize_impl(self):
         """Initializes the sensor handles and internal buffers."""
         print(f"Initializing GelSight Sensor {self.cfg.prim_path}...")
 
         # Initialize parent class
         super()._initialize_impl()
-        
+
         self._prim_view.initialize()
         # Check that sizes are correct
         if self._prim_view.count != self._num_envs:
@@ -224,7 +228,7 @@ class GelSightSensor(SensorBase):
                 f"Number of sensor prims in the view ({self._prim_view.count}) does not match"
                 f" the number of environments ({self._num_envs})."
             )
-    
+
         # set device, if specified (per default the same as the simulation)
         if self.cfg.device is not None:
             self._device = self.cfg.device
@@ -235,10 +239,10 @@ class GelSightSensor(SensorBase):
         self._frame = torch.zeros(self._num_envs, device=self._device, dtype=torch.long)
 
         self._indentation_depth = torch.zeros((self._num_envs), device=self._device)
-        
+
         if self.cfg.sensor_camera_cfg is not None:
             self.camera_cfg: TiledCameraCfg = TiledCameraCfg(
-                    prim_path= self.cfg.prim_path + self.cfg.sensor_camera_cfg.prim_path_appendix, 
+                    prim_path= self.cfg.prim_path + self.cfg.sensor_camera_cfg.prim_path_appendix,
                     update_period= self.cfg.sensor_camera_cfg.update_period,
                     height=self.cfg.sensor_camera_cfg.resolution[1],
                     width=self.cfg.sensor_camera_cfg.resolution[0],
@@ -246,14 +250,14 @@ class GelSightSensor(SensorBase):
                     spawn= None, # use camera which is part of the GelSight Mini Asset
                     # spawn=sim_utils.PinholeCameraCfg(
                     #    focal_length=24.0, focus_distance=400.0, horizontal_aperture=20.955, clipping_range=(0.1, 1.0e5)
-                    # ),      
+                    # ),
                     #depth_clipping_behavior="max", # doesnt work, cause "max" value is taking from spawn config, which we dont have
             )
             self.camera = TiledCamera(cfg=self.camera_cfg)
-            
+
             # use normal camera
             # self.camera_cfg: CameraCfg = CameraCfg(
-            #         prim_path= self.cfg.prim_path + self.cfg.sensor_camera_cfg.prim_path_appendix, 
+            #         prim_path= self.cfg.prim_path + self.cfg.sensor_camera_cfg.prim_path_appendix,
             #         update_period= self.cfg.sensor_camera_cfg.update_period,
             #         height= self.cfg.sensor_camera_cfg.resolution[1],
             #         width= self.cfg.sensor_camera_cfg.resolution[0],
@@ -261,17 +265,17 @@ class GelSightSensor(SensorBase):
             #         spawn= None, # use camera which is part of the GelSight Mini Asset
             #         # spawn=sim_utils.PinholeCameraCfg(
             #         #    focal_length=24.0, focus_distance=400.0, horizontal_aperture=20.955, clipping_range=(0.1, 1.0e5)
-            #         # ),      
+            #         # ),
             #         #depth_clipping_behavior="max", # doesnt work, cause "max" value is taking from spawn config, which we dont have
             # )
             # self.camera = Camera(cfg=self.camera_cfg)
 
             # need to initialize the camera manually, since its not part of the scene cfg
-            self.camera._initialize_impl() 
+            self.camera._initialize_impl()
             self.camera._is_initialized = True
 
         self._data.output["height_map"] = torch.zeros(
-            (self._num_envs, self.camera_cfg.height, self.camera_cfg.width), 
+            (self._num_envs, self.camera_cfg.height, self.camera_cfg.width),
             device=self.cfg.device
         )
 
@@ -280,33 +284,33 @@ class GelSightSensor(SensorBase):
         #     if not self._is_spawned:
         #         raise RuntimeError("Initializing the camera failed! Please provide a valid argument for `prim_path`.")
         #     sensor_prim_path = self.prim_path
-        
+
         # initialize sim approaches
         if self.optical_simulator is not None:
             self.optical_simulator._initialize_impl()
-        
+
         if self.marker_motion_simulator is not None:
             self.marker_motion_simulator._initialize_impl()
 
         # create buffers for output
         if "camera_depth" in self.cfg.data_types:
             self._data.output["camera_depth"] = torch.zeros(
-                (self._num_envs, self.camera_resolution[1], self.camera_resolution[0], 1), 
+                (self._num_envs, self.camera_resolution[1], self.camera_resolution[0], 1),
                 device=self.cfg.device
             )
         if "tactile_rgb" in self.cfg.data_types:
             self._data.output["tactile_rgb"] = torch.zeros(
-                (self._num_envs, self.cfg.optical_sim_cfg.tactile_img_res[1], self.cfg.optical_sim_cfg.tactile_img_res[0], 3), 
+                (self._num_envs, self.cfg.optical_sim_cfg.tactile_img_res[1], self.cfg.optical_sim_cfg.tactile_img_res[0], 3),
                 device=self.cfg.device
             )
         if "marker_motion" in self.cfg.data_types:
             self._data.output["marker_motion"]= torch.zeros(
                 (
                     self._num_envs,
-                    self.cfg.marker_motion_sim_cfg.marker_params.num_markers_row, 
+                    self.cfg.marker_motion_sim_cfg.marker_params.num_markers_row,
                     self.cfg.marker_motion_sim_cfg.marker_params.num_markers_col,
                     2 # two, because each marker at (row,col) has position value (y,x)
-                ), 
+                ),
                 device=self.cfg.device
             )
 
@@ -353,7 +357,7 @@ class GelSightSensor(SensorBase):
 
         if "camera_depth" in self._data.output:
             self._get_camera_depth()
-            
+
         if (self.optical_simulator is not None) and ("tactile_rgb" in self.cfg.data_types):
             # self.optical_simulator.height_map = self._data.output["height_map"]
             self._data.output["tactile_rgb"][:] = self.optical_simulator.optical_simulation()
@@ -364,11 +368,11 @@ class GelSightSensor(SensorBase):
 
     def _set_debug_vis_impl(self, debug_vis: bool):
         """ Creates an USD attribute for the sensor asset, which can visualize the tactile image.
-        
-        Select the GelSight sensor case whose output you want to see in the Isaac Sim GUI, 
+
+        Select the GelSight sensor case whose output you want to see in the Isaac Sim GUI,
         i.e. the `gelsight_mini_case` Xform (not the mesh!).
         Scroll down in the properties panel to "Raw Usd Properties" and click "Extra Properties".
-        There is an attribute called "show_tactile_image". 
+        There is an attribute called "show_tactile_image".
         Toggle it on to show the sensor output in the GUI.
 
         If only optical simulation is used, then only an optical img is displayed.
@@ -389,7 +393,7 @@ class GelSightSensor(SensorBase):
                 if "marker_motion" in self.cfg.data_types:
                     attr = prim.CreateAttribute("debug_marker_motion", Sdf.ValueTypeNames.Bool)
                     attr.Set(False)
-                        
+
             if not hasattr(self, "_windows"):
                 # dict of windows that show the simulated tactile images, if the attribute of the sensor asset is turned on
                 self._windows = {}
@@ -398,7 +402,7 @@ class GelSightSensor(SensorBase):
                 if "camera_depth" in self.cfg.data_types:
                     self._windows["camera_depth"] = {}
                     self._img_providers["camera_depth"] = {}
-        
+
             if "tactile_rgb" in self.cfg.data_types:
                 self.optical_simulator._set_debug_vis_impl(debug_vis)
 
@@ -406,10 +410,10 @@ class GelSightSensor(SensorBase):
                 self.marker_motion_simulator._set_debug_vis_impl(debug_vis)
 
 
-    def _debug_vis_callback(self, event):    
+    def _debug_vis_callback(self, event):
         if self._prim_view is None:
             return
-                
+
         # Update the GUI windows
         for i, prim in enumerate(self._prim_view.prims): #! bad that we iterate through all prims multiple times (once per sim data type)
 
@@ -442,14 +446,14 @@ class GelSightSensor(SensorBase):
                     # remove window/img_provider from dictionary and destroy them
                     self._windows["camera_depth"].pop(str(i)).destroy()
                     self._img_providers["camera_depth"].pop(str(i)).destroy()
-        
+
         if "tactile_rgb" in self.cfg.data_types:
             self.optical_simulator._debug_vis_callback(event)
-        
+
         if "marker_motion" in self.cfg.data_types:
             self.marker_motion_simulator._debug_vis_callback(event)
-        
-    """ 
+
+    """
     Private Helper methods
     """
     #TODO implement
@@ -487,7 +491,7 @@ class GelSightSensor(SensorBase):
     #     poses, quat = self._prim_view.get_world_poses(env_ids)
     #     self._data.pos_w[env_ids] = poses
     #     self._data.quat_w_world[env_ids] = convert_orientation_convention(quat, origin="opengl", target="world")
-    
+
     def _get_camera_depth(self):
         if self.camera is not None:
             depth_output = self.camera.data.output["depth"][:,:,:,0] # tiled camera gives us data with shape (num_cameras, height, width, num_channels),
@@ -519,7 +523,7 @@ class GelSightSensor(SensorBase):
             # e.g. use soft body deformation as height map? -> not implemented yet
             # or that we dont need a height map in general
             pass
-    
+
     def _show_height_map_inside_gui(self, index):
         plt.close()
         height_map = self._data.output["height_map"][0].cpu().numpy()
@@ -550,4 +554,3 @@ class GelSightSensor(SensorBase):
         if hasattr(self, "_windows"):
             self._windows = None
             self._img_providers = None
-        

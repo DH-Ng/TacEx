@@ -1,6 +1,6 @@
 """Showcase on how to use libuipc with Isaac Sim/Lab.
 
-This example corresponds to 
+This example corresponds to
 https://github.com/spiriMirror/libuipc-samples/blob/main/python/1_hello_libuipc/main.py
 
 
@@ -8,6 +8,7 @@ https://github.com/spiriMirror/libuipc-samples/blob/main/python/1_hello_libuipc/
 
 """Launch Isaac Sim Simulator first."""
 import argparse
+
 from isaaclab.app import AppLauncher
 
 # create argparser
@@ -20,37 +21,46 @@ args_cli = parser.parse_args()
 app_launcher = AppLauncher(args_cli)
 simulation_app = app_launcher.app
 
-import numpy as np
 import pathlib
 
 import isaaclab.sim as sim_utils
-from isaaclab.utils.timer import Timer
-
-from pxr import Gf, Sdf, Usd, UsdGeom
+import numpy as np
 import omni.usd
-import usdrt
-
 import uipc
-from uipc.core import Engine, World, Scene
-from uipc.geometry import tetmesh, label_surface, label_triangle_orient, flip_inward_triangles, extract_surface
-from uipc.constitution import AffineBodyConstitution
-from uipc.unit import MPa, GPa
-
-
-from uipc import view
-from uipc import Logger, Animation
-from uipc import Vector3, Vector2, Transform, Quaternion, AngleAxis
-from uipc import builtin
-from uipc.core import Engine, World, Scene, SceneIO
-from uipc.geometry import GeometrySlot, SimplicialComplex, SimplicialComplexSlot, SimplicialComplexIO, label_surface
-from uipc.constitution import AffineBodyConstitution, RotatingMotor
-from uipc.unit import MPa
-
+import usdrt
+from isaaclab.utils.timer import Timer
+from pxr import Gf, Sdf, Usd, UsdGeom
 from tacex_uipc import UipcSim, UipcSimCfg
+from uipc import (
+    AngleAxis,
+    Animation,
+    Logger,
+    Quaternion,
+    Transform,
+    Vector2,
+    Vector3,
+    builtin,
+    view,
+)
+from uipc.constitution import AffineBodyConstitution, RotatingMotor
+from uipc.core import Engine, Scene, SceneIO, World
+from uipc.geometry import (
+    GeometrySlot,
+    SimplicialComplex,
+    SimplicialComplexIO,
+    SimplicialComplexSlot,
+    extract_surface,
+    flip_inward_triangles,
+    label_surface,
+    label_triangle_orient,
+    tetmesh,
+)
+from uipc.unit import GPa, MPa
+
 
 def setup_base_scene(sim: sim_utils.SimulationContext):
     """To make the scene pretty.
-    
+
     """
     # set upAxis to Y to match libuipc-samples
     stage = omni.usd.get_context().get_stage()
@@ -59,7 +69,7 @@ def setup_base_scene(sim: sim_utils.SimulationContext):
     # Design scene by spawning assets
     cfg_ground = sim_utils.GroundPlaneCfg()
     cfg_ground.func(
-        prim_path="/World/defaultGroundPlane", 
+        prim_path="/World/defaultGroundPlane",
         cfg=cfg_ground,
         translation=[0, -1, 0],
         orientation=[0.7071068, -0.7071068, 0, 0]
@@ -74,21 +84,21 @@ def setup_base_scene(sim: sim_utils.SimulationContext):
 
 def setup_libuipc_scene(scene):
     trimesh_path = str(pathlib.Path(__file__).parent.resolve() / "trimesh")
-    
+
     t = Transform.Identity()
     t.scale(0.05)
     io = SimplicialComplexIO()
     abd = AffineBodyConstitution()
     rm = RotatingMotor()
     scene.contact_tabular().default_model(0, 1e9)
-    
+
     screw_obj = scene.objects().create('screw')
     screw_mesh = io.read(f'{trimesh_path}/screw-and-nut/screw-big-2.obj')
     label_surface(screw_mesh)
     abd.apply_to(screw_mesh, 100 * MPa)
     rm.apply_to(screw_mesh, 100, motor_axis=Vector3.UnitY(), motor_rot_vel=-np.pi)
     screw_obj.geometries().create(screw_mesh)
-    
+
     def screw_animation(info:Animation.UpdateInfo):
         geo_slots = info.geo_slots()
         geo_slot: SimplicialComplexSlot = geo_slots[0]
@@ -96,9 +106,9 @@ def setup_libuipc_scene(scene):
         is_constrained = geo.instances().find(builtin.is_constrained)
         view(is_constrained)[0] = 1
         RotatingMotor.animate(geo, info.dt())
-        
+
     scene.animator().insert(screw_obj, screw_animation)
-    
+
     nut_obj = scene.objects().create('nut')
     nut_mesh = io.read(f'{trimesh_path}/screw-and-nut/nut-big-2.obj')
     label_surface(nut_mesh)
@@ -153,7 +163,7 @@ def main():
 
     # to save/ load the simulation frames
     recover_sim = False
-    
+
     # Simulate physics
     while simulation_app.is_running():
 
@@ -176,9 +186,9 @@ def main():
                     print("Replaying frame ", uipc_sim.world.frame() + 1)
                 else:
                     with Timer("[INFO]: Time taken for uipc sim step", name="uipc_step"):
-                        uipc_sim.step()  
+                        uipc_sim.step()
                     total_uipc_sim_time += Timer.get_timer_info("uipc_step")
-                    uipc_sim.world.dump() 
+                    uipc_sim.world.dump()
             else:
                 with Timer("[INFO]: Time taken for uipc sim step", name="uipc_step"):
                     uipc_sim.step()
@@ -191,10 +201,10 @@ def main():
 
             # get time reports
             uipc_sim.get_sim_time_report()
-            
+
             step += 1
-         
-          
+
+
 if __name__ == "__main__":
     # run the main function
     main()

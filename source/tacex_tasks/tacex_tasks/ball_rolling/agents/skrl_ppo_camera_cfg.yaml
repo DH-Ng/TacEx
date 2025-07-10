@@ -90,7 +90,7 @@ agent:
     wandb_kwargs: {
       "sync_tensorboard": True,
       "project": "ball_rolling_tactile"
-    }    
+    }
 
 
 # Sequential trainer

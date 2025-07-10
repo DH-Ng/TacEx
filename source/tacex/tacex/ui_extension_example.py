@@ -10,15 +10,13 @@ import math
 import random
 from ctypes import alignment
 
-
 import carb
 import carb.events
+import numpy as np
 import omni.ext
 import omni.ui as ui
 import omni.usd
 from usdrt import Gf, Rt, Sdf, Usd, Vt
-
-import numpy as np
 
 try:
     wp = None
@@ -120,7 +118,7 @@ def get_fabric_data_for_prim(stage_id, path):
             # Some data types not yet supported in Python
             datastr = "<no Python conversion>"
 
-        result += "{} ({}): {}\n".format(attr.GetName(), str(attr.GetTypeName().GetAsToken()), datastr)
+        result += f"{attr.GetName()} ({str(attr.GetTypeName().GetAsToken())}): {datastr}\n"
 
     return result
 
@@ -174,9 +172,9 @@ def deform_mesh_with_warp(stage_id, path, time):
     warparray = wp.array(pointsarray, dtype=wp.vec3, device="cuda")
 
     wp.launch(
-        kernel=deform, 
-        dim=len(pointsarray), 
-        inputs=[warparray, time], 
+        kernel=deform,
+        dim=len(pointsarray),
+        inputs=[warparray, time],
         device="cuda"
     )
 
@@ -238,6 +236,6 @@ class UsdrtExamplePythonExtension(omni.ext.IExt):
         update_stream = omni.kit.app.get_app().get_update_event_stream()
         self.sub = update_stream.create_subscription_to_pop(on_update, name="omni.example.python.usdrt.on_update")
         return
-    
+
     def on_shutdown(self):
         print("[omni.example.python.usdrt] shutdown")

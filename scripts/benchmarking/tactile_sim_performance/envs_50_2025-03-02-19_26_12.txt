@@ -1,4 +1,4 @@
-Sensor Config: 
+Sensor Config:
 {
   "class_type": "tacex.gelsight_sensor:GelSightSensor",
   "prim_path": "/World/envs/env_.*/Robot/gelsight_mini_case",
@@ -53,15 +53,15 @@ Sensor Config:
     640
   ]
 }
-GPU Info: 
-Name: NVIDIA GeForce RTX 4090 Laptop GPU 
-Driver: 550.144.03 
+GPU Info:
+Name: NVIDIA GeForce RTX 4090 Laptop GPU
+Driver: 550.144.03
 
-Performance data: 
-num_envs: 50 
+Performance data:
+num_envs: 50
 Total amount of 'in-contact' frames per env (ran pattern 3 times): 1752
-Total sim time: 212.1564ms 
-Avg physics_sim time for one frame per env:      0.5583ms 
-Avg tactile_sim time for one frame per env:      1.4876ms 
+Total sim time: 212.1564ms
+Avg physics_sim time for one frame per env:      0.5583ms
+Avg tactile_sim time for one frame per env:      1.4876ms
 
 | CPU:3.5% | RAM:61.4% | GPU Compute:89% | GPU Memory: 62.23% |

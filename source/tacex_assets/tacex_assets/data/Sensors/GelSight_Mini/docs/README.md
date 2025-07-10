@@ -18,7 +18,7 @@ For example
 Additionally we added a translucent plate between gelpad and sensor case.
 This plate is used to attach the gelpad to the sensor case (in PhysX based simulation).
 The translucency is important for camera based simulation approaches.
-Without it, the camera would render images of the plate and not of the indenter. 
+Without it, the camera would render images of the plate and not of the indenter.
 Alternativly, you can turn the meshes that get in the way of the camera invisible.
 If the `Translucency` is not activated in the Render Settings then the objects are simply invisible.
 ![Translucency_setting_in_gui](translucency.png)

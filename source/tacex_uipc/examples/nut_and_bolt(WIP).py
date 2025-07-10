@@ -3,12 +3,13 @@
 .. code-block:: bash
 
     # Usage
-    isaaclab -p ./examples/falling_cubes.py 
+    isaaclab -p ./examples/falling_cubes.py
 """
 
 
 """Launch Isaac Sim Simulator first."""
 import argparse
+
 from isaaclab.app import AppLauncher
 
 # create argparser
@@ -29,29 +30,28 @@ simulation_app = app_launcher.app
 """Rest everything follows."""
 import pathlib
 
-import omni
-
-from isaacsim.core.prims import XFormPrim
 import isaacsim.core.utils.prims as prims_utils
+import omni
+from isaacsim.core.prims import XFormPrim
 from isaacsim.util.debug_draw import _debug_draw
+
 draw = _debug_draw.acquire_debug_draw_interface()
 
-import isaaclab.sim as sim_utils
-from isaaclab.utils.assets import ISAAC_NUCLEUS_DIR
-from isaaclab.assets import AssetBaseCfg
-from isaaclab.utils.timer import Timer
-
-from pxr import UsdGeom, Usd, Sdf, PhysxSchema, UsdPhysics, Gf, UsdShade, Vt
-
-import numpy as np
 import random
+
+import isaaclab.sim as sim_utils
+import numpy as np
 import warp as wp
+from isaaclab.assets import AssetBaseCfg
+from isaaclab.utils.assets import ISAAC_NUCLEUS_DIR
+from isaaclab.utils.timer import Timer
+from pxr import Gf, PhysxSchema, Sdf, Usd, UsdGeom, UsdPhysics, UsdShade, Vt
+from tacex_uipc import UipcObject, UipcObjectCfg, UipcSim, UipcSimCfg
+from tacex_uipc.utils import TetMeshCfg
 
 # import vtk
-from uipc.core import Engine, World, Scene, SceneIO
+from uipc.core import Engine, Scene, SceneIO, World
 
-from tacex_uipc import UipcSim, UipcSimCfg, UipcObject, UipcObjectCfg
-from tacex_uipc.utils import TetMeshCfg
 
 def design_scene():
     """Designs the scene by spawning ground plane, light, objects and meshes from usd files."""
@@ -68,7 +68,7 @@ def design_scene():
 
     # create a new xform prim for all objects to be spawned under
     prims_utils.define_prim("/World/Objects", "Xform")
-       
+
 def main():
     """Main function."""
 
@@ -89,7 +89,7 @@ def main():
     # spawn uipc objects
     bolt_asset_path = pathlib.Path(__file__).parent.resolve() / "assets" / "nut_and_bolt" /"m20_bolt_wt.usd"
     nut_asset_path = pathlib.Path(__file__).parent.resolve() / "assets" / "nut_and_bolt" /"m20_nut_wt.usd"
-    
+
     cube_cfg = UipcObjectCfg(
         prim_path="/World/Objects/Cube0",
         init_state=AssetBaseCfg.InitialStateCfg(pos=[0, 0, 1.25]), #rot=(0.72,-0.3,0.42,-0.45)
@@ -117,7 +117,7 @@ def main():
 
     # Play the simulator
     sim.reset()
-    
+
     # only after Isaac Sim got resetted (= objects init), otherwise world init is false
     # because _initialize_impl() of the object is called in the sim.reset() method
     # and setup_scene() relies on objects being _intialized_impl()
@@ -166,8 +166,8 @@ def main():
             total_uipc_sim_time += Timer.get_timer_info("uipc_step")
             total_uipc_render_time += Timer.get_timer_info("render_update")
 
-            step += 1      
-        
+            step += 1
+
         # start UIPC sim after pausing and playing the sim
         if sim.is_playing() is False:
             start_uipc_test = True
@@ -193,13 +193,13 @@ def main():
                 sim.render()
             avg_uipc_step_time = total_uipc_sim_time/step
             print(f"Sim step for uipc took in avg {avg_uipc_step_time} per frame.")
-            
+
             avg_uipc_render_time = total_uipc_render_time/step
             print(f"Render update for uipc took in avg {avg_uipc_render_time} per frame.")
             print("====================================================================================")
 
             step = 1
-          
+
 if __name__ == "__main__":
     # run the main function
     main()

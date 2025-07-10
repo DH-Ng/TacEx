@@ -10,30 +10,27 @@ import math
 import random
 from ctypes import alignment
 
-
 import carb
 import carb.events
+import isaacsim.core.utils.xforms as xform_utils
 import omni.ext
+from isaacsim.core.prims import XFormPrim
+from isaacsim.util.debug_draw import _debug_draw
+
 # import omni.usd
 from omni.physx import get_physx_cooking_interface, get_physx_interface
 
-import isaacsim.core.utils.xforms as xform_utils
-from isaacsim.core.prims import XFormPrim
-
-from isaacsim.util.debug_draw import _debug_draw
 draw = _debug_draw.acquire_debug_draw_interface()
 
-from omni.physx.scripts import deformableUtils
-
-from usdrt import Gf, Rt, Sdf, Usd, Vt
-from pxr import UsdGeom, Gf, UsdPhysics
-import pxr
-
 import numpy as np
+import pxr
 import wildmeshing as wm
+from omni.physx.scripts import deformableUtils
+from pxr import Gf, UsdGeom, UsdPhysics
+from usdrt import Gf, Rt, Sdf, Usd, Vt
 
+from tacex_uipc.sim import UipcIsaacAttachments
 from tacex_uipc.utils import MeshGenerator, TetMeshCfg
-from tacex_uipc import UipcIsaacAttachments 
 
 try:
     wp = None
@@ -142,13 +139,13 @@ def get_fabric_data_for_prim(stage_id, path):
             # Some data types not yet supported in Python
             datastr = "<no Python conversion>"
 
-        result += "{} ({}): {}\n".format(attr.GetName(), str(attr.GetTypeName().GetAsToken()), datastr)
+        result += f"{attr.GetName()} ({str(attr.GetTypeName().GetAsToken())}): {datastr}\n"
 
     return result
 
 
 ### MESH STUFF
-def _generate_tet_mesh(path, tet_cfg=None):        
+def _generate_tet_mesh(path, tet_cfg=None):
     """
     Need to make sure that we load the geom mesh in USD and not just the Xform of the prim
     """
@@ -196,13 +193,13 @@ def _draw_tets(all_vertices, tet_indices):
 
     # first draw the tet mesh nodes
     # draw.draw_points(all_vertices, [(255,0,0,1)]*len(all_vertices), [10]*len(all_vertices))
-    
+
     # connect nodes according to tet_indices
     color = [(125,0,0,0.5)]
     for i in range(0, len(tet_indices), 4):
         tet_points_idx = tet_indices[i:i+4]
         tet_points = [all_vertices[i] for i in tet_points_idx]
-        #draw.draw_points(tet_points, [(255,0,0,1)]*len(all_vertices), [10]*len(all_vertices)) 
+        #draw.draw_points(tet_points, [(255,0,0,1)]*len(all_vertices), [10]*len(all_vertices))
         draw.draw_lines([tet_points[0]]*3, tet_points[1:], color*3, [10]*3) # draw from point 0 to every other point (3 times 0, cause line from 0 to the other 3 points)
         draw.draw_lines([tet_points[1]]*2, tet_points[2:], color*2, [10]*2)
         draw.draw_lines([tet_points[2]], [tet_points[3]], color, [10]) # draw line between the other 2 points
@@ -213,7 +210,7 @@ def _draw_surface_trimesh(all_vertices, tet_surf_indices):
     for i in range(0, len(tet_surf_indices), 3):
         tri_points_idx = tet_surf_indices[i:i+3]
         tri_points = [all_vertices[j] for j in tri_points_idx]
-        draw.draw_points(tri_points, [(255,255,255,1)]*len(tri_points), [40]*len(tri_points)) 
+        draw.draw_points(tri_points, [(255,255,255,1)]*len(tri_points), [40]*len(tri_points))
         draw.draw_lines([tri_points[0]]*2, tri_points[1:], color*2, [10]*2) # draw from point 0 to every other point (3 times 0, cause line from 0 to the other 3 points)
         draw.draw_lines([tri_points[1]]*1, tri_points[2:], color*1, [10]*1)
 
@@ -255,14 +252,20 @@ def _update_surf_mesh(path):
     stage = omni.usd.get_context().get_stage()
     prim = stage.GetPrimAtPath(pxr.Sdf.Path(path))
     print("prim ", prim)
-    # extract surface data of tet mesh 
+    # extract surface data of tet mesh
     surf_points = prim.GetAttribute("tet_surf_points").Get()
     tet_surf_indices = prim.GetAttribute("tet_surf_indices").Get()
-    
+
     surf_points = np.array(surf_points)
     triangles = tet_surf_indices
     MeshGenerator.update_usd_mesh(UsdGeom.Mesh(prim), surf_points=surf_points, triangles=triangles)
     print("Updated Surface Mesh of ", path)
+
+    # # extract surface data of tet mesh
+    # tet_points = prim.GetAttribute("tet_points").Get()
+    # tet_indices = prim.GetAttribute("tet_indices").Get()
+    # MeshGenerator.update_usd_mesh_pretty(UsdGeom.Mesh(prim), tet_points, tet_indices)
+    # print("Pretty update of surface Mesh of ", path)
 
 def _create_attachment(paths):
     print("paths are ", paths)
@@ -270,12 +273,12 @@ def _create_attachment(paths):
     isaac_mesh_path = paths[0]
     tet_mesh_path = paths[1]
 
-    # extract data of tet mesh 
+    # extract data of tet mesh
     stage = omni.usd.get_context().get_stage()
     tet_prim = stage.GetPrimAtPath(pxr.Sdf.Path(tet_mesh_path))
     tet_points = np.array(tet_prim.GetAttribute("tet_points").Get())
     tet_indices = tet_prim.GetAttribute("tet_indices").Get()
-            
+
     # convert to world coordinates
     tf_world = np.array(omni.usd.get_world_transform_matrix(tet_prim))
     print("tf world ", tf_world)
@@ -284,7 +287,7 @@ def _create_attachment(paths):
 
     # disable collision of the mesh that should be simulated by uipc -> otherwise raycasts are only detecting the tet mesh
     try:
-        collision_enabled = tet_prim.GetAttribute("physics:collisionEnabled")	
+        collision_enabled = tet_prim.GetAttribute("physics:collisionEnabled")
         collision_enabled.Set(False)
     except:
         pass
@@ -342,7 +345,7 @@ class TacexIPCExtension(omni.ext.IExt):
 
                 def create_attachment():
                     _create_attachment(get_selected_prim_paths())
-                    
+
                 omni.ui.Button("Compute Tet Mesh", clicked_fn=compute_tet_mesh, height=0)
                 omni.ui.Button("Update Surface Mesh", clicked_fn=update_surf_mesh, height=0)
                 omni.ui.Button("Create Attachment \n(Select rigid body, then tet mesh, then press button)", clicked_fn=create_attachment, height=0)
@@ -362,6 +365,6 @@ class TacexIPCExtension(omni.ext.IExt):
     #     update_stream = omni.kit.app.get_app().get_update_event_stream()
     #     self.sub = update_stream.create_subscription_to_pop(on_update, name="omni.example.python.usdrt.on_update")
     #     return
-    
+
     def on_shutdown(self):
         print("[tacex_uipc] shutdown")

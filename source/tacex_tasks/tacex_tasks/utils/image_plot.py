@@ -6,16 +6,14 @@
 from __future__ import annotations
 
 import colorsys
-import numpy as np
 from contextlib import suppress
-
-import numpy as np
-from matplotlib import cm
 from typing import TYPE_CHECKING, Optional
 
 import carb
+import numpy as np
 import omni
 import omni.log
+from matplotlib import cm
 
 with suppress(ImportError):
     # isaacsim.gui is not available when running in headless mode.
@@ -54,7 +52,7 @@ class ImagePlot(UIWidgetWrapper):
 
     def __init__(
         self,
-        image: Optional[np.ndarray] = None,
+        image: np.ndarray | None = None,
         label: str = "",
         widget_height: int = 200,
         show_min_max: bool = True,

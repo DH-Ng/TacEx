@@ -13,7 +13,7 @@ from torchvision.transforms import InterpolationMode
 from torchvision.transforms.functional import resize
 
 from .calibration import CALIB_GELSIGHT
-from .taxim_impl import TaximImpl, ArrayType
+from .taxim_impl import ArrayType, TaximImpl
 
 
 @torch.jit.script
@@ -150,7 +150,7 @@ class TaximTorch(torch.nn.Module, TaximImpl[torch.Tensor, torch.device]):
     @property
     def background_img(self):
         return self.__get_background_img_cached((self.height, self.width))
-    
+
     def __get_background_img(self, shape: tuple[int, int]) -> torch.Tensor:
         return resize(
             self.__bg_proc, list(shape), interpolation=InterpolationMode.BILINEAR

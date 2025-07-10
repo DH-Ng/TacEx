@@ -1,6 +1,6 @@
 """Showcase on how to use libuipc with Isaac Sim/Lab.
 
-This example corresponds to 
+This example corresponds to
 https://github.com/spiriMirror/libuipc-samples/blob/main/python/1_hello_libuipc/main.py
 
 
@@ -8,6 +8,7 @@ https://github.com/spiriMirror/libuipc-samples/blob/main/python/1_hello_libuipc/
 
 """Launch Isaac Sim Simulator first."""
 import argparse
+
 from isaaclab.app import AppLauncher
 
 # create argparser
@@ -20,29 +21,37 @@ args_cli = parser.parse_args()
 app_launcher = AppLauncher(args_cli)
 simulation_app = app_launcher.app
 
-import numpy as np
 import pathlib
 
 import isaaclab.sim as sim_utils
-from isaaclab.utils.timer import Timer
-
-from pxr import Gf, Sdf, Usd, UsdGeom
+import numpy as np
 import omni.usd
-import usdrt
-
 import uipc
-from uipc import Logger, Transform, Quaternion, Vector3, Vector2, view, builtin
-from uipc.core import Engine, World, Scene
-from uipc.geometry import tetmesh, label_surface, label_triangle_orient, flip_inward_triangles
-from uipc.geometry import SimplicialComplexIO
-from uipc.constitution import AffineBodyConstitution, NeoHookeanShell, DiscreteShellBending, ElasticModuli
-from uipc.unit import MPa, GPa, kPa 
+import usdrt
+from isaaclab.utils.timer import Timer
+from pxr import Gf, Sdf, Usd, UsdGeom
+from tacex_uipc.sim import UipcSim, UipcSimCfg
+from uipc import Logger, Quaternion, Transform, Vector2, Vector3, builtin, view
+from uipc.constitution import (
+    AffineBodyConstitution,
+    DiscreteShellBending,
+    ElasticModuli,
+    NeoHookeanShell,
+)
+from uipc.core import Engine, Scene, World
+from uipc.geometry import (
+    SimplicialComplexIO,
+    flip_inward_triangles,
+    label_surface,
+    label_triangle_orient,
+    tetmesh,
+)
+from uipc.unit import GPa, MPa, kPa
 
-from tacex_uipc import UipcSim, UipcSimCfg, UipcObject, UipcObjectCfg
 
 def setup_base_scene(sim: sim_utils.SimulationContext):
     """To make the scene pretty.
-    
+
     """
     # set upAxis to Y to match libuipc-samples
     stage = omni.usd.get_context().get_stage()
@@ -51,7 +60,7 @@ def setup_base_scene(sim: sim_utils.SimulationContext):
     # Design scene by spawning assets
     cfg_ground = sim_utils.GroundPlaneCfg()
     cfg_ground.func(
-        prim_path="/World/defaultGroundPlane", 
+        prim_path="/World/defaultGroundPlane",
         cfg=cfg_ground,
         translation=[0, -1, 0],
         orientation=[0.7071068, -0.7071068, 0, 0]
@@ -67,7 +76,7 @@ def setup_base_scene(sim: sim_utils.SimulationContext):
 def setup_libuipc_scene(scene):
     trimesh_path = str(pathlib.Path(__file__).parent.resolve() / "trimesh")
     tetmesh_path = str(pathlib.Path(__file__).parent.resolve() / "tet_meshes")
-    
+
     # setup the scene
     cloth = scene.objects().create('cloth')
     t = Transform.Identity()
@@ -81,7 +90,7 @@ def setup_libuipc_scene(scene):
     nks.apply_to(cloth_mesh, moduli=moduli, mass_density=200, thickness=0.001)
     dsb.apply_to(cloth_mesh, E = 10.0)
     view(cloth_mesh.positions())[:] += 1.0
-    cloth.geometries().create(cloth_mesh)   
+    cloth.geometries().create(cloth_mesh)
 
     bunny = scene.objects().create('bunny')
     t = Transform.Identity()
@@ -94,7 +103,7 @@ def setup_libuipc_scene(scene):
     abd = AffineBodyConstitution()
     abd.apply_to(bunny_mesh, 100 * MPa)
     is_fixed = bunny_mesh.instances().find(builtin.is_fixed)
-    view(is_fixed)[:] = 1   
+    view(is_fixed)[:] = 1
 
     bunny.geometries().create(bunny_mesh)
 
@@ -124,11 +133,11 @@ def main():
     uipc_sim = UipcSim(uipc_cfg)
 
     setup_libuipc_scene(uipc_sim.scene)
-    
+
     # init liubipc world etc.
     uipc_sim.setup_sim()
     uipc_sim.init_libuipc_scene_rendering()
-    
+
     # Now we are ready!
     print("[INFO]: Setup complete...")
 
@@ -160,8 +169,8 @@ def main():
             total_uipc_sim_time += Timer.get_timer_info("uipc_step")
             total_uipc_render_time += Timer.get_timer_info("render_update")
 
-            step += 1      
-          
+            step += 1
+
 if __name__ == "__main__":
     # run the main function
     main()

@@ -4,23 +4,22 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 import cv2
-import omni.usd
 import numpy as np
-
+import omni.usd
 import torch
 import torchvision.transforms.functional as F
 
-from .sim import Taxim
-from ..gelsight_simulator import GelSightSimulator
 from ...gelsight_sensor import GelSightSensor
+from ..gelsight_simulator import GelSightSimulator
+from .sim import Taxim
 
 if TYPE_CHECKING:
     from .taxim_sim_cfg import TaximSimulatorCfg
 
 class TaximSimulator(GelSightSimulator):
-    """Wraps around the Taxim simulation for the optical simulation of GelSight sensors 
+    """Wraps around the Taxim simulation for the optical simulation of GelSight sensors
     inside Isaac Sim.
-    
+
     """
     cfg: TaximSimulatorCfg
 
@@ -36,10 +35,10 @@ class TaximSimulator(GelSightSimulator):
         if self.cfg.device is None:
             # use same device as simulation
             self._device = self.sensor.device
-        else: 
+        else:
             self._device = self.cfg.device
 
-        self._num_envs = self.sensor._num_envs    
+        self._num_envs = self.sensor._num_envs
         # todo make size adaptable? I mean with env_ids. This way we would always simulate everythings
         self._indentation_depth = torch.zeros((self.sensor._num_envs), device=self.sensor._device)
         """Indentation depth, i.e. how deep the object is pressed into the gelpad.
@@ -50,7 +49,7 @@ class TaximSimulator(GelSightSimulator):
         """
         self.tactile_rgb_img = torch.zeros(
             (self.sensor._num_envs, self.cfg.tactile_img_res[1], self.cfg.tactile_img_res[0], 3),
-            device=self._device, 
+            device=self._device,
         )
 
         self._taxim: Taxim = Taxim(calib_folder=calib_folder, device=self._device)
@@ -58,7 +57,7 @@ class TaximSimulator(GelSightSimulator):
         # print(self._taxim.width)
         # self._taxim.width = self.cfg.tactile_img_res[0]
         # self._taxim.height = self.cfg.tactile_img_res[1]
-        
+
         #-- note Taxim sim uses (channels, height, width) format
 
         # tactile rgb image without indentation
@@ -77,7 +76,7 @@ class TaximSimulator(GelSightSimulator):
 
     def optical_simulation(self):
         """ Returns simulation output of Taxim optical simulation.
-        
+
         Images have the shape (num_envs, height, width, channels) and values in range [0,255].
         """
         height_map = self.sensor._data.output["height_map"]
@@ -97,14 +96,14 @@ class TaximSimulator(GelSightSimulator):
         #         with_shadow=self.cfg.with_shadow,
         #         press_depth=self._indentation_depth[self._indentation_depth > 0],
         #         orig_hm_fmt=False,
-        #     ).movedim(1, 3) #*255).type(torch.uint8) 
+        #     ).movedim(1, 3) #*255).type(torch.uint8)
 
         self.tactile_rgb_img[:] = self._taxim.render_direct(
             height_map[:],
             with_shadow=self.cfg.with_shadow,
             press_depth=self._indentation_depth,
             orig_hm_fmt=False,
-        ).movedim(1, 3) #*255).type(torch.uint8) 
+        ).movedim(1, 3) #*255).type(torch.uint8)
 
         return self.tactile_rgb_img
 
@@ -121,24 +120,24 @@ class TaximSimulator(GelSightSimulator):
         dist_obj_sensor_case = torch.where(dist_obj_sensor_case < 0, 0, dist_obj_sensor_case)
 
         self._indentation_depth[:] = torch.where(
-            dist_obj_sensor_case <= self.cfg.gelpad_height, 
-            (self.cfg.gelpad_height - dist_obj_sensor_case)*1000, 
+            dist_obj_sensor_case <= self.cfg.gelpad_height,
+            (self.cfg.gelpad_height - dist_obj_sensor_case)*1000,
             0
         )
 
         return self._indentation_depth
-    
+
     def reset(self):
         self._indentation_depth = torch.zeros((self._num_envs), device=self._device)
         self.tactile_rgb_img[:] = self.background_img
 
     def _set_debug_vis_impl(self, debug_vis: bool):
         """ Creates an USD attribute for the sensor asset, which can visualize the tactile image.
-        
-        Select the GelSight sensor case whose output you want to see in the Isaac Sim GUI, 
+
+        Select the GelSight sensor case whose output you want to see in the Isaac Sim GUI,
         i.e. the `gelsight_mini_case` Xform (not the mesh!).
         Scroll down in the properties panel to "Raw Usd Properties" and click "Extra Properties".
-        There is an attribute called "show_tactile_image". 
+        There is an attribute called "show_tactile_image".
         Toggle it on to show the sensor output in the GUI.
 
         If only optical simulation is used, then only an optical img is displayed.
@@ -157,11 +156,11 @@ class TaximSimulator(GelSightSimulator):
                     self._debug_img_providers = {}
         else:
             pass
-    
-    def _debug_vis_callback(self, event):    
+
+    def _debug_vis_callback(self, event):
         if self.sensor._prim_view is None:
             return
-                
+
         # Update the GUI windows
         for i, prim in enumerate(self.sensor.prim_view.prims):
             if "tactile_rgb" in self.sensor.cfg.data_types:
@@ -176,8 +175,8 @@ class TaximSimulator(GelSightSimulator):
 
                     frame = self.sensor.data.output["tactile_rgb"][i].cpu().numpy()*255
                     frame = cv2.normalize(frame, None, alpha = 0, beta = 255, norm_type = cv2.NORM_MINMAX, dtype = cv2.CV_32F)
-                    
-                    # update image of the window                    
+
+                    # update image of the window
                     frame = frame.astype(np.uint8)
                     frame = cv2.cvtColor(frame, cv2.COLOR_RGB2RGBA) #cv.COLOR_BGR2RGBA) COLOR_RGB2RGBA
                     height, width, channels = frame.shape
@@ -190,4 +189,3 @@ class TaximSimulator(GelSightSimulator):
                     # remove window/img_provider from dictionary and destroy them
                     self._debug_windows.pop(str(i)).destroy()
                     self._debug_img_providers.pop(str(i)).destroy()
-            

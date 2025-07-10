@@ -58,4 +58,3 @@ gym.register(
 > **Note:** As a practice, we specify all the environments in a single file to avoid name conflicts between different
 > tasks or environments. However, this practice is debatable and we are open to suggestions to deal with a large
 > scaling in the number of tasks or environments.
-

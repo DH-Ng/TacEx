@@ -17,10 +17,10 @@ simulation_app = app_launcher.app
 """Rest everything follows."""
 
 import gymnasium as gym
-from prettytable import PrettyTable
 
 # Import extensions to set up environment tasks
 import tacex_tasks  # noqa: F401
+from prettytable import PrettyTable
 
 TEMPLATE = "TacEx"
 

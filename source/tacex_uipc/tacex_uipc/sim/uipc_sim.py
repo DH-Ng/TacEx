@@ -1,16 +1,15 @@
 from __future__ import annotations
 
-from typing import Any, Dict, Tuple, Union, List, TYPE_CHECKING
 import pathlib
 import weakref
+from typing import TYPE_CHECKING, Any, Dict, List, Tuple, Union
 
-from isaaclab.utils import configclass
 import isaaclab.sim as sim_utils
-
-import usdrt
-from pxr import Gf, Sdf, Usd, UsdGeom
 import omni.usd
+import usdrt
 import usdrt.Usd
+from isaaclab.utils import configclass
+from pxr import Gf, Sdf, Usd, UsdGeom
 
 try:
     from isaacsim.util.debug_draw import _debug_draw
@@ -18,22 +17,23 @@ try:
 except:
     draw = None
 
-import uipc
-from uipc import view, builtin
-from uipc import Vector3, Transform, Quaternion, AngleAxis
-from uipc import Logger, Timer
-from uipc.core import Engine, World, Scene, SceneIO
-from uipc.geometry import tetmesh, label_surface, label_triangle_orient, flip_inward_triangles, ground
-from uipc.unit import MPa, GPa
-
-from uipc.geometry import tetmesh, extract_surface
-from tacex_uipc.utils import MeshGenerator
-
 import numpy as np
+import uipc
 import warp as wp
+from tacex_uipc.utils import MeshGenerator
+from uipc import AngleAxis, Logger, Quaternion, Timer, Transform, Vector3, builtin, view
+from uipc.core import Engine, Scene, SceneIO, World
+from uipc.geometry import (
+    extract_surface,
+    flip_inward_triangles,
+    ground,
+    label_surface,
+    label_triangle_orient,
+    tetmesh,
+)
+from uipc.unit import GPa, MPa
 
-if TYPE_CHECKING:
-    from tacex_uipc import UipcObject
+from tacex_uipc.objects import UipcObject
 
 @configclass
 class UipcSimCfg:
@@ -47,7 +47,7 @@ class UipcSimCfg:
     Options: "quiet", "normal"
     "quiet" = do not export mesh
     """
-    
+
     workspace: str = str(pathlib.Path().resolve())
     """Path to directory where the libuipc files (e.g. systems.json) should be saved.
 
@@ -80,7 +80,7 @@ class UipcSimCfg:
         transrate_tol: float = 0.1 / 1.0
         """Convergence tolerance 3)
         max dF <=  dF <= transform_tol * dt
-        
+
         e.g. 0.1/1.0 = 10%/s change in transform
         """
     newton: Newton = Newton()
@@ -89,7 +89,7 @@ class UipcSimCfg:
     class LinearSystem:
         solver: str = "linear_pcg"
         """
-        Options: linear_pcg, 
+        Options: linear_pcg,
         """
 
         tol_rate: float = 1e-3
@@ -105,7 +105,7 @@ class UipcSimCfg:
     @configclass
     class Contact:
         enable: bool = True
-        
+
         enable_friction: bool = True
 
         default_friction_ratio: float = 0.5
@@ -116,7 +116,7 @@ class UipcSimCfg:
         """
 
         constitution: str = "ipc"
-        
+
         d_hat: float = 0.001
 
         eps_velocity: float = 0.01
@@ -137,7 +137,7 @@ class UipcSim():
 
     def __init__(self, cfg: UipcSimCfg = None):
         """Initialize the uipc simulation.
-        
+
         """
         # will be initialized in `setup_sim()`
         self.isaac_sim = None
@@ -162,7 +162,7 @@ class UipcSim():
         uipc_config["dt"] = self.cfg.dt
         uipc_config["sanity_check"] = {
             "enable": self.cfg.sanity_check_enable,
-            "mode": self.cfg.sanity_check_mode 
+            "mode": self.cfg.sanity_check_mode
         }
         uipc_config["gravity"] = [[self.cfg.gravity[0]], [self.cfg.gravity[1]], [self.cfg.gravity[2]]]
         uipc_config["collision_detection"]["method"] = self.cfg.collision_detection_method
@@ -204,7 +204,7 @@ class UipcSim():
 
         # set default friction ratio and contact resistance
         self.scene.contact_tabular().default_model(
-            friction_rate=self.cfg.contact.default_friction_ratio, 
+            friction_rate=self.cfg.contact.default_friction_ratio,
             resistance=self.cfg.contact.default_contact_resistance * GPa,
             enable=self.cfg.contact.enable
         )
@@ -219,11 +219,9 @@ class UipcSim():
 
         # for rendering: used to extract which points belong to which surface mesh
         self._surf_vertex_offsets = [0]
-        
-        self._fabric_meshes = []
-        self.uipc_objects: List[UipcObject] = []
 
-        self._update_mesh_handle = None
+        self._fabric_meshes = []
+        self.uipc_objects: list[UipcObject] = []
 
         self.stage = usdrt.Usd.Stage.Attach(omni.usd.get_context().get_stage_id())
 
@@ -259,21 +257,6 @@ class UipcSim():
         self.isaac_sim: sim_utils.SimulationContext = sim_utils.SimulationContext.instance()
         self.isaac_sim.add_physics_callback("uicp_step", self.step)
 
-        # app_interface = omni.kit.app.get_app_interface()
-        # self._update_mesh_handle = app_interface.get_pre_update_event_stream().create_subscription_to_pop( #get_post_update_event_stream get_pre_update_event_stream
-        #     lambda event, obj=weakref.proxy(self): obj.update_render_meshes(event)
-        # )
-
-        # Use Screnegraph API for fast mesh updates
-        self.selection = self.stage.SelectPrims(
-            require_attrs=[
-                (usdrt.Sdf.ValueTypeNames.Point3fArray, usdrt.UsdGeom.Tokens.points, usdrt.Usd.Access.Overwrite)
-            ],
-            require_prim_type="Mesh",
-            device=self.isaac_sim.device,
-        )
-        print(f"Found {self.selection.GetCount()} meshes for mesh updates.")
-
     def step(self, dt=0):
         self.world.advance()
         self.world.retrieve()
@@ -285,7 +268,7 @@ class UipcSim():
         # test = view(geo_slot.geometry().positions())
         # test = self.init_pos
         # self.world.advance()
-        
+
         # new_test = view(geo_slot.geometry().positions())
 
         # short_cut_trans = geo_slot.geometry().transforms().view()
@@ -295,44 +278,20 @@ class UipcSim():
     def update_render_meshes(self, dt=0):
         all_trimesh_points = self.sio.simplicial_surface(2).positions().view().reshape(-1,3)
         #triangles = self.sio.simplicial_surface(2).triangles().topo().view()
-        # for i, fabric_prim in enumerate(self._fabric_meshes):
-        #     trimesh_points = all_trimesh_points[self._surf_vertex_offsets[i]:self._surf_vertex_offsets[i+1]]
+        for i, fabric_prim in enumerate(self._fabric_meshes):
+            trimesh_points = all_trimesh_points[self._surf_vertex_offsets[i]:self._surf_vertex_offsets[i+1]]
 
-        #     fabric_mesh_points = fabric_prim.GetAttribute("points")
-        #     fabric_mesh_points.Set(usdrt.Vt.Vec3fArray(trimesh_points))
-        
-        points_attr = wp.fabricarray(self.selection.__fabric_arrays_interface__, usdrt.UsdGeom.Tokens.points)
-        wp.launch(
-            self.set_points, 
-            dim=points_attr.size, 
-            inputs=[
-                points_attr, 
-                wp.from_numpy(all_trimesh_points, dtype=wp.vec3, device=self.isaac_sim.device), 
-                wp.from_numpy(np.array(self._surf_vertex_offsets), dtype=wp.int32, device=self.isaac_sim.device),
-            ], 
-            device=self.isaac_sim.device
-        )
+            fabric_mesh_points = fabric_prim.GetAttribute("points")
+            fabric_mesh_points.Set(usdrt.Vt.Vec3fArray(trimesh_points))
         #! Currently there is a 1 frame delay between the points we set and whats rendered in Isaac
         #! if you draw the points and let it render, you see that the mesh is lagging behind the points
-        draw.clear_points()
-        points = np.array(all_trimesh_points)
-        draw.draw_points(points, [(255,0,255,0.5)]*points.shape[0], [30]*points.shape[0])
+        # draw.clear_points()
+        # points = np.array(all_trimesh_points)
+        # draw.draw_points(points, [(255,0,255,0.5)]*points.shape[0], [30]*points.shape[0])
 
         if self.isaac_sim is not None:
-            # additional render call to somewhat mitigate render delay 
+            # additional render call to somewhat mitigate render delay
             self.isaac_sim.render()
-
-    ### Warp kernels
-    @wp.kernel(enable_backward=False)
-    def set_points(points_attr: wp.fabricarrayarray(dtype=wp.vec3f), 
-                   new_points_values: wp.array(dtype=wp.vec3), 
-                   surf_vert_offsets: wp.array(dtype=wp.int32)):
-        i = wp.tid()
-        print("surf_offset")
-        print(surf_vert_offsets[i])
-        print(surf_vert_offsets[i+1])
-        #! slicing doesnt work yet in warp
-        points_attr[i, 0] = new_points_values[surf_vert_offsets[i]:surf_vert_offsets[i+1]]
 
     @staticmethod
     def get_sim_time_report(as_json: bool = False):
@@ -340,25 +299,25 @@ class UipcSim():
             report = Timer.report_as_json()
         else:
             Timer.report()
-    
+
     def save_frame(self):
         """Saves the current frame into multiple files, which can be retrieved to replay the animation later.
 
-        For replaying use the method `replay_frames`        
+        For replaying use the method `replay_frames`
         """
         self.world.dump()
 
     # for replaying already computed uipc simulation results
     def replay_frame(self, frame_num):
         """
-        
+
         Won't work if the loaded tet meshes are different!
         """
         # frame_num = self.world.frame() + 1
         if(self.world.recover(frame_num)):
             self.world.retrieve()
         else:
-            print(f"No data for frame {frame_num}.")      
+            print(f"No data for frame {frame_num}.")
 
     def init_libuipc_scene_rendering(self):
         num_objs = self.scene.objects().size()
