@@ -33,19 +33,23 @@ simulation_app = app_launcher.app
 
 """Rest everything follows."""
 
-import gymnasium as gym
 import os
-import torch
 
-from rsl_rl.runners import OnPolicyRunner
-
-from isaaclab.envs import DirectMARLEnv, multi_agent_to_single_agent
-from isaaclab.utils.dict import print_dict
-from isaaclab_rl.rsl_rl import RslRlOnPolicyRunnerCfg, RslRlVecEnvWrapper, export_policy_as_jit, export_policy_as_onnx
-from isaaclab_tasks.utils import get_checkpoint_path, parse_env_cfg
+import gymnasium as gym
 
 # Import extensions to set up environment tasks
-import tacex_tasks # noqa: F401
+import tacex_tasks  # noqa: F401
+import torch
+from isaaclab.envs import DirectMARLEnv, multi_agent_to_single_agent
+from isaaclab.utils.dict import print_dict
+from isaaclab_rl.rsl_rl import (
+    RslRlOnPolicyRunnerCfg,
+    RslRlVecEnvWrapper,
+    export_policy_as_jit,
+    export_policy_as_onnx,
+)
+from isaaclab_tasks.utils import get_checkpoint_path, parse_env_cfg
+from rsl_rl.runners import OnPolicyRunner
 
 
 def main():

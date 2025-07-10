@@ -58,7 +58,7 @@ class ContainerInterface:
         #self.image_name = f"isaac-lab-{self.profile}:latest"
         self.container_name = f"isaac-lab-tacex"
         self.image_name = f"isaac-lab-tacex:latest"
-        
+
         # keep the environment variables from the current environment
         self.environ = os.environ
 
@@ -118,9 +118,9 @@ class ContainerInterface:
             env=self.environ,
         )
 
-	## We don't support multiple profiles for the extension, to keep it simple 
+	## We don't support multiple profiles for the extension, to keep it simple
 	## -> use profiles when building IsaacLab image
-        # build the image for the profile 
+        # build the image for the profile
         #subprocess.run(
         #    ["docker", "compose"]
         #    + self.add_yamls

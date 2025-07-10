@@ -16,7 +16,7 @@
 **Keywords:** tactile sensing, gelsight, isaaclab, vision-based-tactile-sensor, vbts, reinforcement learning
 
 # Installation
-To install it locally follow the [Local Installation Guide](https://git.ias.informatik.tu-darmstadt.de/tactile-sensing/tacex/-/wikis/Home/Local-Installation).  
+To install it locally follow the [Local Installation Guide](https://git.ias.informatik.tu-darmstadt.de/tactile-sensing/tacex/-/wikis/Home/Local-Installation).
 You can also create a Docker container for TacEx by following [Docker Container Guide](https://git.ias.informatik.tu-darmstadt.de/tactile-sensing/tacex/-/wikis/Home/Docker-Container-Setup).
 
 
@@ -80,4 +80,3 @@ To enable your extension, follow these steps:
 2. **Search and enable your extension**:
     - Find your extension under the `Third Party` category.
     - Toggle it to enable your extension.
-

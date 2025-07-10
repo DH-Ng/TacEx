@@ -1,13 +1,12 @@
 from dataclasses import MISSING
 
+from isaaclab.envs import DirectRLEnv, DirectRLEnvCfg
 from isaaclab.scene import InteractiveSceneCfg
 from isaaclab.sim import SimulationCfg
 from isaaclab.utils import configclass
 from isaaclab.utils.noise import NoiseModelCfg
+from tacex_uipc import UipcObject, UipcObjectCfg, UipcSim, UipcSimCfg
 
-from isaaclab.envs import DirectRLEnv, DirectRLEnvCfg
-
-from tacex_uipc import UipcSim, UipcSimCfg, UipcObject, UipcObjectCfg
 
 @configclass
 class UipcEnvCfg(DirectRLEnvCfg):

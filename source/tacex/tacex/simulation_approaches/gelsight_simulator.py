@@ -7,10 +7,11 @@ Each simulation method class should inherit from this class and implement the ab
 from __future__ import annotations
 
 import inspect
-import torch
 import weakref
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING
+
+import torch
 
 if TYPE_CHECKING:
     from ..gelsight_sensor import GelSightSensor
@@ -18,8 +19,8 @@ if TYPE_CHECKING:
 
 class GelSightSimulator(ABC):
     """Base class for implementing an optical simulation approach.
-    
-    
+
+
     """
     def __init__(self, sensor: GelSightSensor, cfg: GelSightSimulatorCfg):
         self.cfg = cfg
@@ -28,11 +29,11 @@ class GelSightSimulator(ABC):
         if self.cfg.device is None:
             # use same device as simulation
             self._device = self.sensor.device
-        else: 
+        else:
             self._device = self.cfg.device
-        
+
         # self._num_envs = self.sensor._num_envs
-        
+
         # self._initialize_impl()
 
     @abstractmethod
@@ -52,12 +53,12 @@ class GelSightSimulator(ABC):
 
         """
         raise NotImplementedError
-    
+
     #@abstractmethod make it optional, in case another method is used for computing indentation depth
     def compute_indentation_depth(self):
         """Computes how deep the indenter is pressed into the gelpad"""
         raise NotImplementedError
-    
+
     @abstractmethod
     def reset(self):
         raise NotImplementedError
@@ -65,7 +66,7 @@ class GelSightSimulator(ABC):
     """
     Debug visualization
     """
-    
+
     def _set_debug_vis_impl(self, debug_vis: bool):
         """Set debug visualization into visualization objects.
 

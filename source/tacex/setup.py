@@ -1,8 +1,8 @@
 """Installation script for the 'tacex' python package."""
 
 import os
-import toml
 
+import toml
 from setuptools import setup
 
 # Obtain the extension data from the extension.toml file
@@ -14,9 +14,9 @@ EXTENSION_TOML_DATA = toml.load(os.path.join(EXTENSION_PATH, "config", "extensio
 INSTALL_REQUIRES = [
     # NOTE: Add dependencies
     "debugpy", # for debugging scripts that are run from the terminal, e.g. RL training scripts
-    # "torch==2.5.1", 
+    # "torch==2.5.1",
     # "torchvision==0.20.1",
-    #f"torch_scatter @ file://localhost{EXTENSION_PATH}/install_requirements/torch_scatter-2.1.2+pt24cu118-cp310-cp310-linux_x86_64.whl", 
+    #f"torch_scatter @ file://localhost{EXTENSION_PATH}/install_requirements/torch_scatter-2.1.2+pt24cu118-cp310-cp310-linux_x86_64.whl",
     f"torch_scatter @ https://data.pyg.org/whl/torch-2.5.0%2Bcu118/torch_scatter-2.1.2%2Bpt25cu118-cp310-cp310-linux_x86_64.whl", # needed for gpu taxim
     # f"torch_scatter", # @ https://data.pyg.org/whl/torch-2.5.0%2Bcu121/torch_scatter-2.1.2%2Bpt25cu121-cp310-cp310-linux_x86_64.whl", # needed for gpu taxim
     "psutil",

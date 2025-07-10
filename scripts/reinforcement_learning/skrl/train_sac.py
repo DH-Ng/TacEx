@@ -11,9 +11,8 @@ a more user-friendly way.
 """
 
 """Launch Isaac Sim Simulator first."""
-import copy
-
 import argparse
+import copy
 import sys
 
 from omni.isaac.lab.app import AppLauncher
@@ -65,18 +64,18 @@ simulation_app = app_launcher.app
 """Rest everything follows."""
 
 from omni.isaac.core.utils.extensions import enable_extension
+
 enable_extension("omni.isaac.debug_draw") # otherwise running headless on the cluster is not possible (some GIPC classes import debug_draw)
 
-import gymnasium as gym
 import os
 import random
 from datetime import datetime
 
+import gymnasium as gym
 import skrl
-from packaging import version
-
 import torch
 import torch.nn as nn
+from packaging import version
 
 # import the skrl components to build the RL system
 from skrl.agents.torch.sac import SAC, SAC_DEFAULT_CONFIG
@@ -102,6 +101,8 @@ if args_cli.ml_framework.startswith("torch"):
 elif args_cli.ml_framework.startswith("jax"):
     from skrl.utils.runner.jax import Runner
 
+import omni.isaac.lab_tasks  # noqa: F401
+import tacex_rl.tasks
 from omni.isaac.lab.envs import (
     DirectMARLEnv,
     DirectMARLEnvCfg,
@@ -111,10 +112,6 @@ from omni.isaac.lab.envs import (
 )
 from omni.isaac.lab.utils.dict import print_dict
 from omni.isaac.lab.utils.io import dump_pickle, dump_yaml
-
-import omni.isaac.lab_tasks  # noqa: F401
-import tacex_rl.tasks
-
 from omni.isaac.lab_tasks.utils import get_checkpoint_path
 from omni.isaac.lab_tasks.utils.hydra import hydra_task_config
 from omni.isaac.lab_tasks.utils.wrappers.skrl import SkrlVecEnvWrapper
@@ -158,7 +155,7 @@ class Critic(DeterministicMixin, Model):
 
     def compute(self, inputs, role):
         return self.net(torch.cat([inputs["states"], inputs["taken_actions"]], dim=1)), {}
-    
+
 # config shortcuts
 algorithm = args_cli.algorithm.lower()
 agent_cfg_entry_point = "skrl_cfg_entry_point" if algorithm in ["ppo"] else f"skrl_{algorithm}_cfg_entry_point"
@@ -303,11 +300,12 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
     # # start training
     # trainer.train()
 
-    # do the training "manually" for better logging of variables 
-    # -> see `single_agent_train` method of Trainer as reference and https://github.com/Toni-SM/skrl/discussions/84    
+    # do the training "manually" for better logging of variables
+    # -> see `single_agent_train` method of Trainer as reference and https://github.com/Toni-SM/skrl/discussions/84
     import tqdm
+
     # reset env
-    states, infos = trainer.env.reset() 
+    states, infos = trainer.env.reset()
     for timestep in tqdm.tqdm(
         range(trainer.initial_timestep, trainer.timesteps), disable=trainer.disable_progressbar, file=sys.stdout
     ):

@@ -11,29 +11,28 @@ sys.path.append(script_path)
 sys.path.append(track_path)
 sys.path.append(repo_path)
 
+import copy
+
 import cv2
 import numpy as np
 import sapien
 import transforms3d as t3d
+from envs.phong_shading import PhongShadingRenderer
 from path import Path
 from sapienipc.ipc_component import IPCFEMComponent
 from sapienipc.ipc_system import IPCSystem
 from sapienipc.ipc_utils.ipc_mesh import IPCTetMesh
+from sapienipc.ipc_utils.user_utils import ipc_update_render_all
+from scipy.ndimage import gaussian_filter
 from sklearn.neighbors import NearestNeighbors
-
+from utils.common import generate_patch_array
 from utils.geometry import (
     estimate_rigid_transform,
     in_hull,
     quat_product,
     transform_pts,
 )
-
-from sapienipc.ipc_utils.user_utils import ipc_update_render_all
 from utils.sapienipc_utils import cv2ex2pose
-from utils.common import generate_patch_array
-from envs.phong_shading import PhongShadingRenderer
-from scipy.ndimage import gaussian_filter
-import copy
 
 patch_array_dict_global = generate_patch_array()
 
@@ -65,7 +64,7 @@ class TactileSensorSapienIPC:
         self.logger = logger
 
         meta_file = Path(track_path) / "assets" / meta_file
-        with open(meta_file, "r") as f:
+        with open(meta_file) as f:
             config = json.load(f)
 
         meta_dir = meta_file.dirname()
@@ -246,7 +245,7 @@ class VisionTactileSensorSapienIPC(TactileSensorSapienIPC):
         param: camera_params: (fx, fy, cx, cy, distortion)
         """
 
-        super(VisionTactileSensorSapienIPC, self).__init__(**kwargs)
+        super().__init__(**kwargs)
 
         self.marker_interval_range = marker_interval_range
         self.marker_rotation_range = marker_rotation_range
@@ -557,7 +556,7 @@ class VisionTactileSensorSapienIPC(TactileSensorSapienIPC):
     def _gen_depth(self):
         # hide the gel to get the depth of the object in contact
         self.render_component.disable()
-        self.cam_entity.set_pose(cv2ex2pose((self.get_camera_pose())))
+        self.cam_entity.set_pose(cv2ex2pose(self.get_camera_pose()))
         self.scene.update_render()
         ipc_update_render_all(self.scene)
         self.cam.take_picture()

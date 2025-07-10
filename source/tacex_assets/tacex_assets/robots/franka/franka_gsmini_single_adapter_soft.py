@@ -18,7 +18,6 @@ Reference: https://github.com/frankaemika/franka_ros
 import isaaclab.sim as sim_utils
 from isaaclab.actuators import ImplicitActuatorCfg
 from isaaclab.assets import ArticulationCfg
-
 from tacex_assets import TACEX_ASSETS_DATA_DIR
 
 ##

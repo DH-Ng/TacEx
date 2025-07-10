@@ -24,7 +24,7 @@ services:
     image: isaac-lab-tacex
     container_name: isaac-lab-tacex
     # This overlay allows changes on the local files to
-    # be reflected within the container immediately 
+    # be reflected within the container immediately
     # (dont bind the whole TacEx directory, otherwise we cannot create symbolic link with Dockerfile commands)
     volumes:
       - type: bind

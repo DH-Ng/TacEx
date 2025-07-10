@@ -4,7 +4,9 @@
 # SPDX-License-Identifier: BSD-3-Clause
 
 from __future__ import annotations
+
 import argparse
+
 from isaaclab.app import AppLauncher
 
 # add argparse arguments
@@ -22,65 +24,86 @@ args_cli.enable_cameras = True
 app_launcher = AppLauncher(args_cli)
 simulation_app = app_launcher.app
 
+import datetime
+import json
+import platform
+import time
 import traceback
+from pathlib import Path
+
 import carb
-
-import torch
+import isaaclab.sim as sim_utils
+import isaaclab.utils.math as lab_math
+import isaaclab.utils.math as math_utils
 import numpy as np
-
+import psutil
+import pynvml
+import torch
+from isaaclab.actuators.actuator_cfg import ImplicitActuatorCfg
+from isaaclab.assets import (
+    Articulation,
+    ArticulationCfg,
+    AssetBase,
+    AssetBaseCfg,
+    RigidObject,
+    RigidObjectCfg,
+)
+from isaaclab.controllers.differential_ik import DifferentialIKController
+from isaaclab.controllers.differential_ik_cfg import DifferentialIKControllerCfg
+from isaaclab.envs import DirectRLEnv, DirectRLEnvCfg, ViewerCfg
+from isaaclab.envs.ui import BaseEnvWindow
+from isaaclab.markers import VisualizationMarkers
+from isaaclab.markers.config import FRAME_MARKER_CFG
+from isaaclab.scene import InteractiveSceneCfg
+from isaaclab.sensors import FrameTransformer, FrameTransformerCfg
+from isaaclab.sensors.frame_transformer.frame_transformer_cfg import OffsetCfg
+from isaaclab.sim import PhysxCfg, SimulationCfg
+from isaaclab.sim.schemas.schemas_cfg import RigidBodyPropertiesCfg
+from isaaclab.utils import configclass
+from isaaclab.utils.assets import ISAAC_NUCLEUS_DIR
+from isaaclab.utils.math import (
+    combine_frame_transforms,
+    euler_xyz_from_quat,
+    sample_uniform,
+    subtract_frame_transforms,
+    wrap_to_pi,
+)
 from isaacsim.core.utils.stage import get_current_stage
 from isaacsim.core.utils.torch.transformations import tf_combine, tf_inverse, tf_vector
 from pxr import UsdGeom
+from tacex_assets import TACEX_ASSETS_DATA_DIR
+from tacex_assets.robots.franka.franka_gsmini_single_adapter_uipc import (
+    FRANKA_PANDA_ARM_GSMINI_SINGLE_ADAPTER_HIGH_PD_CFG,
+)
+from tacex_assets.sensors.gelsight_mini.gelsight_mini_cfg import GelSightMiniCfg
+from tacex_uipc import (
+    UipcIsaacAttachments,
+    UipcIsaacAttachmentsCfg,
+    UipcObject,
+    UipcObjectCfg,
+    UipcRLEnv,
+    UipcSim,
+    UipcSimCfg,
+)
+from tacex_uipc.utils import TetMeshCfg
 
-import isaaclab.sim as sim_utils
-from isaaclab.actuators.actuator_cfg import ImplicitActuatorCfg
-from isaaclab.assets import Articulation, ArticulationCfg, AssetBase, AssetBaseCfg, RigidObject, RigidObjectCfg
-from isaaclab.sim.schemas.schemas_cfg import RigidBodyPropertiesCfg
-from isaaclab.envs import DirectRLEnv, DirectRLEnvCfg
-from isaaclab.envs.ui import BaseEnvWindow
-from isaaclab.scene import InteractiveSceneCfg
-from isaaclab.sim import SimulationCfg, PhysxCfg
-from isaaclab.utils import configclass
-from isaaclab.utils.assets import ISAAC_NUCLEUS_DIR
-from isaaclab.utils.math import sample_uniform, combine_frame_transforms, subtract_frame_transforms, euler_xyz_from_quat, wrap_to_pi
-import isaaclab.utils.math as lab_math
+from tacex import GelSightSensor, GelSightSensorCfg
+from tacex.simulation_approaches.fots import FOTSMarkerSimulatorCfg
+from tacex.simulation_approaches.gpu_taxim import TaximSimulatorCfg
+
 #  from isaaclab.controllers.differential_ik_cfg import DifferentialIKControllerCfg
 # from isaaclab.envs.mdp.actions.actions_cfg import DifferentialInverseKinematicsActionCfg
 
 
-from isaaclab.markers.config import FRAME_MARKER_CFG
-from isaaclab.markers import VisualizationMarkers
 
-from isaaclab.sensors import FrameTransformer, FrameTransformerCfg
-from isaaclab.sensors.frame_transformer.frame_transformer_cfg import OffsetCfg
-from isaaclab.envs import ViewerCfg
 
 from isaaclab.markers import POSITION_GOAL_MARKER_CFG  # isort: skip
 from isaaclab.markers import CUBOID_MARKER_CFG  # isort: skip
 
-from isaaclab.controllers.differential_ik_cfg import DifferentialIKControllerCfg
-from isaaclab.controllers.differential_ik import DifferentialIKController
-import isaaclab.utils.math as math_utils
 
-from tacex_assets.robots.franka.franka_gsmini_single_adapter_uipc import FRANKA_PANDA_ARM_GSMINI_SINGLE_ADAPTER_HIGH_PD_CFG
-from tacex_assets import TACEX_ASSETS_DATA_DIR
-from tacex_assets.sensors.gelsight_mini.gelsight_mini_cfg import GelSightMiniCfg
 
-from tacex import GelSightSensor, GelSightSensorCfg
-from tacex.simulation_approaches.gpu_taxim import TaximSimulatorCfg
-from tacex.simulation_approaches.fots import FOTSMarkerSimulatorCfg
 
-from tacex_uipc import UipcSim, UipcSimCfg, UipcObject, UipcObjectCfg, UipcRLEnv
-from tacex_uipc import UipcIsaacAttachments, UipcIsaacAttachmentsCfg
-from tacex_uipc.utils import TetMeshCfg
 
-import time
-import psutil
-import pynvml
-import datetime
-from pathlib import Path
-import json
-import platform
 
 try:
     from isaacsim.util.debug_draw import _debug_draw
@@ -115,7 +138,7 @@ class BallRollingEnvCfg(DirectRLEnvCfg):
     viewer: ViewerCfg = ViewerCfg()
     viewer.eye = (1.9, 1.4, 0.3)
     viewer.lookat = (-1.5, -1.9, -1.1)
-    
+
     # viewer.origin_type = "env"
     # viewer.env_idx = 50
 
@@ -152,8 +175,8 @@ class BallRollingEnvCfg(DirectRLEnvCfg):
 
     # scene
     scene: InteractiveSceneCfg = InteractiveSceneCfg(
-        num_envs=1, 
-        env_spacing=1.5, 
+        num_envs=1,
+        env_spacing=1.5,
         replicate_physics=True,
         lazy_sensor_update=True, # only update sensors when they are accessed
     )
@@ -264,14 +287,14 @@ class BallRollingEnvCfg(DirectRLEnvCfg):
     # settings for optical sim - update Taxim cfg
     gsmini.optical_sim_cfg = gsmini.optical_sim_cfg.replace(
         with_shadow=False,
-        device="cuda", 
+        device="cuda",
         tactile_img_res=(240,320),
     )
     # update FOTS cfg
     marker_cfg = FRAME_MARKER_CFG.copy()
     marker_cfg.markers["frame"].scale = (0.01, 0.01, 0.01)
     marker_cfg.prim_path = "/Visuals/FrameTransformer"
-    
+
     gsmini.marker_motion_sim_cfg = gsmini.marker_motion_sim_cfg.replace(
         device="cuda",
         tactile_img_res=(240,320),
@@ -296,10 +319,10 @@ class BallRollingEnvCfg(DirectRLEnvCfg):
 
     obj_pos_randomization_range = [-0.15, 0.15]
 
-    # some filler values, needed for DirectRLEnv     
+    # some filler values, needed for DirectRLEnv
     episode_length_s = 0
-    action_space = 0 
-    observation_space = 0 
+    action_space = 0
+    observation_space = 0
     state_space = 0
 
 class BallRollingEnv(UipcRLEnv):
@@ -318,22 +341,22 @@ class BallRollingEnv(UipcRLEnv):
         # save only the first body index
         self._body_idx = body_ids[0]
         self._body_name = body_names[0]
-        
+
         # For a fixed base robot, the frame index is one less than the body index.
         # This is because the root body is not included in the returned Jacobians.
         self._jacobi_body_idx = self._body_idx - 1
         # self._jacobi_joint_ids = self._joint_ids # we take every joint
-        
+
         # ee offset w.r.t panda hand -> based on the asset
         self._offset_pos = torch.tensor([0.0, 0.0, 0.131], device=self.device).repeat(self.num_envs, 1)
-        self._offset_rot = torch.tensor([1.0, 0.0, 0.0, 0.0], device=self.device).repeat(self.num_envs, 1) 
+        self._offset_rot = torch.tensor([1.0, 0.0, 0.0, 0.0], device=self.device).repeat(self.num_envs, 1)
         ####################################################################
 
         # create buffer to store actions (= ik_commands)
         self.ik_commands = torch.zeros((self.num_envs, self._ik_controller.action_dim), device=self.device)
         # ee orientation should always be (0,1,0,0)
-        self.ik_commands[:, 3:] = torch.tensor([0,1,0,0],device=self.device)  
-        
+        self.ik_commands[:, 3:] = torch.tensor([0,1,0,0],device=self.device)
+
         # for moving ee and ball in a specific pattern
         # Define goals for the end effector of the franka arm by adding offsets to the current ball position
         ball_radius = self.cfg.ball_radius
@@ -342,30 +365,30 @@ class BallRollingEnv(UipcRLEnv):
         gel_height = self.cfg.gsmini.gelpad_dimensions.height
         z_offset = ball_radius - gel_height/2
 
-        above_ball = torch.tensor([0, 0, ball_radius*2],device=self.device) 
+        above_ball = torch.tensor([0, 0, ball_radius*2],device=self.device)
         center = torch.tensor([0, 0, z_offset],device=self.device)
         backward = torch.tensor([-gel_length/2, 0, z_offset],device=self.device)
         forward = torch.tensor([gel_length, 0, z_offset],device=self.device)
         left = torch.tensor([0, gel_width/2, z_offset],device=self.device)
         right = torch.tensor([0, -gel_width, z_offset],device=self.device)
-        pose_for_reset = torch.tensor([0, 0, ball_radius + 4*gel_height],device=self.device) 
+        pose_for_reset = torch.tensor([0, 0, ball_radius + 4*gel_height],device=self.device)
 
         self.pattern_offsets = [
-            above_ball, # first, place ee above ball 
+            above_ball, # first, place ee above ball
             center, # then ee to the center of the ball, so that there is contact
             backward, # move ee backwards
-            forward,    
+            forward,
             center, # back to the center
             left, # move ee to the left
             right,
             # repeat pattern
             center,
             backward, # move ee backwards
-            forward,    
+            forward,
             center, # back to the center
             left, # move ee to the left
-            right,    
-            center, 
+            right,
+            center,
             pose_for_reset # move ee over ball again, to prevent that the ball gets thrown around when the scene is resetted (not sure why this happens tho, I think cause the ball spawns directly where the ee is)
         ]
         # Track the given command
@@ -375,14 +398,14 @@ class BallRollingEnv(UipcRLEnv):
 
         # add handle for debug visualization (this is set to a valid handle inside set_debug_vis)
         self.set_debug_vis(self.cfg.debug_vis)
-        
+
     def _setup_scene(self):
         self._robot = Articulation(self.cfg.robot)
         self.scene.articulations["robot"] = self._robot
 
         # clone, filter, and replicate
         self.scene.clone_environments(copy_from_source=False)
-        
+
         marker_cfg = FRAME_MARKER_CFG.copy()
         marker_cfg.markers["frame"].scale = (0.01, 0.01, 0.01)
         marker_cfg.prim_path = "/Visuals/FrameTransformer"
@@ -400,7 +423,7 @@ class BallRollingEnv(UipcRLEnv):
                 ),
             ],
         )
-        
+
         # sensors
         self._ee_frame = FrameTransformer(ee_frame_cfg)
         self.scene.sensors["ee_frame"] = self._ee_frame
@@ -439,7 +462,7 @@ class BallRollingEnv(UipcRLEnv):
 
         # gelpad simulated via uipc
         self._uipc_gelpad: UipcObject = UipcObject(self.cfg.gelpad_cfg, self.uipc_sim)
-        
+
         self.object: UipcObject = UipcObject(self.cfg.ball, self.uipc_sim)
         self.scene.uipc_objects["object"] = self.object
 
@@ -448,7 +471,7 @@ class BallRollingEnv(UipcRLEnv):
 
 
     #MARK: pre-physics step calls
-        
+
     def _pre_physics_step(self, actions: torch.Tensor):
         # update movement pattern according to the ball position
         # ball_pos = self.object.data.root_link_pos_w - self.scene.env_origins
@@ -464,12 +487,12 @@ class BallRollingEnv(UipcRLEnv):
         if (self.step_count+1) % self.num_step_goal_change == 0:
             self.current_goal_idx = (self.current_goal_idx+1)  % len(self.pattern_offsets)
         self.ik_commands[:, :3] = ball_pos + self.pattern_offsets[self.current_goal_idx]
-        
+
         # # add some randomization for diverse tactile signals
         # self.ik_commands[:, :2] += sample_uniform(
-        #     -0.002, 
+        #     -0.002,
         #     0.002,
-        #     (self.num_envs, 2), 
+        #     (self.num_envs, 2),
         #     self.device
         # )
         self._ik_controller.set_command(self.ik_commands)
@@ -488,31 +511,31 @@ class BallRollingEnv(UipcRLEnv):
 
         self.step_count += 1
 
-    # post-physics step calls    
+    # post-physics step calls
 
     #MARK: dones
     def _get_dones(self) -> tuple[torch.Tensor, torch.Tensor]: # which environment is done
         pass
-    
+
     #MARK: rewards
-    def _get_rewards(self) -> torch.Tensor:        
+    def _get_rewards(self) -> torch.Tensor:
         pass
-        
+
     def _reset_idx(self, env_ids: torch.Tensor | None):
         super()._reset_idx(env_ids)
 
         # # spawn ball at random position
-        # obj_pos = self.object.data.default_root_state[env_ids] 
+        # obj_pos = self.object.data.default_root_state[env_ids]
         # obj_pos[:, :3] += self.scene.env_origins[env_ids]
         # # obj_pos[:, :2] += sample_uniform(
-        # #     self.cfg.obj_pos_randomization_range[0], 
+        # #     self.cfg.obj_pos_randomization_range[0],
         # #     self.cfg.obj_pos_randomization_range[1],
-        # #     (len(env_ids), 2), 
+        # #     (len(env_ids), 2),
         # #     self.device
         # # )
         # self.object.write_root_state_to_sim(obj_pos, env_ids=env_ids)
 
-        # reset robot state 
+        # reset robot state
         joint_pos = (
             self._robot.data.default_joint_pos[env_ids]
             # + sample_uniform(
@@ -528,14 +551,14 @@ class BallRollingEnv(UipcRLEnv):
 
         self.object.write_vertex_positions_to_sim(vertex_positions=self.object.init_vertex_pos)
         self._uipc_gelpad.write_vertex_positions_to_sim(vertex_positions=self._uipc_gelpad.init_vertex_pos)
-        
+
         # reset goal
         self.current_goal_idx = 0
 
     #MARK: observations
     def _get_observations(self) -> dict:
         pass
-        
+
     ####
     ## Helper Functions
     ####
@@ -575,7 +598,7 @@ class BallRollingEnv(UipcRLEnv):
         )
 
         return ee_pose_b, ee_quat_b
-    
+
     def _compute_frame_jacobian(self):
         """Computes the geometric Jacobian of the target frame in the root frame.
 
@@ -598,7 +621,7 @@ class BallRollingEnv(UipcRLEnv):
         jacobian[:, 3:, :] = torch.bmm(math_utils.matrix_from_quat(self._offset_rot), jacobian[:, 3:, :])
 
         return jacobian
-    
+
 """
 System diagnosis
 -> adapted from benchmark_cameras.py script of IsaacLab
@@ -608,7 +631,7 @@ def _get_utilization_percentages(reset: bool = False, max_values: list[float] = 
     GPU memory usage percentages since the last time reset was true."""
     if reset:
         max_values[:] = [0, 0, 0, 0]  # Reset the max values
-    
+
     # # CPU utilization
     #cpu_usage = psutil.cpu_percent(interval=0.1) # blocking slows down Isaac Sim a lot
     cpu_usage = psutil.cpu_percent(interval=None)
@@ -638,7 +661,7 @@ def _get_utilization_percentages(reset: bool = False, max_values: list[float] = 
     else:
         gpu_processing_utilization_percent = None
         gpu_memory_utilization_percent = None
-    
+
     return max_values
 
 
@@ -646,7 +669,7 @@ def run_simulator(env: BallRollingEnv):
     """Runs the simulation loop."""
 
     #! for time measurements
-    timestamp = "{:%Y-%m-%d-%H_%M_%S}".format(datetime.datetime.now())
+    timestamp = f"{datetime.datetime.now():%Y-%m-%d-%H_%M_%S}"
     output_dir = Path(__file__).parent.resolve()
     file_name = str(output_dir) + f"/envs_{env.num_envs}_{timestamp}.txt"
 
@@ -662,7 +685,7 @@ def run_simulator(env: BallRollingEnv):
 
     print(f"Starting simulation with {env.num_envs} envs")
     print("Number of steps till reset: ", len(env.pattern_offsets)*env.num_step_goal_change)
-    
+
     total_sim_time = time.time()
     # Simulation loop
     while simulation_app.is_running():
@@ -675,9 +698,9 @@ def run_simulator(env: BallRollingEnv):
 
             if len(frame_times_physics) != 0:
                 print("Current total amount of 'in-contact' frames per env: ", len(frame_times_physics))
-                print("Total sim time currently: {:8.4f}ms".format(time.time()-total_sim_time))
-                print("Avg physics_sim time per env:    {:8.4f}ms".format(np.mean(np.array(frame_times_physics)/env.num_envs)))
-                print("Avg tactile_sim time per env:    {:8.4f}ms".format(np.mean(np.array(frame_times_tactile)/env.num_envs)))
+                print(f"Total sim time currently: {time.time()-total_sim_time:8.4f}ms")
+                print(f"Avg physics_sim time per env:    {np.mean(np.array(frame_times_physics)/env.num_envs):8.4f}ms")
+                print(f"Avg tactile_sim time per env:    {np.mean(np.array(frame_times_tactile)/env.num_envs):8.4f}ms")
                 print(
                     f"| CPU:{system_utilization_analytics[0]}% | "
                     f"RAM:{system_utilization_analytics[1]}% | "
@@ -754,7 +777,7 @@ def run_simulator(env: BallRollingEnv):
         # if contact_idx.shape[0] != 0:
         #     frame_times_physics.append(1000 * (physics_end - physics_start))
         #     frame_times_tactile.append(1000 * (tactile_sim_end - tactile_sim_start))
-        
+
         # print("Current total amount of 'in-contact' frames per env: ", len(frame_times_physics))
         # print("Total sim time currently: {:8.4f}ms".format(time.time()-total_sim_time))
         # print("Avg physics_sim time per env:    {:8.4f}ms".format(np.mean(np.array(frame_times_physics)/env.num_envs)))
@@ -767,11 +790,11 @@ def run_simulator(env: BallRollingEnv):
         #     f"GPU Memory: {system_utilization_analytics[3]:.2f}% |"
         # )
         # print("")
-        
+
 
     env.close()
-    
-    pynvml.nvmlShutdown() 
+
+    pynvml.nvmlShutdown()
 
 def main():
     """Main function."""
@@ -780,7 +803,7 @@ def main():
     # override configurations with non-hydra CLI arguments
     env_cfg.scene.num_envs = args_cli.num_envs if args_cli.num_envs is not None else env_cfg.scene.num_envs
     env_cfg.sim.device = args_cli.device if args_cli.device is not None else env_cfg.sim.device
-    env_cfg.gsmini.debug_vis = args_cli.debug_vis 
+    env_cfg.gsmini.debug_vis = args_cli.debug_vis
 
     experiment = BallRollingEnv(env_cfg)
 

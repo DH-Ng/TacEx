@@ -6,36 +6,37 @@
 from __future__ import annotations
 
 import builtins
-import gymnasium as gym
 import inspect
 import math
-import numpy as np
-import torch
 import weakref
 from abc import abstractmethod
 from collections.abc import Sequence
 from dataclasses import MISSING
 from typing import Any, ClassVar
 
+import gymnasium as gym
 import isaacsim.core.utils.torch as torch_utils
+import numpy as np
 import omni.kit.app
 import omni.log
-from isaacsim.core.simulation_manager import SimulationManager
-from isaacsim.core.version import get_version
-
+import torch
+from isaaclab.envs import DirectRLEnv, DirectRLEnvCfg
+from isaaclab.envs.common import VecEnvObs, VecEnvStepReturn
+from isaaclab.envs.ui import ViewportCameraController
+from isaaclab.envs.utils.spaces import sample_space, spec_to_gym_space
 from isaaclab.managers import EventManager
+
 # from isaaclab.scene import InteractiveScene
 from isaaclab.sim import SimulationContext
 from isaaclab.utils.noise import NoiseModel
 from isaaclab.utils.timer import Timer
+from isaacsim.core.simulation_manager import SimulationManager
+from isaacsim.core.version import get_version
 
-from isaaclab.envs import DirectRLEnv, DirectRLEnvCfg
-from isaaclab.envs.ui import ViewportCameraController
-from isaaclab.envs.utils.spaces import sample_space, spec_to_gym_space 
-from isaaclab.envs.common import VecEnvObs, VecEnvStepReturn
+from tacex_uipc.objects import UipcObject, UipcObjectCfg
+from tacex_uipc.sim import UipcSim, UipcSimCfg
 
-from tacex_uipc import UipcSim, UipcSimCfg, UipcObject, UipcObjectCfg
-from tacex_uipc import UipcInteractiveScene
+from .uipc_interactive_scene import UipcInteractiveScene
 
 class UipcRLEnv(DirectRLEnv):
 
@@ -130,7 +131,7 @@ class UipcRLEnv(DirectRLEnv):
                 # this is needed for the observation manager to get valid tensors for initialization.
                 # this shouldn't cause an issue since later on, users do a reset over all the environments so the lazy buffers would be reset.
                 self.scene.update(dt=self.physics_dt)
-        
+
         self.uipc_sim.setup_sim()
 
         # check if debug visualization is has been implemented by the environment
@@ -325,7 +326,7 @@ class UipcRLEnv(DirectRLEnv):
             # #!test
             # self.scene.update(dt=self.physics_dt) # so that our uipc_sim has the newest data
             # self.uipc_sim.step()
-            
+
             # render between steps only if the GUI or an RTX sensor needs it
             # note: we assume the render interval to be the shortest accepted rendering interval.
             #    If a camera needs rendering at a faster frequency, this will lead to unexpected behavior.

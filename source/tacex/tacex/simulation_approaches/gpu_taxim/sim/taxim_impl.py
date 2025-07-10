@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from abc import abstractmethod, ABC
+from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Generic, TypeVar, overload
@@ -260,4 +260,3 @@ class TaximImpl(Generic[ArrayType, DeviceType], ABC):
     @property
     def backend_name(self) -> str:
         return self.__backend_name
-

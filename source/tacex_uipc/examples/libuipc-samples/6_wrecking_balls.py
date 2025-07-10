@@ -1,6 +1,6 @@
 """Showcase on how to use libuipc with Isaac Sim/Lab.
 
-This example corresponds to 
+This example corresponds to
 https://github.com/spiriMirror/libuipc-samples/blob/main/python/6_wrecking_balls/main.py
 
 Notes:
@@ -16,7 +16,7 @@ e.g. if the original example does this:
 
 cube_obj = scene.objects().create('cubes')
 ball_obj = scene.objects().create('balls')
-link_obj = scene.objects().create('links')  
+link_obj = scene.objects().create('links')
 
 In this case we first need to create cube geometries,
 then the ball geometries and in the end the link geometries.
@@ -25,7 +25,7 @@ Since the scene json has the order link.msh, ball.msh, cube.msh (which results i
 we need to first create the scene objects for the links, then the balls and in the end the cube.
 So, we do:
 
-link_obj = scene.objects().create('links')  
+link_obj = scene.objects().create('links')
 ball_obj = scene.objects().create('balls')
 cube_obj = scene.objects().create('cubes')
 
@@ -40,6 +40,7 @@ i.e. corresponding to the object creation.
 
 """Launch Isaac Sim Simulator first."""
 import argparse
+
 from isaaclab.app import AppLauncher
 
 # create argparser
@@ -52,32 +53,44 @@ args_cli = parser.parse_args()
 app_launcher = AppLauncher(args_cli)
 simulation_app = app_launcher.app
 
-import numpy as np
-
-import pathlib
 import json
+import pathlib
 
 import isaaclab.sim as sim_utils
-from isaaclab.utils.timer import Timer
-
-from pxr import Gf, Sdf, Usd, UsdGeom
+import numpy as np
 import omni.usd
+import uipc
 import usdrt
-
-import uipc 
-from uipc import view
-from uipc import Vector3, Vector2, Transform, Logger, Quaternion, AngleAxis
-from uipc import builtin
-from uipc.core import Engine, World, Scene
-from uipc.geometry import GeometrySlot, SimplicialComplex, SimplicialComplexIO, ground, label_surface, label_triangle_orient, flip_inward_triangles
-from uipc.constitution import AffineBodyConstitution
-from uipc.unit import MPa, GPa
-
+from isaaclab.utils.timer import Timer
+from pxr import Gf, Sdf, Usd, UsdGeom
 from tacex_uipc import UipcSim, UipcSimCfg
+from uipc import (
+    AngleAxis,
+    Logger,
+    Quaternion,
+    Transform,
+    Vector2,
+    Vector3,
+    builtin,
+    view,
+)
+from uipc.constitution import AffineBodyConstitution
+from uipc.core import Engine, Scene, World
+from uipc.geometry import (
+    GeometrySlot,
+    SimplicialComplex,
+    SimplicialComplexIO,
+    flip_inward_triangles,
+    ground,
+    label_surface,
+    label_triangle_orient,
+)
+from uipc.unit import GPa, MPa
+
 
 def setup_base_scene(sim: sim_utils.SimulationContext):
     """To make the scene pretty.
-    
+
     """
     # set upAxis to Y to match libuipc-samples
     stage = omni.usd.get_context().get_stage()
@@ -86,7 +99,7 @@ def setup_base_scene(sim: sim_utils.SimulationContext):
     # Design scene by spawning assets
     cfg_ground = sim_utils.GroundPlaneCfg()
     cfg_ground.func(
-        prim_path="/World/defaultGroundPlane", 
+        prim_path="/World/defaultGroundPlane",
         cfg=cfg_ground,
         translation=[0, -1, 0],
         orientation=[0.7071068, -0.7071068, 0, 0]
@@ -106,36 +119,36 @@ def setup_libuipc_scene(scene):
         label_surface(sc)
         label_triangle_orient(sc)
         sc = flip_inward_triangles(sc)
-        return sc   
+        return sc
 
     abd = AffineBodyConstitution()
     scene.contact_tabular().default_model(0.02, 10 * GPa)
-    default_contact = scene.contact_tabular().default_element() 
+    default_contact = scene.contact_tabular().default_element()
 
-    io = SimplicialComplexIO()  
+    io = SimplicialComplexIO()
 
     f = open(f'{str(pathlib.Path(__file__).parent.resolve())}/6_wrecking_ball.json')
-    wrecking_ball_scene = json.load(f)  
+    wrecking_ball_scene = json.load(f)
 
     cube = io.read(f'{tetmesh_dir}/cube.msh')
     cube = process_surface(cube)
     ball = io.read(f'{tetmesh_dir}/ball.msh')
     ball = process_surface(ball)
     link = io.read(f'{tetmesh_dir}/link.msh')
-    link = process_surface(link)    
+    link = process_surface(link)
 
-    link_obj = scene.objects().create('links')  
+    link_obj = scene.objects().create('links')
     ball_obj = scene.objects().create('balls')
     cube_obj = scene.objects().create('cubes')
 
     abd.apply_to(cube, 10 * MPa)
-    default_contact.apply_to(cube)  
+    default_contact.apply_to(cube)
 
     abd.apply_to(ball, 10 * MPa)
-    default_contact.apply_to(ball)  
+    default_contact.apply_to(ball)
 
     abd.apply_to(link, 10 * MPa)
-    default_contact.apply_to(link)  
+    default_contact.apply_to(link)
 
     def build_mesh(json, obj: uipc.core.Object, mesh:SimplicialComplex):
         t = Transform.Identity()
@@ -166,7 +179,7 @@ def setup_libuipc_scene(scene):
         is_fixed_attr = this_mesh.instances().find('is_fixed')
         view(is_fixed_attr)[0] = is_fixed
 
-        obj.geometries().create(this_mesh)  
+        obj.geometries().create(this_mesh)
 
     for obj in wrecking_ball_scene:
         if obj['mesh'] == 'link.msh':
@@ -208,7 +221,7 @@ def main():
     setup_libuipc_scene(uipc_sim.scene)
 
     # init liubipc world etc.
-    uipc_sim.setup_sim()    
+    uipc_sim.setup_sim()
     uipc_sim.init_libuipc_scene_rendering()
 
     # Now we are ready!
@@ -221,7 +234,7 @@ def main():
 
     # to save/ load the simulation frames
     recover_sim = False
-    
+
     # Simulate physics
     while simulation_app.is_running():
 
@@ -241,9 +254,9 @@ def main():
                     print("Replaying frame ", uipc_sim.world.frame() + 1)
                 else:
                     with Timer("[INFO]: Time taken for uipc sim step", name="uipc_step"):
-                        uipc_sim.step()  
+                        uipc_sim.step()
                     total_uipc_sim_time += Timer.get_timer_info("uipc_step")
-                    uipc_sim.world.dump() 
+                    uipc_sim.world.dump()
             else:
                 with Timer("[INFO]: Time taken for uipc sim step", name="uipc_step"):
                     uipc_sim.step()
@@ -255,10 +268,10 @@ def main():
             total_uipc_render_time += Timer.get_timer_info("render_update")
             # get time reports
             uipc_sim.get_sim_time_report()
-            
+
             step += 1
-   
-          
+
+
 if __name__ == "__main__":
     # run the main function
     main()

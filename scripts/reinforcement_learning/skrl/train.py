@@ -62,11 +62,11 @@ simulation_app = app_launcher.app
 
 """Rest everything follows."""
 
-import gymnasium as gym
 import os
 import random
 from datetime import datetime
 
+import gymnasium as gym
 import skrl
 from packaging import version
 
@@ -84,8 +84,8 @@ if args_cli.ml_framework.startswith("torch"):
 elif args_cli.ml_framework.startswith("jax"):
     from skrl.utils.runner.jax import Runner
 
-from isaaclab_rl.skrl import SkrlVecEnvWrapper
-
+# import isaaclab_tasks  # noqa: F401
+import tacex_tasks
 from isaaclab.envs import (
     DirectMARLEnv,
     DirectMARLEnvCfg,
@@ -96,9 +96,7 @@ from isaaclab.envs import (
 from isaaclab.utils.assets import retrieve_file_path
 from isaaclab.utils.dict import print_dict
 from isaaclab.utils.io import dump_pickle, dump_yaml
-
-# import isaaclab_tasks  # noqa: F401
-import tacex_tasks
+from isaaclab_rl.skrl import SkrlVecEnvWrapper
 from isaaclab_tasks.utils.hydra import hydra_task_config
 
 # config shortcuts

@@ -1,33 +1,30 @@
 from __future__ import annotations
 
+import math
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 import cv2
-import omni.usd
 import numpy as np
-import math
-
+import omni.usd
 import torch
 import torchvision.transforms.functional as F
-
-from isaaclab.utils.math import euler_xyz_from_quat
 from isaaclab.sensors import FrameTransformer, FrameTransformerCfg
+from isaaclab.utils.math import euler_xyz_from_quat
 
-from .sim import MarkerMotion
+from ...gelsight_sensor import GelSightSensor
 from ..gelsight_simulator import GelSightSimulator
 from ..gpu_taxim import TaximSimulator
 from ..gpu_taxim.sim import TaximTorch
-
-from ...gelsight_sensor import GelSightSensor
+from .sim import MarkerMotion
 
 if TYPE_CHECKING:
     from .fots_marker_sim_cfg import FOTSMarkerSimulatorCfg
 
 class FOTSMarkerSimulator(GelSightSimulator):
-    """Wraps around the Taxim simulation for the optical simulation of GelSight sensors 
+    """Wraps around the Taxim simulation for the optical simulation of GelSight sensors
     inside Isaac Sim.
-    
+
     The class uses an instance of the gpu_taxim simulator for some of it operations.
     """
     cfg: FOTSMarkerSimulatorCfg
@@ -36,15 +33,15 @@ class FOTSMarkerSimulator(GelSightSimulator):
         self.sensor = sensor
 
         super().__init__(sensor=sensor, cfg=cfg)
-        
+
         # use IsaacLab FrameTransformer for keeping track of relative positon/rotation
         self.frame_transformer: FrameTransformer = FrameTransformer(self.cfg.frame_transformer_cfg)
-            
+
     def _initialize_impl(self):
         if self.cfg.device is None:
             # use same device as simulation
             self._device = self.sensor.device
-        else: 
+        else:
             self._device = self.cfg.device
 
         self._num_envs = self.sensor._num_envs
@@ -80,20 +77,20 @@ class FOTSMarkerSimulator(GelSightSimulator):
         )
 
         self.init_marker_pos = (self.marker_motion_sim.init_marker_x_pos, self.marker_motion_sim.init_marker_y_pos)
-        
+
         # if camera resolution is different than the tactile RGB res, scale img
         self.img_res = self.cfg.tactile_img_res
 
         # create buffers
         self.marker_data = torch.zeros((self.sensor._num_envs, self.cfg.marker_params.num_markers_row, self.cfg.marker_params.num_markers_col, 2), device=self._device)
-        
+
         self.sensor._data.output["traj"] = []
         for _ in range(self.sensor._num_envs):
             self.sensor._data.output["traj"].append([])
         self.theta = torch.zeros((self.sensor._num_envs), device=self._device)
 
         # need to initialize manually
-        self.frame_transformer._initialize_impl() 
+        self.frame_transformer._initialize_impl()
         self.frame_transformer._is_initialized = True
         print("Frame transformer for FOTS: ", self.frame_transformer)
 
@@ -171,7 +168,7 @@ class FOTSMarkerSimulator(GelSightSimulator):
 
         marker_rotated_xy = marker_xy @ rot_mat.T
         return marker_rotated_xy / 1000.0
-    
+
     def marker_motion_simulation(self):
         self.frame_transformer.update(dt=0)
         self._indentation_depth = self.sensor._indentation_depth
@@ -189,7 +186,7 @@ class FOTSMarkerSimulator(GelSightSimulator):
         deformed_gel, contact_mask = self._taxim._TaximTorch__compute_gel_pad_deformation(height_map_shifted)
         deformed_gel = deformed_gel.max() - deformed_gel
 
-       
+
         for h in range(deformed_gel.shape[0]):
             if self._indentation_depth[h].item() > 0.0:
                 # compute contact center based on contact_mask
@@ -202,7 +199,7 @@ class FOTSMarkerSimulator(GelSightSimulator):
                 mean[1] = (mean[1]-self.marker_motion_sim.tactile_img_width/2)/self.marker_motion_sim.mm2pix
                 #self.sensor._data.output["traj"][h].append([mean[1], mean[0], self.theta[h].cpu().numpy()])
                 #print("should be ", mean[1], mean[0])
-                
+
                 # rel position/orientation of obj to sensor
                 rel_pos = self.frame_transformer.data.target_pos_source.cpu().numpy()[h,0,:] # target_pos_source shape is (num_envs, num_targets, 3)
                 rel_pos *= 1000 # convert to mm
@@ -215,37 +212,37 @@ class FOTSMarkerSimulator(GelSightSimulator):
 
                 #self.sensor._data.output["traj"][h].append([rel_pos[0], rel_pos[1], theta])
                 # print("")
-                
+
                 # traj = contaxt data (x,y,theta)
                 self.sensor._data.output["traj"][h].append([mean[1], mean[0], theta])
-                
-                #todo vectorize with pytorch 
+
+                #todo vectorize with pytorch
                 marker_x_pos, marker_y_pos = self.marker_motion_sim.marker_sim(
-                    deformed_gel[h].cpu().numpy(), 
-                    contact_mask[h].cpu().numpy(), 
+                    deformed_gel[h].cpu().numpy(),
+                    contact_mask[h].cpu().numpy(),
                     self.sensor._data.output["traj"][h]
                 )
             else:
                 self.sensor._data.output["traj"][h] = []
                 marker_x_pos = self.marker_motion_sim.init_marker_x_pos
                 marker_y_pos = self.marker_motion_sim.init_marker_y_pos
-                
+
             self.marker_data[h, :, :, 0] = torch.tensor(marker_x_pos, device=self._device)
             self.marker_data[h, :, :, 1] = torch.tensor(marker_y_pos, device=self._device)
-            
+
         return self.marker_data
 
     def reset(self):
         self._indentation_depth = torch.zeros((self._num_envs), device=self._device)
         self.init_marker_pos = (self.marker_motion_sim.init_marker_x_pos, self.marker_motion_sim.init_marker_y_pos)
-    
+
     def _set_debug_vis_impl(self, debug_vis: bool):
         """ Creates an USD attribute for the sensor asset, which can visualize the tactile image.
-        
-        Select the GelSight sensor case whose output you want to see in the Isaac Sim GUI, 
+
+        Select the GelSight sensor case whose output you want to see in the Isaac Sim GUI,
         i.e. the `gelsight_mini_case` Xform (not the mesh!).
         Scroll down in the properties panel to "Raw Usd Properties" and click "Extra Properties".
-        There is an attribute called "show_tactile_image". 
+        There is an attribute called "show_tactile_image".
         Toggle it on to show the sensor output in the GUI.
 
         If only optical simulation is used, then only an optical img is displayed.
@@ -265,10 +262,10 @@ class FOTSMarkerSimulator(GelSightSimulator):
         else:
             pass
 
-    def _debug_vis_callback(self, event):    
+    def _debug_vis_callback(self, event):
         if self.sensor._prim_view is None:
             return
-                
+
         # Update the GUI windows_prim_view
         for i, prim in enumerate(self.sensor._prim_view.prims):
             if "marker_motion" in self.sensor.cfg.data_types:
@@ -281,7 +278,7 @@ class FOTSMarkerSimulator(GelSightSimulator):
                         # create image provider
                         self._debug_img_providers[str(i)] = omni.ui.ByteImageProvider() # default format omni.ui.TextureFormat.RGBA8_UNORM
 
-                    frame = np.zeros((self.cfg.tactile_img_res[1],self.cfg.tactile_img_res[0])).astype(np.uint8) 
+                    frame = np.zeros((self.cfg.tactile_img_res[1],self.cfg.tactile_img_res[0])).astype(np.uint8)
 
                     # like the `_generate` function of FOTS MarkerMotion sim
                     marker_data = self.sensor.data.output["marker_motion"][i]
@@ -305,17 +302,17 @@ class FOTSMarkerSimulator(GelSightSimulator):
                                 continue
                             # cv2.circle(frame,(column,row), 6, (255,255,255), 1, lineType=8)
 
-                            arrow_scale = 0.001 #10 #0.0001 #0.25     
+                            arrow_scale = 0.001 #10 #0.0001 #0.25
                             pt1 = (init_x_pos, init_y_pos)
                             # pt2 = (column+int(arrow_scale*(column-init_column)), row+int(arrow_scale*(row-init_row)))
                             pt2 = (x_pos, y_pos)
                             cv2.arrowedLine(frame, pt1, pt2, color, 2,  tipLength=0.1)
                     # visualize contact center with red cross
-                    # if len(self._data.output["traj"][i]) > 1:     
+                    # if len(self._data.output["traj"][i]) > 1:
                     #     traj = []
-                    #     traj.append(self._data.output["traj"][i][0])            
-                    #     cv2.circle(frame,(int(traj[0][0]/self.taxim.sensor_params.pixmm + frame.shape[0]/2), int(traj[0][1]/self.taxim.sensor_params.pixmm + frame.shape[1]/2)), 5, (255,0,0), -1) 
-                    #     # cv2.circle(frame,(int(traj[0][0]/self.taxim.sensor_params.pixmm + 320), int(traj[0][1]/self.taxim.sensor_params.pixmm + 240)), 5, (255,0,0), -1) 
+                    #     traj.append(self._data.output["traj"][i][0])
+                    #     cv2.circle(frame,(int(traj[0][0]/self.taxim.sensor_params.pixmm + frame.shape[0]/2), int(traj[0][1]/self.taxim.sensor_params.pixmm + frame.shape[1]/2)), 5, (255,0,0), -1)
+                    #     # cv2.circle(frame,(int(traj[0][0]/self.taxim.sensor_params.pixmm + 320), int(traj[0][1]/self.taxim.sensor_params.pixmm + 240)), 5, (255,0,0), -1)
 
                         # should = self.should_be.cpu().numpy()[0]
                         # cv2.circle(frame,(should[1], should[0]), 4, (0,255,0), -1)

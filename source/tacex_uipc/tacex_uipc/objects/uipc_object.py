@@ -5,19 +5,18 @@
 
 from __future__ import annotations
 
-import torch
+import re
 from collections.abc import Sequence
 from typing import TYPE_CHECKING
-import re
 
 import omni.log
 import omni.physics.tensors.impl.api as physx
-
 import omni.usd
+import torch
 import usdrt
-from isaacsim.core.prims import XFormPrim
-from pxr import UsdPhysics, UsdGeom, Gf, Usd
 import usdrt.UsdGeom
+from isaacsim.core.prims import XFormPrim
+from pxr import Gf, Usd, UsdGeom, UsdPhysics
 
 # from isaacsim.core.utils.extensions import enable_extension
 # enable_extension("isaacsim.util.debug_draw")
@@ -27,43 +26,56 @@ try:
 except:
     draw = None
 
+import random
+
 import isaaclab.sim as sim_utils
 import isaaclab.utils.math as math_utils
 import isaaclab.utils.string as string_utils
-
-from isaaclab.utils import configclass
-from isaaclab.assets import AssetBase, AssetBaseCfg
-
-
-import uipc
-from uipc import builtin, view
-from uipc.core import Engine, World, Scene, SceneIO
-from uipc import Vector3, Vector2, Transform, Logger, Quaternion, AngleAxis
-from uipc.geometry import tetmesh, label_surface, label_triangle_orient, flip_inward_triangles, extract_surface
-from uipc.constitution import AffineBodyConstitution, ElasticModuli, StableNeoHookean
-from uipc.unit import MPa, GPa
-
-import random
 import numpy as np
+import uipc
 import warp as wp
+from isaaclab.assets import AssetBase, AssetBaseCfg
+from isaaclab.utils import configclass
+from uipc import (
+    AngleAxis,
+    Logger,
+    Quaternion,
+    Transform,
+    Vector2,
+    Vector3,
+    builtin,
+    view,
+)
+from uipc.constitution import AffineBodyConstitution, ElasticModuli, StableNeoHookean
+from uipc.core import Engine, Scene, SceneIO, World
+from uipc.geometry import (
+    extract_surface,
+    flip_inward_triangles,
+    label_surface,
+    label_triangle_orient,
+    tetmesh,
+)
+from uipc.unit import GPa, MPa
+
 wp.init()
 
-from tacex_uipc.utils import TetMeshCfg, MeshGenerator
-from tacex_uipc.uipc_attachments import UipcIsaacAttachments, UipcIsaacAttachmentsCfg
+
+from tacex_uipc.utils import MeshGenerator, TetMeshCfg
 
 from .uipc_object_deformable_data import UipcObjectDeformableData
 from .uipc_object_rigid_data import UipcObjectRigidData
 
 if TYPE_CHECKING:
-    from tacex_uipc import UipcSim
+    from tacex_uipc.sim import UipcIsaacAttachmentsCfg, UipcSim
+
 
 @configclass
 class UipcObjectCfg(AssetBaseCfg):
     mesh_cfg: TetMeshCfg = None
-    # contact_model: 
+    # contact_model:
 
     mass_density: float = 1e3
-    
+
     @configclass
     class AffineBodyConstitutionCfg:
         # class_type = AffineBodyConstitution # doesnt work, cause no builtin signature found for AffineBodyConstitution class
@@ -76,9 +88,9 @@ class UipcObjectCfg(AssetBaseCfg):
 
         kinematic: bool = False
         """Makes the DoF of the ABD body fixed.
-        
+
         """
-    
+
     @configclass
     class StableNeoHookeanCfg:
         # class_type = StableNeoHookean
@@ -89,10 +101,10 @@ class UipcObjectCfg(AssetBaseCfg):
 
         poisson_rate: float = 0.49
         """ Poission Rate
-        
+
         Has to be < 0.5.
         """
-    
+
     constitution_cfg: AffineBodyConstitutionCfg | StableNeoHookeanCfg = None
 
     attachment_cfg: UipcIsaacAttachmentsCfg = None
@@ -137,7 +149,7 @@ class UipcObject(AssetBase):
         self._prim_view.initialize()
 
         self.stage = usdrt.Usd.Stage.Attach(omni.usd.get_context().get_stage_id())
-        
+
         self.uipc_scene_objects = []
         self.geo_slot_list = []
 
@@ -149,7 +161,7 @@ class UipcObject(AssetBase):
             usd_mesh = UsdGeom.Mesh(prim_children[0])
             usd_mesh_path = str(usd_mesh.GetPath())
             print("usd_mesh_path ", usd_mesh_path)
-            
+
             if self.cfg.mesh_cfg is None:
                 # Load precomputed mesh data from USD prim.
                 tet_points = np.array(prim_children[0].GetAttribute("tet_points").Get())
@@ -169,20 +181,20 @@ class UipcObject(AssetBase):
             tf_world = np.array(omni.usd.get_world_transform_matrix(usd_mesh))
             tet_points_world = tf_world.T @ np.vstack((tet_points.T, np.ones(tet_points.shape[0])))
             tet_points_world = (tet_points_world[:-1].T)
-            
+
             # uipc wants 2D array
             tet_indices = np.array(tet_indices).reshape(-1,4)
             tet_surf_indices = np.array(tet_surf_indices).reshape(-1,3)
 
             # create uipc mesh
             mesh = tetmesh(tet_points_world.copy(), tet_indices.copy())
-            # enable the contact by labeling the surface 
+            # enable the contact by labeling the surface
             label_surface(mesh)
             label_triangle_orient(mesh) #-> only needed when we want to export the mesh with uipc
-            # flip the triangles inward for better rendering 
+            # flip the triangles inward for better rendering
             mesh = flip_inward_triangles(mesh) #todo idk if this makes a difference for us
             self.uipc_meshes.append(mesh)
-              
+
             surf = extract_surface(mesh)
             tet_surf_points_world = surf.positions().view().reshape(-1,3)
             tet_surf_tri = surf.triangles().topo().view().reshape(-1).tolist()
@@ -215,7 +227,7 @@ class UipcObject(AssetBase):
 
             # add fabric meshes to uipc sim class for updating the render meshes
             self._uipc_sim._fabric_meshes.append(fabric_prim)
-            
+
             # save surface offsets for finding corresponding surface points of the meshes for rendering
             num_surf_points = tet_surf_points_world.shape[0] #np.unique(tet_surf_indices)
             self._uipc_sim._surf_vertex_offsets.append(
@@ -225,7 +237,7 @@ class UipcObject(AssetBase):
             # required for writing vertex positions to sim
             num_vertex_points = mesh.positions().view().shape[0]
             self._vertex_count = num_vertex_points
-            
+
             # update local vertex offset of the subsystem
             self._uipc_sim._system_vertex_offsets[self._system_name].append(
                 self._uipc_sim._system_vertex_offsets[self._system_name][-1] + self._vertex_count
@@ -241,7 +253,7 @@ class UipcObject(AssetBase):
     """
 
     @property
-    def data(self) -> UipcObjectDeformableData | UipcObjectRigidData: 
+    def data(self) -> UipcObjectDeformableData | UipcObjectRigidData:
         return self._data
 
     @property
@@ -268,7 +280,7 @@ class UipcObject(AssetBase):
 
         """
         return self._uipc_sim
-     
+
     """
     Operations.
     """
@@ -321,10 +333,10 @@ class UipcObject(AssetBase):
         return string_utils.resolve_matching_names(name_keys, self.body_names, preserve_order)
 
     # def _compute_obj_position_world(self):
-    #     # get current world vertex positions        
+    #     # get current world vertex positions
     #     geom = self._uipc_sim.scene.geometries()
     #     geo_slot, geo_slot_rest = geom.find(self.obj_id)
-        
+
     #     vertex_positions_world = torch.tensor(geo_slot.geometry().positions().view().copy().reshape(-1,3), device=self.device)
     #     obj_pos = torch.mean(vertex_positions_world, dim=0)
 
@@ -351,7 +363,7 @@ class UipcObject(AssetBase):
         if env_ids is None:
             env_ids = slice(None)
             physx_env_ids = self._ALL_INDICES
-        
+
 
         # # note: we need to do this here since tensors are not set into simulation until step.
         # # set into internal buffers
@@ -381,7 +393,7 @@ class UipcObject(AssetBase):
             self.uipc_sim.world.write_vertex_pos_to_sim(vertex_positions.cpu().numpy(), global_vertex_offset, self.local_system_id-1, self._vertex_count, self._system_name)
         else:
             self.uipc_sim.world.write_vertex_pos_to_sim(vertex_positions.cpu().numpy(), global_vertex_offset, local_vertex_offset, self._vertex_count, self._system_name)
-    
+
     """
     Internal helper.
     """
@@ -399,11 +411,11 @@ class UipcObject(AssetBase):
         print(f"obj id of {self.cfg.prim_path}: {self.obj_id} ")
         self.geo_slot_list.append(obj_geo_slot)
 
-        # save initial world vertex positions        
+        # save initial world vertex positions
         geom = self._uipc_sim.scene.geometries()
         geo_slot, geo_slot_rest = geom.find(self.obj_id)
         self.init_vertex_pos = torch.tensor(geo_slot.geometry().positions().view().copy().reshape(-1,3), device=self.device)
-            
+
         # log information the uipc body
         omni.log.info(f"UIPC body initialized at: {self.cfg.prim_path}.")
         omni.log.info(f"Number of instances: {self.num_instances}")
@@ -420,11 +432,11 @@ class UipcObject(AssetBase):
         self._process_cfg()
         # update the uipc_object data
         self.update(0.0)
-        
+
         # add this object to the list of all uipc objects in the world
         self._uipc_sim.uipc_objects.append(self)
-                
-            
+
+
     def _create_buffers(self):
         """Create buffers for storing data."""
         # constants
@@ -472,7 +484,7 @@ class UipcObject(AssetBase):
             self._system_name = "uipc::backend::cuda::FiniteElementMethod"
         elif type(self.constitution) == AffineBodyConstitution:
             stiffness = self.cfg.constitution_cfg.m_kappa
-            self.constitution.apply_to(mesh, stiffness * MPa, mass_density=self.cfg.mass_density) 
+            self.constitution.apply_to(mesh, stiffness * MPa, mass_density=self.cfg.mass_density)
             self._system_name = "uipc::backend::cuda::AffineBodyDynamics"
 
             # make ABD body kinematic
@@ -483,7 +495,7 @@ class UipcObject(AssetBase):
         # apply the default contact model to the base mesh
         default_element = self._uipc_sim.scene.contact_tabular().default_element()
         default_element.apply_to(mesh)
-            
+
     """
     Internal simulation callbacks.
     """

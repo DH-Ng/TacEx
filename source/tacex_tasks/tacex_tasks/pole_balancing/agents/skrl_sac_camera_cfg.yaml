@@ -31,7 +31,7 @@ memory_size: 15625
 
 # SAC agent configuration (field names are from SAC_DEFAULT_CONFIG)
 # https://skrl.readthedocs.io/en/latest/api/agents/sac.html#configuration-and-hyperparameters
-agent: 
+agent:
   class: SAC
   gradient_steps": 1            # gradient steps
   batch_size": 4096               # training batch size
@@ -51,7 +51,7 @@ agent:
   initial_entropy_value": 0.2   # initial entropy value
   target_entropy": None         # target entropy
   rewards_shaper": None         # rewards shaping function: Callable(reward, timestep, timesteps) -> reward
-    
+
   # logging and checkpoint
   experiment:
     directory: "pole_balancing"

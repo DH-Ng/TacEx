@@ -1,6 +1,8 @@
 import random
+
 import omni.usd
-from pxr import UsdGeom, Gf
+from pxr import Gf, UsdGeom
+
 
 class Example():
 
@@ -16,7 +18,7 @@ class Example():
         # Set up Geometry to be Instanced
         tet_path = "/World/Tetrahedra"
         stage = omni.usd.get_context().get_stage()
-  
+
         tet = UsdGeom.Mesh.Define(stage, tet_path)
         tet.CreatePointsAttr([(0.0, 0.0, 0.0), (1.0, 0.0, 0.0), (0.0, 1.0, 0.0), (0.0, 0.0, 1.0)])
         tet.CreateFaceVertexCountsAttr([3]*self.face_count)
@@ -24,7 +26,7 @@ class Example():
         tet.CreateDisplayColorPrimvar().Set([(0, 1, 1)])
         tet.CreateDisplayOpacityPrimvar().Set([0.15]*self.face_count)
         tet.AddScaleOp().Set(Gf.Vec3d(1, 1, 1) * scale)
-        
+
         # Set up Point Instancer
 
         instance_path = "/World/PointInstancer"
@@ -77,6 +79,8 @@ class Example():
         self.positions_attr.Set(self.point_list)
 
 import asyncio
+
 import omni
+
 example = Example()
 example.create_tet()

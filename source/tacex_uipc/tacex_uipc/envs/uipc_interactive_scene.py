@@ -3,17 +3,13 @@
 #
 # SPDX-License-Identifier: BSD-3-Clause
 
-import torch
 from collections.abc import Sequence
 from typing import Any
 
 import carb
-import omni.usd
-from isaacsim.core.cloner import GridCloner
-from isaacsim.core.prims import XFormPrim
-from pxr import PhysxSchema
-
 import isaaclab.sim as sim_utils
+import omni.usd
+import torch
 from isaaclab.assets import (
     Articulation,
     ArticulationCfg,
@@ -25,12 +21,20 @@ from isaaclab.assets import (
     RigidObjectCollection,
     RigidObjectCollectionCfg,
 )
-from isaaclab.sensors import ContactSensorCfg, FrameTransformerCfg, SensorBase, SensorBaseCfg
-from isaaclab.terrains import TerrainImporter, TerrainImporterCfg
-
 from isaaclab.scene import InteractiveSceneCfg
+from isaaclab.sensors import (
+    ContactSensorCfg,
+    FrameTransformerCfg,
+    SensorBase,
+    SensorBaseCfg,
+)
+from isaaclab.terrains import TerrainImporter, TerrainImporterCfg
+from isaacsim.core.cloner import GridCloner
+from isaacsim.core.prims import XFormPrim
+from pxr import PhysxSchema
 
-from tacex_uipc import UipcObject,  UipcObjectCfg
+from tacex_uipc.objects import UipcObject, UipcObjectCfg
+
 
 class UipcInteractiveScene:
     """A scene that contains entities added to the simulation.
@@ -360,7 +364,7 @@ class UipcInteractiveScene:
     @property
     def uipc_objects(self) -> dict[str, UipcObject]:
         return self._uipc_objects
-    
+
     @property
     def state(self) -> dict[str, dict[str, dict[str, torch.Tensor]]]:
         """Returns the state of the scene entities.

@@ -10,18 +10,18 @@ This env is basically the ball_rolling_privileged extended for mixed observation
 
 - Actions (=5): Task space with relative IK Controller (dx, dy, dz, droll, dpitch)
     - dyaw is omitted, since the z rotation of the ee is irrelevant for our task (a fixed value is passed over during pre_physics step)
-- Observations contain vision and proprioception data (=14): 
+- Observations contain vision and proprioception data (=14):
     - proprioception: ee pos (=3), ee orientation (=2 -> roll, pitch), goal pos (=2 -> x,y) and **current** obj pos (=2 -> x,y), as well as the actions (=5)
-    - vision: depth map of the cameras inside the scene (for testing purposes) 
+    - vision: depth map of the cameras inside the scene (for testing purposes)
 
-- Reward: 
+- Reward:
     - reaching part (distance obj and ee)
     - bonus rew, when ee is close enough to obj
     - target tracking part (distance obj and goal -> applied when ee is close enough to obj)
     - success reward -> applied when ball is close enough to target pos
     - penalty if ee is too close to the ground
     - penalty if ee roll and pitch orientation is too big
-    - action_rate and joint_vel penalties 
+    - action_rate and joint_vel penalties
 
 An [IK-solver](https://github.com/UM-ARM-Lab/pytorch_kinematics]) is used to place the ee at the ball after every reset.
 This is necessary to make the training with the tactile readings work.
@@ -40,15 +40,15 @@ And the privileged data is omitted. Instead of having the current ball position 
 
 - Actions (=5): Task space with relative IK Controller (dx, dy, dz, droll, dpitch)
     - dyaw is omitted, since the z rotation of the ee is irrelevant for our task (a fixed value is passed over during pre_physics step)
-- Observations contain vision and proprioception data (=14): 
+- Observations contain vision and proprioception data (=14):
     - proprioception: ee pos (=3), ee orientation (=2 -> roll, pitch), goal pos (=2 -> x,y) and **initial** obj pos (=2 -> x,y), as well as the actions (=5)
     - vision: depth map of the cameras inside the scene
 
-- Reward: 
+- Reward:
     - reaching part (distance obj and ee)
     - bonus rew, when ee is close enough to obj
     - target tracking part (distance obj and goal -> applied when ee is close enough to obj)
     - success reward -> applied when ball is close enough to target pos
     - penalty if ee is too close to the ground
     - penalty if ee roll and pitch orientation is too big
-    - action_rate and joint_vel penalties 
+    - action_rate and joint_vel penalties

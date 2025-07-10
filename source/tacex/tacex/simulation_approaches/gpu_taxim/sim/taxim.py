@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Literal, overload, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Literal, overload
 
 from .calibration import CALIB_GELSIGHT
 
@@ -20,10 +20,11 @@ def _mk_taxim_torch(
     calib_folder: Path,
     params: dict[str, dict[str, Any]] | None,
     device: str | None,
-) -> "TaximTorch":
+) -> TaximTorch:
     try:
-        from .taxim_torch import TaximTorch
         import torch.cuda
+
+        from .taxim_torch import TaximTorch
 
         if device is None:
             device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -38,10 +39,11 @@ def _mk_taxim_jax(
     calib_folder: Path,
     params: dict[str, dict[str, Any]] | None,
     device: str | None,
-) -> "TaximJax":
+) -> TaximJax:
     try:
-        from .taxim_jax import TaximJax
         import jax
+
+        from .taxim_jax import TaximJax
 
         return TaximJax(
             calib_folder=calib_folder, params=params, device=jax.devices(device)[0]
@@ -57,7 +59,7 @@ def Taxim(
     calib_folder: Path = ...,
     params: dict[str, dict[str, Any]] | None = ...,
     backend: Literal["torch"] = ...,
-) -> "TaximTorch":
+) -> TaximTorch:
     ...
 
 
@@ -66,7 +68,7 @@ def Taxim(
     calib_folder: Path = ...,
     params: dict[str, dict[str, Any]] | None = ...,
     backend: Literal["jax"] = ...,
-) -> "TaximJax":
+) -> TaximJax:
     ...
 
 
@@ -75,7 +77,7 @@ def Taxim(
     calib_folder: Path = ...,
     params: dict[str, dict[str, Any]] | None = ...,
     backend: Literal["auto"] = ...,
-) -> "Union[TaximTorch, TaximJax]":
+) -> Union[TaximTorch, TaximJax]:
     ...
 
 
@@ -84,7 +86,7 @@ def Taxim(
     params: dict[str, dict[str, Any]] | None = None,
     backend: Literal["torch", "jax", "auto"] = "auto",
     device: str | None = None,
-) -> "Union[TaximTorch, TaximJax]":
+) -> Union[TaximTorch, TaximJax]:
     """
     Create a Taxim simulator.
 

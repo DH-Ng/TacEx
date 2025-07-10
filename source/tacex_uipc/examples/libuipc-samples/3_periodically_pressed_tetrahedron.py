@@ -1,6 +1,6 @@
 """Showcase on how to use libuipc with Isaac Sim/Lab.
 
-This example corresponds to 
+This example corresponds to
 https://github.com/spiriMirror/libuipc-samples/blob/main/python/1_hello_libuipc/main.py
 
 
@@ -8,6 +8,7 @@ https://github.com/spiriMirror/libuipc-samples/blob/main/python/1_hello_libuipc/
 
 """Launch Isaac Sim Simulator first."""
 import argparse
+
 from isaaclab.app import AppLauncher
 
 # create argparser
@@ -20,34 +21,43 @@ args_cli = parser.parse_args()
 app_launcher = AppLauncher(args_cli)
 simulation_app = app_launcher.app
 
-import numpy as np
-
 import isaaclab.sim as sim_utils
-from isaaclab.utils.timer import Timer
-
-from pxr import Gf, Sdf, Usd, UsdGeom
+import numpy as np
 import omni.usd
-import usdrt
-
 import uipc
-from uipc.core import Engine, World, Scene
-from uipc.geometry import tetmesh, label_surface, label_triangle_orient, flip_inward_triangles, extract_surface
-from uipc.constitution import AffineBodyConstitution
-from uipc.unit import MPa, GPa
+import usdrt
+from isaaclab.utils.timer import Timer
+from pxr import Gf, Sdf, Usd, UsdGeom
+from tacex_uipc import UipcObject, UipcObjectCfg, UipcSim, UipcSimCfg
+from tacex_uipc.utils import (
+    MeshGenerator,
+    TetMeshCfg,
+    create_prim_for_uipc_scene_object,
+)
+from uipc import Animation, Vector3, builtin, view
+from uipc.constitution import (
+    AffineBodyConstitution,
+    ElasticModuli,
+    SoftPositionConstraint,
+    StableNeoHookean,
+)
+from uipc.core import Engine, Scene, SceneIO, World
+from uipc.geometry import (
+    GeometrySlot,
+    SimplicialComplex,
+    SimplicialComplexIO,
+    extract_surface,
+    flip_inward_triangles,
+    label_surface,
+    label_triangle_orient,
+    tetmesh,
+)
+from uipc.unit import GPa, MPa
 
-from uipc import view
-from uipc import builtin
-from uipc import Animation, Vector3
-from uipc.core import Engine, World, Scene, SceneIO
-from uipc.constitution import ElasticModuli, StableNeoHookean, SoftPositionConstraint
-from uipc.geometry import GeometrySlot, SimplicialComplex, SimplicialComplexIO
-
-from tacex_uipc import UipcSim, UipcSimCfg, UipcObject, UipcObjectCfg
-from tacex_uipc.utils import TetMeshCfg, MeshGenerator, create_prim_for_uipc_scene_object
 
 def setup_base_scene(sim: sim_utils.SimulationContext):
     """To make the scene pretty.
-    
+
     """
     # set upAxis to Y to match libuipc-samples
     stage = omni.usd.get_context().get_stage()
@@ -56,7 +66,7 @@ def setup_base_scene(sim: sim_utils.SimulationContext):
     # Design scene by spawning assets
     cfg_ground = sim_utils.GroundPlaneCfg()
     cfg_ground.func(
-        prim_path="/World/defaultGroundPlane", 
+        prim_path="/World/defaultGroundPlane",
         cfg=cfg_ground,
         translation=[0, -0.5, 0],
         orientation=[0.7071068, -0.7071068, 0, 0]
@@ -110,7 +120,7 @@ def setup_libuipc_scene(scene):
         aim_position_view[0] = rest_position_view[0] + Vector3.UnitY() * y
 
     animator.insert(tet_object, animate_tet)
- 
+
 def main():
     """Main function."""
     # Initialize the simulation context
@@ -136,11 +146,11 @@ def main():
     uipc_sim = UipcSim(uipc_cfg)
 
     setup_libuipc_scene(uipc_sim.scene)
-    
+
     # init liubipc world etc.
     uipc_sim.setup_sim()
     uipc_sim.init_libuipc_scene_rendering()
-   
+
     # Now we are ready!
     print("[INFO]: Setup complete...")
 
@@ -172,8 +182,8 @@ def main():
             total_uipc_sim_time += Timer.get_timer_info("uipc_step")
             total_uipc_render_time += Timer.get_timer_info("render_update")
 
-            step += 1      
-          
+            step += 1
+
 if __name__ == "__main__":
     # run the main function
     main()

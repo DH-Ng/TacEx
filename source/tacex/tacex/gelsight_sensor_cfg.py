@@ -1,11 +1,12 @@
-from dataclasses import dataclass, MISSING
-from typing import TYPE_CHECKING, Any, Dict, Sequence, Tuple, Union, Literal
-from isaaclab.utils import class_to_dict, to_camel_case, configclass
-from isaaclab.sensors import SensorBaseCfg, TiledCameraCfg
+from dataclasses import MISSING, dataclass
+from typing import TYPE_CHECKING, Any, Dict, Literal, Sequence, Tuple, Union
 
+from isaaclab.sensors import SensorBaseCfg, TiledCameraCfg
+from isaaclab.utils import class_to_dict, configclass, to_camel_case
+
+from .gelsight_sensor import GelSightSensor
 from .simulation_approaches.gelsight_simulator import GelSightSimulator
 from .simulation_approaches.gelsight_simulator_cfg import GelSightSimulatorCfg
-from .gelsight_sensor import GelSightSensor
 
 """Configuration for a Gelsight tactile sensor."""
 @configclass
@@ -20,7 +21,7 @@ class GelSightSensorCfg(SensorBaseCfg):
         height: float = 0.0
     case_dimensions: Dimensions = Dimensions()
     gelpad_dimensions: Dimensions = Dimensions()
- 
+
     @configclass
     class SensorCameraCfg:
         """Configs for the Camera of the GelSight sensor."""
@@ -39,9 +40,9 @@ class GelSightSensorCfg(SensorBaseCfg):
     - marker_motion: New new positions of the gelpad markers.
         Shape (num_envs, num_markers_row, num_markers_col, 2)
         - each marker is specified by (row_number, col_number) and has a pos (x,y)
-    
+
     """
-    
+
     optical_sim_cfg: GelSightSimulatorCfg = None # freely choose what class, but can also be left None
     """Cfg class of the optical simulator you want to use."""
 
@@ -50,7 +51,7 @@ class GelSightSensorCfg(SensorBaseCfg):
 
     compute_indentation_depth_class: Literal["optical_sim", "marker_motion_sim"] = "optical_sim"
     """What class to use for computing the indentation depth.
-    
+
     Maybe you want to use the method via your optical simulation (e.g. Taxim), or use one from your marker motion simulation (e.g. if its FEM based).
     """
 

@@ -1,12 +1,11 @@
 from __future__ import annotations
+
+import weakref
 from typing import TYPE_CHECKING
 
-import torch
-import weakref
-
-import omni.physics.tensors.impl.api as physx
-
 import isaaclab.utils.math as math_utils
+import omni.physics.tensors.impl.api as physx
+import torch
 from isaaclab.utils.buffers import TimestampedBuffer
 
 try:
@@ -16,7 +15,9 @@ except:
     draw = None
 
 if TYPE_CHECKING:
-    from tacex_uipc import UipcSim, UipcObject
+    from tacex_uipc.sim import UipcSim
+    from .uipc_object import UipcObject
+
 
 class UipcObjectDeformableData:
     """Data container for a uipc object.
@@ -114,7 +115,7 @@ class UipcObjectDeformableData:
     def nodal_pos_w(self):
         """Nodal positions in simulation world frame. Shape is (num_instances, max_sim_vertices_per_body, 3)."""
         if self._nodal_pos_w.timestamp < self._sim_timestamp:
-            # get current world vertex positions        
+            # get current world vertex positions
             geom = self._uipc_sim.scene.geometries()
             geo_slot, geo_slot_rest = geom.find(self._uipc_object.obj_id) #todo instead of finding obj, lets just save ref to geo_slot
 
@@ -123,7 +124,7 @@ class UipcObjectDeformableData:
 
             self._nodal_pos_w.timestamp = self._sim_timestamp
         return self._nodal_pos_w.data
-        
+
     @property
     def surf_nodal_pos_w(self):
         """Nodal positions in simulation world frame. Shape is (num_instances, max_sim_vertices_per_body, 3)."""
@@ -134,7 +135,7 @@ class UipcObjectDeformableData:
 
             self._nodal_pos_w.timestamp = self._sim_timestamp
         return self._nodal_pos_w.data
-    
+
     ##
     # Derived properties.
     ##

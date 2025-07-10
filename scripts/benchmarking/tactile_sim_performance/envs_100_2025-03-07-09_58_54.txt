@@ -1,4 +1,4 @@
-Sensor Config: 
+Sensor Config:
 {
   "class_type": "tacex.gelsight_sensor:GelSightSensor",
   "prim_path": "/World/envs/env_.*/Robot/gelsight_mini_case",
@@ -53,15 +53,15 @@ Sensor Config:
     640
   ]
 }
-GPU Info: 
-Name: NVIDIA RTX 6000 Ada Generation 
-Driver: 535.183.01 
+GPU Info:
+Name: NVIDIA RTX 6000 Ada Generation
+Driver: 535.183.01
 
-Performance data: 
-num_envs: 100 
+Performance data:
+num_envs: 100
 Total amount of 'in-contact' frames per env (ran pattern 3 times): 1752
-Total sim time: 310.0974ms 
-Avg physics_sim time for one frame per env:      0.9392ms 
-Avg tactile_sim time for one frame per env:      0.7688ms 
+Total sim time: 310.0974ms
+Avg physics_sim time for one frame per env:      0.9392ms
+Avg tactile_sim time for one frame per env:      0.7688ms
 
 | CPU:14.3% | RAM:12.7% | GPU Compute:43% | GPU Memory: 36.05% |

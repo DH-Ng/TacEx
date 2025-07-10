@@ -1,6 +1,6 @@
 """Showcase on how to use libuipc with Isaac Sim/Lab.
 
-This example corresponds to 
+This example corresponds to
 https://github.com/spiriMirror/libuipc-samples/blob/main/python/1_hello_libuipc/main.py
 
 
@@ -8,6 +8,7 @@ https://github.com/spiriMirror/libuipc-samples/blob/main/python/1_hello_libuipc/
 
 """Launch Isaac Sim Simulator first."""
 import argparse
+
 from isaaclab.app import AppLauncher
 
 # create argparser
@@ -20,27 +21,41 @@ args_cli = parser.parse_args()
 app_launcher = AppLauncher(args_cli)
 simulation_app = app_launcher.app
 
-import numpy as np
 import pathlib
 
 import isaaclab.sim as sim_utils
-from isaaclab.utils.timer import Timer
-
-from pxr import Gf, Sdf, Usd, UsdGeom
+import numpy as np
 import omni.usd
 import usdrt
-
-from uipc import view
-from uipc import Vector3, Vector2, Transform, Logger, Quaternion, AngleAxis
-from uipc import builtin
-from uipc.core import Engine, World, Scene, ContactElement
-from uipc.geometry import GeometrySlot, SimplicialComplex, SimplicialComplexIO, ground, label_surface, label_triangle_orient, flip_inward_triangles
-from uipc.constitution import AffineBodyConstitution
+from isaaclab.utils.timer import Timer
+from pxr import Gf, Sdf, Usd, UsdGeom
 from tacex_uipc import UipcSim, UipcSimCfg
+from uipc import (
+    AngleAxis,
+    Logger,
+    Quaternion,
+    Transform,
+    Vector2,
+    Vector3,
+    builtin,
+    view,
+)
+from uipc.constitution import AffineBodyConstitution
+from uipc.core import ContactElement, Engine, Scene, World
+from uipc.geometry import (
+    GeometrySlot,
+    SimplicialComplex,
+    SimplicialComplexIO,
+    flip_inward_triangles,
+    ground,
+    label_surface,
+    label_triangle_orient,
+)
+
 
 def setup_base_scene(sim: sim_utils.SimulationContext):
     """To make the scene pretty.
-    
+
     """
     # set upAxis to Y to match libuipc-samples
     stage = omni.usd.get_context().get_stage()
@@ -49,7 +64,7 @@ def setup_base_scene(sim: sim_utils.SimulationContext):
     # Design scene by spawning assets
     cfg_ground = sim_utils.GroundPlaneCfg()
     cfg_ground.func(
-        prim_path="/World/defaultGroundPlane", 
+        prim_path="/World/defaultGroundPlane",
         cfg=cfg_ground,
         translation=[0, -2, 0],
         orientation=[0.7071068, -0.7071068, 0, 0]
@@ -64,7 +79,7 @@ def setup_base_scene(sim: sim_utils.SimulationContext):
 
 def setup_libuipc_scene(scene):
     trimesh_path = str(pathlib.Path(__file__).parent.resolve() / "trimesh")
-    
+
     abd = AffineBodyConstitution()
     scene.constitution_tabular().insert(abd)
     contact_tabular = scene.contact_tabular()
@@ -79,7 +94,7 @@ def setup_libuipc_scene(scene):
     for i in range(N):
         friction_rate = i * friction_rate_step
         e = contact_tabular.create(f'element_{i}')
-        contact_tabular.insert(e, default_element, 
+        contact_tabular.insert(e, default_element,
                                friction_rate=friction_rate,
                                resistance=1e9)
         contact_elements.append(e)
@@ -151,11 +166,11 @@ def main():
     uipc_sim = UipcSim(uipc_cfg)
 
     setup_libuipc_scene(uipc_sim.scene)
-    
+
     # init liubipc world etc.
     uipc_sim.setup_sim()
     uipc_sim.init_libuipc_scene_rendering()
-    
+
     # Now we are ready!
     print("[INFO]: Setup complete...")
 
@@ -187,8 +202,8 @@ def main():
             total_uipc_sim_time += Timer.get_timer_info("uipc_step")
             total_uipc_render_time += Timer.get_timer_info("render_update")
 
-            step += 1      
-          
+            step += 1
+
 if __name__ == "__main__":
     # run the main function
     main()

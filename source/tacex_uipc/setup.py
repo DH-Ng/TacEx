@@ -12,18 +12,16 @@ Workaround: use ENV variables (see https://github.com/pypa/setuptools/discussion
 """
 
 import os
-import toml
-
+import platform
 import re
+import subprocess
 import sys
 import sysconfig
-import platform
-import subprocess
-
-from setuptools import setup, find_packages, Extension
-from setuptools.command.build_ext import build_ext
-
 from pathlib import Path
+
+import toml
+from setuptools import Extension, find_packages, setup
+from setuptools.command.build_ext import build_ext
 
 # Obtain the extension data from the extension.toml file
 EXTENSION_PATH = os.path.dirname(os.path.realpath(__file__))
@@ -49,7 +47,7 @@ class CMakeBuild(build_ext):
     # -> underscore directly isnt allowed for user options string
     user_options = build_ext.user_options + \
         [("DCMAKE-CUDA-ARCHITECTURES=", None, "Specify CUDA architecture,e.g. 89.")] + \
-        [("DUIPC-BUILD-PYBIND=", "1", "Whether to build libuipc python bindings or not.")]    
+        [("DUIPC-BUILD-PYBIND=", "1", "Whether to build libuipc python bindings or not.")]
 
     def initialize_options(self):
         super().initialize_options()
@@ -105,7 +103,7 @@ class CMakeBuild(build_ext):
         if not os.path.exists(self.build_dir):
             os.makedirs(self.build_dir)
         subprocess.check_call(['cmake', ext.sourcedir] + cmake_args,
-                              cwd=self.build_dir, env=env)    
+                              cwd=self.build_dir, env=env)
         subprocess.check_call(['cmake', '--build', '.'] + build_args,
                               cwd=self.build_dir)
 

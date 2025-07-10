@@ -4,9 +4,14 @@ Goal is to roll a ball to a random target position.
 """
 
 import gymnasium as gym
+
 from . import agents
 
-
+# isaaclab -p ./scripts/reinforcement_learning/skrl/train.py --task TacEx-Ball-Rolling-Tactile-Base-v1 --num_envs 1024 --enable_cameras
+from .ball_rolling_base import (  # need to import BallRollingEnv here, otherwise class will not be detected for entry point
+    BallRollingEnv,
+    BallRollingEnvCfg,
+)
 
 ##
 # Register Gym environments.
@@ -26,8 +31,6 @@ from . import agents
 #     },
 # )
 
-# isaaclab -p ./scripts/reinforcement_learning/skrl/train.py --task TacEx-Ball-Rolling-Tactile-Base-v1 --num_envs 1024 --enable_cameras
-from .ball_rolling_base import BallRollingEnv, BallRollingEnvCfg # need to import BallRollingEnv here, otherwise class will not be detected for entry point
 gym.register(
     id="TacEx-Ball-Rolling-Tactile-Base-v1",
     entry_point=f"{__name__}.ball_rolling_base:BallRollingEnv",
@@ -40,7 +43,8 @@ gym.register(
     },
 )
 # isaaclab -p ./scripts/reinforcement_learning/skrl/train.py --task TacEx-Ball-Rolling-Tactile-RGB-v0 --num_envs 512 --enable_cameras
-from .ball_rolling_tactile_rgb import BallRollingTactileRGBEnv, BallRollingTactileRGBCfg 
+from .ball_rolling_tactile_rgb import BallRollingTactileRGBCfg, BallRollingTactileRGBEnv
+
 gym.register(
     id="TacEx-Ball-Rolling-Tactile-RGB-v0",
     entry_point=f"{__name__}.ball_rolling_tactile_rgb:BallRollingTactileRGBEnv",
@@ -53,7 +57,11 @@ gym.register(
     },
 )
 
-from .ball_rolling_tactile_rgb_uipc import BallRollingTactileRGBUipcEnv, BallRollingTactileRGBUipcCfg 
+from .ball_rolling_tactile_rgb_uipc import (
+    BallRollingTactileRGBUipcCfg,
+    BallRollingTactileRGBUipcEnv,
+)
+
 gym.register(
     id="TacEx-Ball-Rolling-Tactile-RGB-Uipc-v0",
     entry_point=f"{__name__}.ball_rolling_tactile_rgb_uipc:BallRollingTactileRGBUipcEnv",

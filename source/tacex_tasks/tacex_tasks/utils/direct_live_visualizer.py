@@ -1,16 +1,15 @@
 from __future__ import annotations
 
-import torch
 import weakref
 from dataclasses import MISSING
 from typing import TYPE_CHECKING
 
 import carb
 import omni.kit.app
+import torch
+from isaaclab.ui.widgets import ManagerLiveVisualizer, UiVisualizerBase
 from isaacsim.core.api.simulation_context import SimulationContext
 
-
-from isaaclab.ui.widgets import UiVisualizerBase, ManagerLiveVisualizer
 from .image_plot import ImagePlot
 from .line_plot import LiveLinePlot
 
@@ -18,7 +17,7 @@ if TYPE_CHECKING:
     import omni.ui
 
 class DirectLiveVisualizer(ManagerLiveVisualizer):
-    
+
     def __init__(self, debug_vis: bool, num_envs: int, parent_window: omni.ui.Window, visualizer_name: str):
         """Initialize ManagerLiveVisualizer.
 
@@ -60,7 +59,7 @@ class DirectLiveVisualizer(ManagerLiveVisualizer):
 
     # def create_window_elements(self):
     #     """Creates window elements for each term of the visualizer
-        
+
     #     """
     #     for name in self.terms:
     #         with self._vis_window.ui_window_elements["debug_frame"]:
@@ -176,14 +175,14 @@ class DirectLiveVisualizer(ManagerLiveVisualizer):
 
         # get updated data and update visualization
         for name, values in self.terms.items():
-            # E.g. terms = actions: Actions values have the shape (num_envs, num_actions). 
+            # E.g. terms = actions: Actions values have the shape (num_envs, num_actions).
             # This means we have `num_actions` amount of plots in our 'actions' timeserie.
-            # To plot this, we need to pass over a list of lists. 
+            # To plot this, we need to pass over a list of lists.
             # Specifically, `num_actions` amount of lists, where each inner list contains the datapoint for the corresponding timeserie
             value = values[self._env_idx]
             if len(value.shape) == 0:
                 value = value.reshape(1)
-            
+
             vis = self._term_visualizers[name]
             if isinstance(vis, LiveLinePlot):
                 vis.add_datapoint(value.T.tolist())
@@ -192,14 +191,14 @@ class DirectLiveVisualizer(ManagerLiveVisualizer):
 
         # # get updated data and update visualization
         # for name, values in self.terms.items():
-        #     # E.g. terms = actions: Actions values have the shape (num_envs, num_actions). 
+        #     # E.g. terms = actions: Actions values have the shape (num_envs, num_actions).
         #     # This means we have `num_actions` amount of plots in our 'actions' timeserie.
-        #     # To plot this, we need to pass over a list of lists. 
+        #     # To plot this, we need to pass over a list of lists.
         #     # Specifically, `num_actions` amount of lists, where each inner list contains the datapoint for the corresponding timeserie
         #     value = values[self._env_idx]
         #     if len(value.shape) == 0:
         #         value = value.reshape(1)
-            
+
         #     vis = self._term_visualizers[name]
         #     if isinstance(vis, LiveLinePlot):
         #         vis.add_datapoint(value.T.tolist())

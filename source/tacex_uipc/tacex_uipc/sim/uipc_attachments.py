@@ -1,40 +1,38 @@
 from __future__ import annotations
 
-import weakref
 import inspect
-
-import omni
-from omni.physx import get_physx_cooking_interface, get_physx_interface, get_physx_scene_query_interface
-from isaacsim.core.prims import XFormPrim
-
-from pxr import UsdGeom, Usd, Sdf, PhysxSchema, UsdPhysics, Gf, UsdShade, Vt
-
-import numpy as np
-import torch
 import re
+import weakref
 from typing import TYPE_CHECKING
 
 import isaaclab.sim as sim_utils
+import numpy as np
+import omni
+import torch
+from isaacsim.core.prims import XFormPrim
+from omni.physx import (
+    get_physx_cooking_interface,
+    get_physx_interface,
+    get_physx_scene_query_interface,
+)
+from pxr import Gf, PhysxSchema, Sdf, Usd, UsdGeom, UsdPhysics, UsdShade, Vt
+
 try:
     from isaacsim.util.debug_draw import _debug_draw
     draw = _debug_draw.acquire_debug_draw_interface()
 except:
     draw = None
 
+import isaaclab.utils.math as math_utils
+from isaaclab.assets import Articulation, AssetBase, AssetBaseCfg, RigidObject
 from isaaclab.utils import configclass
 from isaaclab.utils.math import transform_points
-import isaaclab.utils.math as math_utils
-
-from isaaclab.assets import AssetBase, AssetBaseCfg, RigidObject, Articulation
-
+from uipc import Animation, Vector3, builtin, view
 from uipc.constitution import SoftPositionConstraint
-from uipc import view
-from uipc import builtin
-from uipc import Animation, Vector3
 from uipc.geometry import GeometrySlot, SimplicialComplex
 
-if TYPE_CHECKING:
-    from tacex_uipc.uipc_attachments import UipcObject
+
+from tacex_uipc.objects import UipcObject
 
 @configclass
 class UipcIsaacAttachmentsCfg:
@@ -45,9 +43,9 @@ class UipcIsaacAttachmentsCfg:
 
     debug_vis: bool = False
     """Draw attachment offsets and aim_position via IsaacSim's _debug_draw api.
-    
+
     """
-    
+
     body_name: str = None
     """Name of the body in the rigid object that should be used for the attachment.
 
@@ -56,14 +54,14 @@ class UipcIsaacAttachmentsCfg:
 
     compute_attachment_data: bool = True
     """False to use precomputed attachment data.
-    
+
     Note: Precomputed attachment data is only valid if the corresponding precomputed tet mesh data exists.
-    This means, that the uipc_object of the attachment class should also use precomputed data. 
+    This means, that the uipc_object of the attachment class should also use precomputed data.
     """
 
     attachment_points_radius: float = 5e-4
     """Distance between tet points and isaac collider, which is used to determine the attachment points.
-    
+
     If the collision mesh of the isaaclab_rigid_object is in the radius of a point, then the
     point is considered "attached" to the isaaclab_rigid_object.
     """
@@ -71,7 +69,7 @@ class UipcIsaacAttachments():
     cfg: UipcIsaacAttachmentsCfg
 
     #todo code init properly
-    def __init__(self, cfg: UipcIsaacAttachmentsCfg, uipc_object: UipcObject, isaaclab_rigid_object: RigidObject | Articulation) -> None: 
+    def __init__(self, cfg: UipcIsaacAttachmentsCfg, uipc_object: UipcObject, isaaclab_rigid_object: RigidObject | Articulation) -> None:
         # check that the config is valid
         cfg.validate()
         self.cfg = cfg.copy()
@@ -92,10 +90,10 @@ class UipcIsaacAttachments():
         self.aim_positions = np.zeros(0)
 
         # create the attachment
-        
+
         if not self.cfg.compute_attachment_data:
             #todo hmm, its kinda tricky. Can only use precomputed attachment data, if its the same tet mesh.
-            #-- how can we make sure that this case? 
+            #-- how can we make sure that this case?
 
             # Load precomputed attachmend data from USD prim.
             prim_children = self.uipc_object._prim_view.prims[0].GetChildren() #todo properly deal with multiple meshs
@@ -119,7 +117,7 @@ class UipcIsaacAttachments():
             tet_points_world = mesh.positions().view()[:,:,0]
             tet_indices = mesh.tetrahedra().topo().view()[:,:,0]
             attachment_offsets, idx, rigid_prims = self.compute_attachment_data(isaac_rigid_prim_path, tet_points_world, tet_indices, attachment_points_radius)
-        
+
         # set attachment data
         self.attachment_offsets = attachment_offsets
         self.attachment_points_idx = idx
@@ -130,7 +128,7 @@ class UipcIsaacAttachments():
         # set uipc constraint
         soft_position_constraint = SoftPositionConstraint()
         #todo handle multiple meshes properly (currently just single mesh)
-        soft_position_constraint.apply_to(self.uipc_object.uipc_meshes[0], self.cfg.constraint_strength_ratio) 
+        soft_position_constraint.apply_to(self.uipc_object.uipc_meshes[0], self.cfg.constraint_strength_ratio)
 
         # flag for whether the asset is initialized
         self._is_initialized = False
@@ -185,7 +183,7 @@ class UipcIsaacAttachments():
 
         This is equal to the number of asset instances per environment multiplied by the number of environments.
         """
-        return self._num_instances 
+        return self._num_instances
 
     @property
     def device(self) -> str:
@@ -233,7 +231,7 @@ class UipcIsaacAttachments():
                 self._debug_vis_handle = None
         # return success
         return True
-    
+
     @staticmethod
     def compute_attachment_data(isaac_mesh_path, tet_points, tet_indices, sphere_radius=5e-4, max_dist=1e-5): # really small distances to prevent intersection with unwanted geometries
         """
@@ -272,7 +270,7 @@ class UipcIsaacAttachments():
         obj_pos = obj_position[0,:]
         # print("obj_pos ", obj_pos)
         # print("orient ", obj_orientation)
-        
+
         # uipc_mesh = self.uipc_object.uipc_meshes[0]
         # vertex_positions = torch.tensor(uipc_mesh.positions().view().copy().reshape(-1,3), device=self.device)
         # print("vertex_positions ", vertex_positions)
@@ -282,10 +280,10 @@ class UipcIsaacAttachments():
 
         vertex_positions = tet_points
         indices = tet_indices
-        
+
         for i, v in enumerate(vertex_positions):
             # print("raycast ", i)
-            ray_dir = [0,0,1] # unit direction of the sphere ray cast -> doesnt really matter here, cause we only use a super short ray. 
+            ray_dir = [0,0,1] # unit direction of the sphere ray cast -> doesnt really matter here, cause we only use a super short ray.
             hitInfo = get_physx_scene_query_interface().sweep_sphere_closest(radius=sphere_radius, origin=v, dir=ray_dir, distance=max_dist, bothSides=True)
             if hitInfo["hit"]:
                 # print("hiiiit, ", hitInfo["collision"])
@@ -294,7 +292,7 @@ class UipcIsaacAttachments():
                     # idx.append(i+min_vertex_idx) unlike the gipc simulation, we use the object specific idx here
                     idx.append(i)
                     #TODO do this at the end and compute in a vectorized fashion?
-                    # compute offsets from object position to attachment points 
+                    # compute offsets from object position to attachment points
                     offset = v - obj_pos
                     offset = torch.tensor(offset, device="cuda:0").float()
                     offset = math_utils.quat_apply_inverse(obj_orientation[0].reshape((1,4)), offset.reshape((1,3)))[0]
@@ -304,7 +302,7 @@ class UipcIsaacAttachments():
         attachment_points_positions = np.array(attachment_points_positions).reshape(-1,3)
 
         # offset to later compute the `should-be` positions of the attachment point
-        attachment_offsets = np.array(attachment_offsets).reshape(-1, 3) 
+        attachment_offsets = np.array(attachment_offsets).reshape(-1, 3)
         assert len(idx) == attachment_offsets.shape[0]
 
         # print("offsets, ", attachment_offsets)
@@ -320,8 +318,8 @@ class UipcIsaacAttachments():
         # for j in range(0, attachment_points_positions.shape[0]):
         #     draw.draw_lines([obj_center], [attachment_points_positions[j,:]], [(255,255,0,0.5)], [10])
 
-        return attachment_offsets, idx, matching_prims    
-       
+        return attachment_offsets, idx, matching_prims
+
     """
     Internal helper.
     """
@@ -338,7 +336,7 @@ class UipcIsaacAttachments():
     def _create_animation(self):
         animator = self.uipc_object._uipc_sim.scene.animator()
         def animate_tet(info: Animation.UpdateInfo): # animation function
-            # print("test, ", self.aim_positions) 
+            # print("test, ", self.aim_positions)
 
             geo_slots:list[GeometrySlot] = info.geo_slots()
             geo: SimplicialComplex = geo_slots[0].geometry()
@@ -359,7 +357,7 @@ class UipcIsaacAttachments():
 
     def _compute_aim_positions(self, dt=0):
         # make sure we have the newest data
-        
+
         if type(self.isaaclab_rigid_object) is Articulation:
             # this only works when rigid body is an articulation
             # self.isaaclab_rigid_object._physics_sim_view.update_articulations_kinematic()
@@ -375,7 +373,7 @@ class UipcIsaacAttachments():
             raise RuntimeError("Need an Articulation or a RigidBody object for the Isaac X UIPC attachment.")
         #- doing this is undesirable -> need to update the scene to get newest data
         # pose = self.isaaclab_rigid_object.data.body_state_w[:, self.rigid_body_id, 0:7].clone()
-        
+
         self.obj_pose = pose
 
         # obj_pos = pose[:, 0, :3].cpu().numpy().flatten().reshape(-1,3)
@@ -387,17 +385,17 @@ class UipcIsaacAttachments():
         aim_pos = transform_points(attachment_offsets, pos=pose[:, 0, 0:3], quat=pose[:, 0, 3:]) #todo give over batch of pos and quat for each instance (i.e. pos has shape N,3 and quat N,4)
         aim_pos = aim_pos.cpu().numpy()
         self.aim_positions = aim_pos.flatten().reshape(-1,3)
-        
+
         #      # extract velocity
         #      lin_vel = scene["robot"].data.body_state_w[:, robot_entity_cfg.body_ids[1], 7:10]
         #      lin_vel = lin_vel.cpu().numpy()
         #      lin_vel = np.tile(lin_vel, len(attachment_points)).reshape(len(attachment_points),3)
 
-        return self.aim_positions     
-    
+        return self.aim_positions
+
     """
-    Internal simulation callbacks. 
-    
+    Internal simulation callbacks.
+
     Same as AssetBase class from asset_base.py
     """
 
@@ -435,21 +433,21 @@ class UipcIsaacAttachments():
                 return
 
     def _debug_vis_callback(self, event):
-        
+
         if self.aim_positions.shape[0] == 0:
             return
-        
+
         # self._compute_aim_positions()
 
         # # draw attachment data
-        # self._draw.clear_points()
+        self._draw.clear_points()
         self._draw.clear_lines()
 
         #drawing with the debug method leads to render delay
         self._draw.draw_points(self.aim_positions, [(255,0,0,0.5)]*self.aim_positions.shape[0], [60]*self.aim_positions.shape[0]) # the new positions
         # pose = self.isaaclab_rigid_object.data.body_state_w[:, self.rigid_body_id, 0:7].clone()
         pose = self.obj_pose.clone()
-        
+
         for i in range(self._num_instances):
             obj_center = pose[i, 0, 0:3].cpu().numpy()
             # self._draw.clear_points()

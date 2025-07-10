@@ -53,7 +53,7 @@ RUN --mount=type=cache,target=/var/cache/apt \
     # libglib2.0-0 \
     # ncurses-term && \
 
-# set cuda paths 
+# set cuda paths
 ENV CUDA_HOME=/usr/local/cuda
 ENV LD_LIBRARY_PATH=/usr/local/cuda/lib64:$LD_LIBRARY_PATH
 ENV PATH=/usr/local/cuda/bin:$PATH
@@ -65,17 +65,17 @@ FROM nvcr.io/nvidia/cuda:12.4.0-devel-ubuntu22.04 AS cuda-devel
 FROM base
 COPY --from=cuda-devel /usr/local/cuda /usr/local/cuda
 
-# set extra convenience aliases for IsaacLab 
+# set extra convenience aliases for IsaacLab
 RUN echo "alias run=/isaac-sim/isaac-sim.streaming.sh" >> ${HOME}/.bashrc && \
     echo "alias lab=${ISAACLAB_PATH}/isaaclab.sh" >> ${HOME}/.bashrc
 ENV LIVESTREAM=1
 
 # upgrade pip and create symlink to IsaacSim python
-RUN /isaac-sim/python.sh -m pip install --upgrade pip && \ 
-    rm /usr/bin/python3.10 && \ 
+RUN /isaac-sim/python.sh -m pip install --upgrade pip && \
+    rm /usr/bin/python3.10 && \
     ln -s /isaac-sim/kit/python/bin/python3.10 /usr/bin/python3.10
 
-# Install Base TacEx packages 
+# Install Base TacEx packages
 # -> you can also just call the tacex.sh script once you are in the container
 # RUN bash -i -c "source ${HOME}/.bashrc && \
 #     cd ${ISAACLAB_EXTENSION_TEMPLATE_PATH}/source && \

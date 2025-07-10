@@ -302,7 +302,7 @@ while [[ $# -gt 0 ]]; do
             # install the learning frameworks specified
             # ${python_exe} -m pip install -e ${TACEX_PATH}/source/isaaclab_rl["${framework_name}"]
             # ${python_exe} -m pip install -e ${TACEX_PATH}/source/isaaclab_mimic["${framework_name}"]
-            
+
             # check if we are inside a docker container or are building a docker image
             # in that case don't setup VSCode since it asks for EULA agreement which triggers user interaction
             if is_docker; then

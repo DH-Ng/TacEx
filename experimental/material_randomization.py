@@ -4,8 +4,8 @@ import os
 import numpy as np
 import omni.replicator.core as rep
 import omni.usd
-from isaacsim.storage.native import get_assets_root_path
 from isaacsim.core.utils.semantics import add_update_semantics, get_semantics
+from isaacsim.storage.native import get_assets_root_path
 from pxr import Gf, Sdf, UsdGeom, UsdShade
 
 omni.usd.get_context().new_stage()

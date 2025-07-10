@@ -1,8 +1,8 @@
-
-from dataclasses import dataclass, MISSING
-from typing import Any, Dict, Tuple, Union, List, TYPE_CHECKING
+from dataclasses import MISSING, dataclass
+from typing import TYPE_CHECKING, Any, Dict, List, Tuple, Union
 
 import numpy as np
+
 
 @dataclass
 class GelSightSensorData:
@@ -18,7 +18,7 @@ class GelSightSensorData:
     """A tuple containing (height, width) of the camera sensor."""
     output: Dict[str, Any] = None
     """The retrieved sensor data with sensor types as key.
-    
+
     This is definied inside the correspondig sensor cfg class.
     For GelSight sensors the defaults are "camera_depth", "height_map", "tactile_rgb" and "marker_motion".
     """
