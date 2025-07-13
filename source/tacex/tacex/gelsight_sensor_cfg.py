@@ -16,8 +16,8 @@ class GelSightSensorCfg(SensorBaseCfg):
     @configclass
     class Dimensions:
         """Dimensions here are in mm (we assume that the world units are meters)"""
-        width: float = 0.0,
-        length: float = 0.0,
+        width: float = 0.0
+        length: float = 0.0
         height: float = 0.0
     case_dimensions: Dimensions = Dimensions()
     gelpad_dimensions: Dimensions = Dimensions()
@@ -25,11 +25,11 @@ class GelSightSensorCfg(SensorBaseCfg):
     @configclass
     class SensorCameraCfg:
         """Configs for the Camera of the GelSight sensor."""
-        prim_path_appendix: str = "/Camera",
-        update_period: float = 0,
-        resolution: Tuple[int] = (120, 160),
-        data_types: list[str] = ["depth"],
-        clipping_range: Tuple[float] = (0,1),
+        prim_path_appendix: str = "/Camera"
+        update_period: float = 0
+        resolution: Tuple[int] = (120, 160)
+        data_types: list[str] = ["depth"]
+        clipping_range: Tuple[float] = (0,1)
     sensor_camera_cfg: SensorCameraCfg = SensorCameraCfg()
 
     data_types: list[str] = ["camera_depth", "height_map", "tactile_rgb", "marker_motion"]

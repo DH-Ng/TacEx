@@ -81,10 +81,6 @@ from isaaclab.markers import CUBOID_MARKER_CFG  # isort: skip
 
 
 
-
-
-
-
 class CustomEnvWindow(BaseEnvWindow):
     """Window manager for the RL environment."""
 
