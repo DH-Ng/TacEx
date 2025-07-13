@@ -2,7 +2,7 @@
 #from meshpy.tet import MeshInfo, build, Options
 from isaacsim.util.debug_draw import _debug_draw
 from omni.physx.scripts import deformableUtils
-from pxr import Gf, UsdGeom, UsdPhysics
+from pxr import Gf, UsdGeom, UsdPhysics, Sdf, Usd
 
 draw = _debug_draw.acquire_debug_draw_interface()
 
@@ -40,8 +40,8 @@ class TetMeshCfg:
 
     -> Absolute epsilon = epsilon_r * diagonal_of_bbox.
 
-    Smaller envelope pereserves features better.
-    Larger Envelope + larger edge_length = tetmesh with low res
+    Smaller envelope preserves features better.  
+    Large Envelope + large edge_length = tetmesh with low res
     """
 
     edge_length_r: float = 1/2
@@ -202,20 +202,7 @@ class MeshGenerator():
         # triangles is a list of indices: every 3 consecutive indices form a triangle
         triangles = deformableUtils.triangulate_mesh(prim)
 
-        #draw surface mesh
-        # color = [(125,0,125,0.5)]
-        # for i in range(0, len(triangles), 3):
-        #     tet_points_idx = triangles[i:i+3]
-        #     tet_points = [points[i] for i in tet_points_idx]
-        #     draw.draw_points(tet_points, [(255,255,255,1)]*len(tet_points), [40]*len(tet_points))
-        #     draw.draw_lines([tet_points[0]]*2, tet_points[1:], color*2, [10]*2) # draw from point 0 to every other point (3 times 0, cause line from 0 to the other 3 points)
-        #     draw.draw_lines([tet_points[1]]*1, tet_points[2:], color*1, [10]*1)
-
-
         tet_mesh_points, tet_indices, surf_points, surf_indices = self.compute_tet_mesh(points, triangles)
-
-        # update the usd mesh
-        #self.update_surface_mesh(prim, surf_points=surf_points, triangles=surf_indices)
 
         # draw the tet mesh
         # color = [(0,0,0,1)]
@@ -286,20 +273,32 @@ class MeshGenerator():
         colors = [(random.uniform(0.0, 0.0), random.uniform(0.0, 0.75), random.uniform(0.0, 0.75)) for _ in range(triangles.shape[0]*3)]
         prim.CreateDisplayColorPrimvar(UsdGeom.Tokens.faceVarying).Set(colors) # num_surf_tri * 3
 
-        # set uv_coor variable
-        uv_coor = np.indices((int(triangles.shape[0]*1.5),2)).transpose((1,2,0)).reshape((-1,2))
+        # texture map
+        uv_coor = np.indices((int(triangles.size),2)).transpose((1,2,0)).reshape((-1,2))
 
-        try:
-            pv_api = UsdGeom.PrimvarsAPI(prim)
+        pv_api = UsdGeom.PrimvarsAPI(prim)
+        if pv_api.HasPrimvar("primvars:st"):
             pv = pv_api.GetPrimvar("primvars:st")
             pv.SetInterpolation(UsdGeom.Tokens.faceVarying)
+            if uv_coor.size != pv.Get():
+                print("primvars:st array has the wrong size.")
+        else:
+            # set some values for the uv_coor variable, if no values exist
+            pv = pv_api.CreatePrimvar(
+                "primvars:st",
+                Sdf.ValueTypeNames.TexCoord2fArray,
+                UsdGeom.Tokens.faceVarying,
+                # UsdGeom.Tokens.uniform,
+                uv_coor.size
+            )    
             pv.Set(uv_coor)
-        except:
-            pass
-            # print("During update of the surface mesh: No `primvars:st` attribute found.")
 
     @staticmethod
-    def update_usd_mesh_pretty(prim: UsdGeom.Mesh, tet_points, tet_indices: list[int]):
+    def update_usd_mesh_with_uipc_surface(prim: Usd.Prim):
+        """ Method to update render mesh topology based on the surface of the mesh in UIPC.
+
+        Used for workaround so that textures can be applied to the meshes.
+        """
         from uipc.geometry import (
             extract_surface,
             flip_inward_triangles,
@@ -308,9 +307,12 @@ class MeshGenerator():
             tetmesh,
         )
 
+        tet_points = prim.GetAttribute("tet_points").Get()
         tet_points = np.array(tet_points)
+
+        tet_indices = prim.GetAttribute("tet_indices").Get()
         tet_indices = np.array(tet_indices).reshape(-1,4)
-        # tet_surf_indices = np.array(tet_indices).reshape(-1,3)
+
 
         # compute mesh
         mesh = tetmesh(tet_points.copy(), tet_indices.copy())
@@ -323,8 +325,18 @@ class MeshGenerator():
 
         surf_points = surf.positions().view().reshape(-1,3)
         triangles = surf.triangles().topo().view().reshape(-1).tolist()
-        triangles = np.array(triangles).reshape(-1,3)
 
+        # update usd attributes
+        attr_tet_surf_points = prim.CreateAttribute("tet_surf_points", Sdf.ValueTypeNames.Vector3fArray)
+        attr_tet_surf_points.Set(surf_points)
+
+        attr_tet_surf_indices = prim.CreateAttribute("tet_surf_indices", Sdf.ValueTypeNames.UIntArray)
+        attr_tet_surf_indices.Set(triangles)
+
+        # update render mesh
+        prim = UsdGeom.Mesh(prim)
+
+        triangles = np.array(triangles).reshape(-1,3)
         prim.GetPointsAttr().Set(surf_points)
         prim.GetFaceVertexCountsAttr().Set([3] * triangles.shape[0]) # how many vertices each face has (3, cause triangles)
         prim.GetFaceVertexIndicesAttr().Set(triangles)
@@ -339,10 +351,15 @@ class MeshGenerator():
         # set uv_coor variable
         uv_coor = np.indices((int(triangles.shape[0]*1.5),2)).transpose((1,2,0)).reshape((-1,2))
 
-        try:
-            pv_api = UsdGeom.PrimvarsAPI(prim)
+        pv_api = UsdGeom.PrimvarsAPI(prim)
+        if pv_api.HasPrimvar("primvars:st"):
             pv = pv_api.GetPrimvar("primvars:st")
             pv.SetInterpolation(UsdGeom.Tokens.faceVarying)
-            pv.Set(uv_coor)
-        except:
-            pass
+        else:
+            pv = pv_api.CreatePrimvar(
+                "primvars:st",
+                Sdf.ValueTypeNames.TexCoord2fArray,
+                UsdGeom.Tokens.faceVarying,
+                uv_coor.size
+            )    
+        pv.Set(uv_coor)

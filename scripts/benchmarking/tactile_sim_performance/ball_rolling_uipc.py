@@ -100,11 +100,6 @@ from tacex.simulation_approaches.gpu_taxim import TaximSimulatorCfg
 from isaaclab.markers import POSITION_GOAL_MARKER_CFG  # isort: skip
 from isaaclab.markers import CUBOID_MARKER_CFG  # isort: skip
 
-
-
-
-
-
 try:
     from isaacsim.util.debug_draw import _debug_draw
     draw = _debug_draw.acquire_debug_draw_interface()
@@ -150,7 +145,7 @@ class BallRollingEnvCfg(DirectRLEnvCfg):
     # simulation
     sim: SimulationCfg = SimulationCfg(
         dt=1/60, #0.01, #1 / 120, #0.001
-        render_interval=decimation,
+        render_interval=4,
         #device="cpu",
         physx=PhysxCfg(
             enable_ccd=True, # needed for more stable ball_rolling
@@ -167,7 +162,7 @@ class BallRollingEnvCfg(DirectRLEnvCfg):
 
     uipc_sim = UipcSimCfg(
         # logger_level="Info"
-        ground_height=0.0025,
+        ground_height=0.001,
         contact=UipcSimCfg.Contact(
             d_hat=0.0005
         )
@@ -259,7 +254,7 @@ class BallRollingEnvCfg(DirectRLEnvCfg):
     )
     gelpad_cfg = UipcObjectCfg(
         prim_path="/World/envs/env_.*/Robot/gelsight_mini_gelpad",
-        mesh_cfg=mesh_cfg,
+        # mesh_cfg=mesh_cfg,
         constitution_cfg=UipcObjectCfg.StableNeoHookeanCfg(),
     )
     gelpad_attachment_cfg=UipcIsaacAttachmentsCfg(
@@ -276,7 +271,7 @@ class BallRollingEnvCfg(DirectRLEnvCfg):
             update_period= 0,
             resolution = (240,320), #(120, 160),
             data_types = ["depth"],
-            clipping_range = (0.024, 0.034),
+            clipping_range = (0.02, 0.034), #(0.024, 0.034),
         ),
         device = "cuda",
         debug_vis=True, # for rendering sensor output in the gui
@@ -308,7 +303,7 @@ class BallRollingEnvCfg(DirectRLEnvCfg):
             target_frames=[
                 FrameTransformerCfg.FrameCfg(prim_path="/World/envs/env_.*/ball")
             ],
-            debug_vis=True,
+            debug_vis=False,
             visualizer_cfg=marker_cfg,
         )
     )

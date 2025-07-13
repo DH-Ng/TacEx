@@ -26,32 +26,10 @@ import numpy as np
 import pxr
 import wildmeshing as wm
 from omni.physx.scripts import deformableUtils
-from pxr import Gf, UsdGeom, UsdPhysics
-from usdrt import Gf, Rt, Sdf, Usd, Vt
+from pxr import Gf, UsdGeom, Sdf
 
 from tacex_uipc.sim import UipcIsaacAttachments
 from tacex_uipc.utils import MeshGenerator, TetMeshCfg
-
-try:
-    wp = None
-    import warp as wp
-
-    wp.init()
-
-    @wp.kernel
-    def deform(positions: wp.array(dtype=wp.vec3), t: float):
-        tid = wp.tid()
-
-        x = positions[tid]
-        offset = -wp.sin(x[0])
-        scale = wp.sin(5.0*t) * 0.05
-
-        x = x + wp.vec3(0.0, offset * scale, 0.0)
-
-        positions[tid] = x
-
-except ImportError:
-    pass
 
 
 def get_selected_prim_path():
@@ -75,75 +53,6 @@ def get_stage_id():
     context = omni.usd.get_context()
     return context.get_stage_id()
 
-
-def is_vtarray(obj):
-    """Check if this is a VtArray type
-
-    In Python, each data type gets its own
-    VtArray class i.e. Vt.Float3Array etc.
-    so this helper identifies any of them.
-    """
-    return hasattr(obj, "IsFabricData")
-
-
-def condensed_vtarray_str(data):
-    """Return a string representing VtArray data
-
-    Include at most 6 values, and the total items
-    in the array
-    """
-    size = len(data)
-    if size > 6:
-        datastr = "[{}, {}, {}, .. {}, {}, {}] (size: {})".format(
-            data[0], data[1], data[2], data[-3], data[-2], data[-1], size
-        )
-    else:
-        datastr = "["
-        for i in range(size - 1):
-            datastr += str(data[i]) + ", "
-        datastr += str(data[-1]) + "]"
-
-    return datastr
-
-
-def get_fabric_data_for_prim(stage_id, path):
-    """Get the Fabric data for a path as a string"""
-    if path is None:
-        return "Nothing selected"
-
-    stage = Usd.Stage.Attach(stage_id)
-
-    # If a prim does not already exist in Fabric,
-    # it will be fetched from USD by simply creating the
-    # Usd.Prim object. At this time, only the attributes that have
-    # authored opinions will be fetch into Fabric.
-    prim = stage.GetPrimAtPath(Sdf.Path(path))
-    if not prim:
-        return f"Prim at path {path} is not in Fabric"
-
-    # This diverges a bit from USD - only attributes
-    # that exist in Fabric are returned by this API
-    attrs = prim.GetAttributes()
-
-    result = f"Fabric data for prim at path {path}\n\n\n"
-    for attr in attrs:
-        try:
-            data = attr.Get()
-            datastr = str(data)
-            if data is None:
-                datastr = "<no value>"
-            elif is_vtarray(data):
-                datastr = condensed_vtarray_str(data)
-
-        except TypeError:
-            # Some data types not yet supported in Python
-            datastr = "<no Python conversion>"
-
-        result += f"{attr.GetName()} ({str(attr.GetTypeName().GetAsToken())}): {datastr}\n"
-
-    return result
-
-
 ### MESH STUFF
 def _generate_tet_mesh(path, tet_cfg=None):
     """
@@ -153,6 +62,15 @@ def _generate_tet_mesh(path, tet_cfg=None):
         tet_cfg = TetMeshCfg(
             edge_length_r=0.25
         )
+
+    # # high res
+    # if tet_cfg is None:
+    #     tet_cfg = TetMeshCfg(
+    #         max_its=250,
+    #         epsilon_r=0.001,
+    #         edge_length_r=0.05
+    #     )
+
     mesh_gen = MeshGenerator(tet_cfg)
 
     stage = omni.usd.get_context().get_stage()
@@ -175,18 +93,6 @@ def _generate_tet_mesh(path, tet_cfg=None):
     # Dont save the transformed points ->  we want to save the local points. Transformations happens during scene creation
     _create_tet_data_attributes(path, tet_points=tet_points, tet_indices=tet_indices, tet_surf_points=surf_points, tet_surf_indices=tet_surf_indices)
     return f"Amount of tet points {len(tet_points)},\nAmount of tetrahedra: {int(len(tet_indices)/4)},\nAmount of surface points: {int(len(tet_surf_indices)/3)}"
-
-def _transform_points(points, transformation_matrix):
-    # need a Gf matrix, otherwise matrix multiplication is going to yield wrong result
-    # transformation_matrix = Vt.Matrix4fArray.FromNumpy(transformation_matrix)[0]
-    transformed_points = []
-    # transform points by making them homogenous first and then applying the transformation matrix
-    # after that, convert to normal coor.
-    for p in points:
-        transformed_vector = Gf.Vec4f(p[0], p[1], p[2], 1) * transformation_matrix # usd applies transform to row vectors: y^T = p^T*M^T, ref. https://nvidia.github.io/warp/modules/functions.html#warp.transform_point
-        transformed_vector = Gf.Vec3f(transformed_vector[0], transformed_vector[1], transformed_vector[2])/transformed_vector[3]
-        transformed_points.append(transformed_vector)
-    return transformed_points
 
 def _draw_tets(all_vertices, tet_indices):
     draw.clear_lines()
@@ -214,7 +120,6 @@ def _draw_surface_trimesh(all_vertices, tet_surf_indices):
         draw.draw_lines([tri_points[0]]*2, tri_points[1:], color*2, [10]*2) # draw from point 0 to every other point (3 times 0, cause line from 0 to the other 3 points)
         draw.draw_lines([tri_points[1]]*1, tri_points[2:], color*1, [10]*1)
 
-
 def _create_tet_data_attributes(path, tet_points, tet_indices, tet_surf_points, tet_surf_indices):
     """
     Creates an attribute for a prim that holds a boolean.
@@ -230,9 +135,11 @@ def _create_tet_data_attributes(path, tet_points, tet_indices, tet_surf_points, 
 
     attr_tet_points = prim.CreateAttribute("tet_points", pxr.Sdf.ValueTypeNames.Vector3fArray)
     attr_tet_points.Set(tet_points)
+    attr_tet_points.SetCustom(True)
 
     attr_tet_indices = prim.CreateAttribute("tet_indices", pxr.Sdf.ValueTypeNames.UIntArray)
     attr_tet_indices.Set(tet_indices)
+    attr_tet_indices.SetCustom(True)
 
     attr_tet_surf_points = prim.CreateAttribute("tet_surf_points", pxr.Sdf.ValueTypeNames.Vector3fArray)
     attr_tet_surf_points.Set(tet_surf_points)
@@ -253,19 +160,17 @@ def _update_surf_mesh(path):
     prim = stage.GetPrimAtPath(pxr.Sdf.Path(path))
     print("prim ", prim)
     # extract surface data of tet mesh
-    surf_points = prim.GetAttribute("tet_surf_points").Get()
-    tet_surf_indices = prim.GetAttribute("tet_surf_indices").Get()
+    # surf_points = prim.GetAttribute("tet_surf_points").Get()
+    # tet_surf_indices = prim.GetAttribute("tet_surf_indices").Get()
 
-    surf_points = np.array(surf_points)
-    triangles = tet_surf_indices
-    MeshGenerator.update_usd_mesh(UsdGeom.Mesh(prim), surf_points=surf_points, triangles=triangles)
-    print("Updated Surface Mesh of ", path)
+    # surf_points = np.array(surf_points)
+    # triangles = tet_surf_indices
+    # MeshGenerator.update_usd_mesh(UsdGeom.Mesh(prim), surf_points=surf_points, triangles=triangles)
+    # print("Updated Surface Mesh of ", path)
 
-    # # extract surface data of tet mesh
-    # tet_points = prim.GetAttribute("tet_points").Get()
-    # tet_indices = prim.GetAttribute("tet_indices").Get()
-    # MeshGenerator.update_usd_mesh_pretty(UsdGeom.Mesh(prim), tet_points, tet_indices)
-    # print("Pretty update of surface Mesh of ", path)
+    # update surface based on uipc_mesh surface
+    MeshGenerator.update_usd_mesh_with_uipc_surface(prim)
+    print("Update of surface Mesh via UIPC: ", path)
 
 def _create_attachment(paths):
     print("paths are ", paths)
@@ -313,7 +218,41 @@ def _create_attachment_data_attributes(path, attachment_offsets, attachment_indi
     print(f"attachment_indices (num {len(attachment_indices)})")
     print("*"*40)
 
+### for some funky UV stuff
+def _extract_primvar_st(path):
+    stage = omni.usd.get_context().get_stage()
+    prim = stage.GetPrimAtPath(path)
+    
+    pv_api = UsdGeom.PrimvarsAPI(UsdGeom.Mesh(prim))
+    if not pv_api.HasPrimvar("primvars:st"):
+        print("No primvars:st")
+        return
+    
+    primvars_st = np.array(pv_api.GetPrimvar("primvars:st").Get())
+    print("primvars:st has shape ", primvars_st.shape)
+    np.save("./primvars_st.npy", primvars_st)
+        
+    
+def _set_primvar_st(path):
+    stage = omni.usd.get_context().get_stage()
+    prim = stage.GetPrimAtPath(path)
 
+    # load uv coor from array
+    uv_coor = np.load("./primvars_st.npy")
+
+    pv_api = UsdGeom.PrimvarsAPI(UsdGeom.Mesh(prim))
+    if not pv_api.HasPrimvar("primvars:st"):
+        pv = pv_api.CreatePrimvar(
+            "primvars:st",
+            Sdf.ValueTypeNames.TexCoord2fArray,
+            UsdGeom.Tokens.faceVarying,
+            uv_coor.size
+        )   
+    else:
+        pv = pv_api.GetPrimvar("primvars:st")
+    pv.Set(uv_coor)
+    print("Set uv values for primvars:st")
+    
 # Any class derived from `omni.ext.IExt` in top level module (defined in `python.modules` of `extension.toml`) will be
 # instantiated when extension gets enabled and `on_startup(ext_id)` will be called. Later when extension gets disabled
 # on_shutdown() is called.
@@ -350,21 +289,14 @@ class TacexIPCExtension(omni.ext.IExt):
                 omni.ui.Button("Update Surface Mesh", clicked_fn=update_surf_mesh, height=0)
                 omni.ui.Button("Create Attachment \n(Select rigid body, then tet mesh, then press button)", clicked_fn=create_attachment, height=0)
 
-    # def init_on_update(self):
-    #     @carb.profiler.profile(zone_name="omni.example.python.usdrt.on_update")
-    #     def on_update(e: carb.events.IEvent):
-    #         if not self.playing:
-    #             return
-    #         try:
-    #             deform_mesh_with_warp(get_stage_id(), get_selected_prim_path(), self._t)
-    #             self._t += self._dt
-    #         except Exception as e:
-    #             carb.log_error(e)
-    #         return
-
-    #     update_stream = omni.kit.app.get_app().get_update_event_stream()
-    #     self.sub = update_stream.create_subscription_to_pop(on_update, name="omni.example.python.usdrt.on_update")
-    #     return
+                # experimental
+                def extract_primvar_st():
+                    _extract_primvar_st(get_selected_prim_path())
+                
+                def set_primvar_st():
+                    _set_primvar_st(get_selected_prim_path())
+                omni.ui.Button("Extract primvars:st values (uv map)", clicked_fn=extract_primvar_st, height=0)
+                omni.ui.Button("Set primvars:st values (uv map)", clicked_fn=set_primvar_st, height=0)
 
     def on_shutdown(self):
         print("[tacex_uipc] shutdown")
