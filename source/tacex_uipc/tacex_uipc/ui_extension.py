@@ -26,8 +26,7 @@ import numpy as np
 import pxr
 import wildmeshing as wm
 from omni.physx.scripts import deformableUtils
-from pxr import Gf, UsdGeom, Sdf
-
+from pxr import Gf, Sdf, UsdGeom
 from tacex_uipc.sim import UipcIsaacAttachments
 from tacex_uipc.utils import MeshGenerator, TetMeshCfg
 
@@ -222,17 +221,17 @@ def _create_attachment_data_attributes(path, attachment_offsets, attachment_indi
 def _extract_primvar_st(path):
     stage = omni.usd.get_context().get_stage()
     prim = stage.GetPrimAtPath(path)
-    
+
     pv_api = UsdGeom.PrimvarsAPI(UsdGeom.Mesh(prim))
     if not pv_api.HasPrimvar("primvars:st"):
         print("No primvars:st")
         return
-    
+
     primvars_st = np.array(pv_api.GetPrimvar("primvars:st").Get())
     print("primvars:st has shape ", primvars_st.shape)
     np.save("./primvars_st.npy", primvars_st)
-        
-    
+
+
 def _set_primvar_st(path):
     stage = omni.usd.get_context().get_stage()
     prim = stage.GetPrimAtPath(path)
@@ -247,12 +246,12 @@ def _set_primvar_st(path):
             Sdf.ValueTypeNames.TexCoord2fArray,
             UsdGeom.Tokens.faceVarying,
             uv_coor.size
-        )   
+        )
     else:
         pv = pv_api.GetPrimvar("primvars:st")
     pv.Set(uv_coor)
     print("Set uv values for primvars:st")
-    
+
 # Any class derived from `omni.ext.IExt` in top level module (defined in `python.modules` of `extension.toml`) will be
 # instantiated when extension gets enabled and `on_startup(ext_id)` will be called. Later when extension gets disabled
 # on_shutdown() is called.
@@ -292,7 +291,7 @@ class TacexIPCExtension(omni.ext.IExt):
                 # experimental
                 def extract_primvar_st():
                     _extract_primvar_st(get_selected_prim_path())
-                
+
                 def set_primvar_st():
                     _set_primvar_st(get_selected_prim_path())
                 omni.ui.Button("Extract primvars:st values (uv map)", clicked_fn=extract_primvar_st, height=0)

@@ -3,23 +3,22 @@
 #
 # SPDX-License-Identifier: BSD-3-Clause
 
+import carb
+import isaaclab.sim as sim_utils
+import isaacsim.core.utils.torch as torch_utils
 import numpy as np
 import torch
-
-import carb
-import isaacsim.core.utils.torch as torch_utils
-
-import isaaclab.sim as sim_utils
 from isaaclab.assets import Articulation
 from isaaclab.envs import DirectRLEnv
 from isaaclab.sim.spawners.from_files import GroundPlaneCfg, spawn_ground_plane
 from isaaclab.utils.assets import ISAAC_NUCLEUS_DIR
 from isaaclab.utils.math import axis_angle_from_quat
 
+from tacex import GelSightSensor
+
 from . import factory_control as fc
 from .factory_env_cfg import OBS_DIM_CFG, STATE_DIM_CFG, FactoryEnvCfg
 
-from tacex import GelSightSensor
 
 class FactoryEnv(DirectRLEnv):
     cfg: FactoryEnvCfg

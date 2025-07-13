@@ -199,7 +199,7 @@ class UipcObject(AssetBase):
             surf = extract_surface(mesh)
             tet_surf_points_world = surf.positions().view().reshape(-1,3)
             tet_surf_tri = surf.triangles().topo().view().reshape(-1).tolist()
-            
+
             MeshGenerator.update_usd_mesh(prim=usd_mesh, surf_points=tet_surf_points_world, triangles=tet_surf_tri)
 
             # enable contact for uipc meshes etc.

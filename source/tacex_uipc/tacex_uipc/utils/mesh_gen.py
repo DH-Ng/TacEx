@@ -2,7 +2,7 @@
 #from meshpy.tet import MeshInfo, build, Options
 from isaacsim.util.debug_draw import _debug_draw
 from omni.physx.scripts import deformableUtils
-from pxr import Gf, UsdGeom, UsdPhysics, Sdf, Usd
+from pxr import Gf, Sdf, Usd, UsdGeom, UsdPhysics
 
 draw = _debug_draw.acquire_debug_draw_interface()
 
@@ -40,7 +40,7 @@ class TetMeshCfg:
 
     -> Absolute epsilon = epsilon_r * diagonal_of_bbox.
 
-    Smaller envelope preserves features better.  
+    Smaller envelope preserves features better.
     Large Envelope + large edge_length = tetmesh with low res
     """
 
@@ -290,7 +290,7 @@ class MeshGenerator():
                 UsdGeom.Tokens.faceVarying,
                 # UsdGeom.Tokens.uniform,
                 uv_coor.size
-            )    
+            )
             pv.Set(uv_coor)
 
     @staticmethod
@@ -361,5 +361,5 @@ class MeshGenerator():
                 Sdf.ValueTypeNames.TexCoord2fArray,
                 UsdGeom.Tokens.faceVarying,
                 uv_coor.size
-            )    
+            )
         pv.Set(uv_coor)
