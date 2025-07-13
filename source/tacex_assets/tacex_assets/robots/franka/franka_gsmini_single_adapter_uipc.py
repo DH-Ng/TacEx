@@ -24,10 +24,10 @@ from tacex_assets import TACEX_ASSETS_DATA_DIR
 # Configuration
 ##
 
+
 FRANKA_PANDA_ARM_WITH_ONE_GSMINI_CFG = ArticulationCfg(
     spawn=sim_utils.UsdFileCfg(
-        # usd_path=f"{TACEX_ASSETS_DATA_DIR}/Robots/Franka/GelSight_Mini/Single_Adapter/uipc_gelpad.usd",
-        usd_path=f"{TACEX_ASSETS_DATA_DIR}/Robots/Franka/GelSight_Mini/Single_Adapter/uipc_textured_gelpad.usd",
+        usd_path=f"{TACEX_ASSETS_DATA_DIR}/Robots/Franka/GelSight_Mini/Single_Adapter/uipc_gelpad.usd",
         activate_contact_sensors=False,
         rigid_props=sim_utils.RigidBodyPropertiesCfg(
             disable_gravity=False,
@@ -75,15 +75,23 @@ FRANKA_PANDA_ARM_WITH_ONE_GSMINI_CFG = ArticulationCfg(
     },
     soft_joint_pos_limit_factor=1.0,
 )
-"""Configuration of Franka Emika Panda robot with a single GelSight Mini sensor."""
+"""Configuration of Franka Emika Panda robot with a single GelSight Mini sensor.
+
+Sensor case prim name: `gelsight_mini_case`  
+Gelpad prim name: `gelsight_mini_gelpad`
+"""
 
 FRANKA_PANDA_ARM_GSMINI_SINGLE_ADAPTER_HIGH_PD_CFG = FRANKA_PANDA_ARM_WITH_ONE_GSMINI_CFG.copy()
+"""Configuration of Franka Emika Panda robot with stiffer PD control.
+
+This configuration is useful for task-space control using differential IK.
+
+Sensor case prim name: `gelsight_mini_case`  
+Gelpad prim name: `gelsight_mini_gelpad`
+"""
 FRANKA_PANDA_ARM_GSMINI_SINGLE_ADAPTER_HIGH_PD_CFG.spawn.rigid_props.disable_gravity = True
 FRANKA_PANDA_ARM_GSMINI_SINGLE_ADAPTER_HIGH_PD_CFG.actuators["panda_shoulder"].stiffness = 400.0
 FRANKA_PANDA_ARM_GSMINI_SINGLE_ADAPTER_HIGH_PD_CFG.actuators["panda_shoulder"].damping = 80.0
 FRANKA_PANDA_ARM_GSMINI_SINGLE_ADAPTER_HIGH_PD_CFG.actuators["panda_forearm"].stiffness = 400.0
 FRANKA_PANDA_ARM_GSMINI_SINGLE_ADAPTER_HIGH_PD_CFG.actuators["panda_forearm"].damping = 80.0
-"""Configuration of Franka Emika Panda robot with stiffer PD control.
 
-This configuration is useful for task-space control using differential IK.
-"""

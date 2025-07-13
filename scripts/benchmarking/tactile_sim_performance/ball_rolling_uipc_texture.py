@@ -53,12 +53,12 @@ from isaaclab.markers.config import FRAME_MARKER_CFG
 from isaaclab.scene import InteractiveSceneCfg
 from isaaclab.sensors import FrameTransformer, FrameTransformerCfg
 from isaaclab.sensors.frame_transformer.frame_transformer_cfg import OffsetCfg
-from isaaclab.sim import PhysxCfg, SimulationCfg
+from isaaclab.sim import PhysxCfg, SimulationCfg, RenderCfg
 from isaaclab.sim.schemas.schemas_cfg import RigidBodyPropertiesCfg
 from isaaclab.utils import configclass
 
 from tacex_assets import TACEX_ASSETS_DATA_DIR
-from tacex_assets.robots.franka.franka_gsmini_single_adapter_uipc import (
+from tacex_assets.robots.franka.franka_gsmini_single_adapter_uipc_textured import (
     FRANKA_PANDA_ARM_GSMINI_SINGLE_ADAPTER_HIGH_PD_CFG,
 )
 from tacex_assets.sensors.gelsight_mini.gelsight_mini_cfg import GelSightMiniCfg
@@ -117,11 +117,11 @@ class BallRollingEnvCfg(DirectRLEnvCfg):
 
     ui_window_class_type = CustomEnvWindow
 
-    decimation = 1
-    # simulation
+    decimation = 10
+    # simulationff
     sim: SimulationCfg = SimulationCfg(
-        dt=1/60, #0.01, #1 / 120, #0.001
-        render_interval=1,
+        dt=0.01, #0.01, #1 / 120, #0.001
+        render_interval=decimation,
         #device="cpu",
         physx=PhysxCfg(
             enable_ccd=True, # needed for more stable ball_rolling
@@ -134,6 +134,9 @@ class BallRollingEnvCfg(DirectRLEnvCfg):
             dynamic_friction=5.0,
             restitution=0.0,
         ),
+        # render=RenderCfg(
+        #     rendering_mode="performance"
+        # )
     )
 
     uipc_sim = UipcSimCfg(
@@ -235,15 +238,15 @@ class BallRollingEnvCfg(DirectRLEnvCfg):
         prim_path="/World/envs/env_.*/Robot/gelsight_mini_case",
         sensor_camera_cfg = GelSightMiniCfg.SensorCameraCfg(
             prim_path_appendix = "/Camera",
-            update_period= 0,
+            update_period= 0.1,
             resolution = (240,320), #(120, 160),
-            data_types = ["depth"],
+            data_types = ["depth", "rgb"],
             clipping_range = (0.02, 0.034), #(0.024, 0.034),
         ),
         device = "cuda",
         debug_vis=True, # for rendering sensor output in the gui
         # marker_motion_sim_cfg=None,
-        data_types=["tactile_rgb", "marker_motion", "camera_depth"], #marker_motion
+        data_types=["tactile_rgb", "marker_motion", "camera_depth", "camera_rgb"], #marker_motion
     )
 
     # settings for optical sim - update Taxim cfg
@@ -391,6 +394,8 @@ class BallRollingEnv(UipcRLEnv):
 
         self.gsmini = GelSightSensor(self.cfg.gsmini)
         self.scene.sensors["gsmini"] = self.gsmini
+        # for convenience, we directly turn on debug_vis
+        self.gsmini._prim_view.prims[0].GetAttribute("debug_camera_rgb").Set(True)
 
         plate = RigidObject(self.cfg.plate)
 
