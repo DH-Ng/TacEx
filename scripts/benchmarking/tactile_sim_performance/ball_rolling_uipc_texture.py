@@ -117,7 +117,7 @@ class BallRollingEnvCfg(DirectRLEnvCfg):
 
     ui_window_class_type = CustomEnvWindow
 
-    decimation = 10
+    decimation = 1
     # simulationff
     sim: SimulationCfg = SimulationCfg(
         dt=0.01, #0.01, #1 / 120, #0.001
@@ -238,8 +238,8 @@ class BallRollingEnvCfg(DirectRLEnvCfg):
         prim_path="/World/envs/env_.*/Robot/gelsight_mini_case",
         sensor_camera_cfg = GelSightMiniCfg.SensorCameraCfg(
             prim_path_appendix = "/Camera",
-            update_period= 0.1,
-            resolution = (240,320), #(120, 160),
+            update_period= 0,
+            resolution = (480,640), #(120, 160),
             data_types = ["depth", "rgb"],
             clipping_range = (0.02, 0.034), #(0.024, 0.034),
         ),
@@ -712,18 +712,19 @@ def run_simulator(env: BallRollingEnv):
         physics_end = time.time()
         ###
 
-        # update scene buffers (i.e. from rigid bodies, uipc bodies, sensors...)
-        env.scene.update(dt=env.physics_dt)
 
         # render scene for cameras (used by sensor)
         env.uipc_sim.update_render_meshes()
         env.sim.render()
 
+        # update scene buffers (i.e. from rigid bodies, uipc bodies, sensors...)
+        env.scene.update(dt=env.physics_dt)
+
         ### update sensors again to measure tactile sim time separately
-        tactile_sim_start = time.time()
-        env.gsmini.update(dt=env.physics_dt, force_recompute=True)
-        # tactile_rgb = env.gsmini.data.output["tactile_rgb"]
-        tactile_sim_end = time.time()
+        # tactile_sim_start = time.time()
+        # env.gsmini.update(dt=env.physics_dt, force_recompute=True)
+        # # tactile_rgb = env.gsmini.data.output["tactile_rgb"]
+        # tactile_sim_end = time.time()
         ###
 
         #- add frame times, if sensor was in contact
