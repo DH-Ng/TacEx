@@ -27,12 +27,11 @@ import isaaclab.utils.math as math_utils
 from isaaclab.assets import Articulation, AssetBase, AssetBaseCfg, RigidObject
 from isaaclab.utils import configclass
 from isaaclab.utils.math import transform_points
+from tacex_uipc.objects import UipcObject
 from uipc import Animation, Vector3, builtin, view
 from uipc.constitution import SoftPositionConstraint
 from uipc.geometry import GeometrySlot, SimplicialComplex
 
-
-from tacex_uipc.objects import UipcObject
 
 @configclass
 class UipcIsaacAttachmentsCfg:

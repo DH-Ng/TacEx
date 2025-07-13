@@ -18,6 +18,7 @@ from uipc import builtin
 
 if TYPE_CHECKING:
     from tacex_uipc.sim import UipcSim
+
     from .uipc_object import UipcObject
 
 class UipcObjectRigidData:

@@ -95,13 +95,6 @@ from tacex.simulation_approaches.gpu_taxim import TaximSimulatorCfg
 # from isaaclab.envs.mdp.actions.actions_cfg import DifferentialInverseKinematicsActionCfg
 
 
-
-
-
-
-
-
-
 class CustomEnvWindow(BaseEnvWindow):
     """Window manager for the RL environment."""
 
@@ -322,7 +315,9 @@ class BallRollingEnvCfg(DirectRLEnvCfg):
             usd_path=f"{TACEX_ASSETS_DATA_DIR}/Props/ball_wood.usd",
         ),
         mesh_cfg=mesh_cfg,
-        constitution_cfg=UipcObjectCfg.StableNeoHookeanCfg()
+        constitution_cfg=UipcObjectCfg.StableNeoHookeanCfg(
+            youngs_modulus=0.0005
+        )
     )
 
     robot: ArticulationCfg = FRANKA_PANDA_ARM_GSMINI_GRIPPER_HIGH_PD_UIPC_CFG.replace(

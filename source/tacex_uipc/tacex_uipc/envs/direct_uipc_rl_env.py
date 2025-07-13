@@ -32,11 +32,11 @@ from isaaclab.utils.noise import NoiseModel
 from isaaclab.utils.timer import Timer
 from isaacsim.core.simulation_manager import SimulationManager
 from isaacsim.core.version import get_version
-
 from tacex_uipc.objects import UipcObject, UipcObjectCfg
 from tacex_uipc.sim import UipcSim, UipcSimCfg
 
 from .uipc_interactive_scene import UipcInteractiveScene
+
 
 class UipcRLEnv(DirectRLEnv):
 

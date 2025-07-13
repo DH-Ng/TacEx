@@ -190,17 +190,19 @@ class UipcObject(AssetBase):
             mesh = tetmesh(tet_points_world.copy(), tet_indices.copy())
             # enable the contact by labeling the surface
             label_surface(mesh)
-            label_triangle_orient(mesh) #-> only needed when we want to export the mesh with uipc
+            label_triangle_orient(mesh)
             # flip the triangles inward for better rendering
             mesh = flip_inward_triangles(mesh) #todo idk if this makes a difference for us
             self.uipc_meshes.append(mesh)
 
+            # libuipc uses different indexing for the surface topology
             surf = extract_surface(mesh)
             tet_surf_points_world = surf.positions().view().reshape(-1,3)
             tet_surf_tri = surf.triangles().topo().view().reshape(-1).tolist()
+
             MeshGenerator.update_usd_mesh(prim=usd_mesh, surf_points=tet_surf_points_world, triangles=tet_surf_tri)
 
-            # # enable contact for uipc meshes etc.
+            # enable contact for uipc meshes etc.
             # mesh = self.uipc_meshes[0] #todo code properly cloned envs (i.e. for instanced objects?)
             self._create_constitutions(mesh)
 
@@ -331,20 +333,6 @@ class UipcObject(AssetBase):
             A tuple of lists containing the body indices and names.
         """
         return string_utils.resolve_matching_names(name_keys, self.body_names, preserve_order)
-
-    # def _compute_obj_position_world(self):
-    #     # get current world vertex positions
-    #     geom = self._uipc_sim.scene.geometries()
-    #     geo_slot, geo_slot_rest = geom.find(self.obj_id)
-
-    #     vertex_positions_world = torch.tensor(geo_slot.geometry().positions().view().copy().reshape(-1,3), device=self.device)
-    #     obj_pos = torch.mean(vertex_positions_world, dim=0)
-
-    #     draw.clear_points()
-    #     points = obj_pos.cpu().numpy()
-    #     draw.draw_points([points], [(255,0,255,0.5)]*points.shape[0], [30]*points.shape[0])
-
-    #     return obj_pos
 
     """
     Operations - Write to simulation.

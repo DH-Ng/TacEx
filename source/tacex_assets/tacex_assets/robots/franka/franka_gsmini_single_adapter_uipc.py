@@ -26,7 +26,8 @@ from tacex_assets import TACEX_ASSETS_DATA_DIR
 
 FRANKA_PANDA_ARM_WITH_ONE_GSMINI_CFG = ArticulationCfg(
     spawn=sim_utils.UsdFileCfg(
-        usd_path=f"{TACEX_ASSETS_DATA_DIR}/Robots/Franka/GelSight_Mini/Single_Adapter/uipc_gelpad.usd",
+        # usd_path=f"{TACEX_ASSETS_DATA_DIR}/Robots/Franka/GelSight_Mini/Single_Adapter/uipc_gelpad.usd",
+        usd_path=f"{TACEX_ASSETS_DATA_DIR}/Robots/Franka/GelSight_Mini/Single_Adapter/uipc_textured_gelpad.usd",
         activate_contact_sensors=False,
         rigid_props=sim_utils.RigidBodyPropertiesCfg(
             disable_gravity=False,
