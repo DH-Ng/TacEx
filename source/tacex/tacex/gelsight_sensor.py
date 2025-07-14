@@ -299,6 +299,11 @@ class GelSightSensor(SensorBase):
                 (self._num_envs, self.camera_resolution[1], self.camera_resolution[0], 1),
                 device=self.cfg.device
             )
+        if "camera_rgb" in self.cfg.data_types:
+            self._data.output["camera_rgb"] = torch.zeros(
+                (self._num_envs, self.camera_resolution[1], self.camera_resolution[0], 3),
+                device=self.cfg.device
+            )
         if "tactile_rgb" in self.cfg.data_types:
             self._data.output["tactile_rgb"] = torch.zeros(
                 (self._num_envs, self.cfg.optical_sim_cfg.tactile_img_res[1], self.cfg.optical_sim_cfg.tactile_img_res[0], 3),
@@ -359,6 +364,9 @@ class GelSightSensor(SensorBase):
         if "camera_depth" in self._data.output:
             self._get_camera_depth()
 
+        if "camera_rgb" in self._data.output:
+            self._data.output["camera_rgb"][:] = self.camera.data.output["rgb"]
+
         if (self.optical_simulator is not None) and ("tactile_rgb" in self.cfg.data_types):
             # self.optical_simulator.height_map = self._data.output["height_map"]
             self._data.output["tactile_rgb"][:] = self.optical_simulator.optical_simulation()
@@ -388,6 +396,9 @@ class GelSightSensor(SensorBase):
                 if "camera_depth" in self.cfg.data_types:
                     attr = prim.CreateAttribute("_debug_camera_depth", Sdf.ValueTypeNames.Bool)
                     attr.Set(False)
+                if "camera_rgb" in self.cfg.data_types:
+                    attr = prim.CreateAttribute("debug_camera_rgb", Sdf.ValueTypeNames.Bool)
+                    attr.Set(False)
                 if "tactile_rgb" in self.cfg.data_types:
                     attr = prim.CreateAttribute("_debug_tactile_rgb", Sdf.ValueTypeNames.Bool)
                     attr.Set(False)
@@ -403,6 +414,9 @@ class GelSightSensor(SensorBase):
                 if "camera_depth" in self.cfg.data_types:
                     self._windows["camera_depth"] = {}
                     self._img_providers["camera_depth"] = {}
+                if "camera_rgb" in self.cfg.data_types:
+                    self._windows["camera_rgb"] = {}
+                    self._img_providers["camera_rgb"] = {}
 
             if "tactile_rgb" in self.cfg.data_types:
                 self.optical_simulator._set_debug_vis_impl(debug_vis)
@@ -418,12 +432,37 @@ class GelSightSensor(SensorBase):
         # Update the GUI windows
         for i, prim in enumerate(self._prim_view.prims): #! bad that we iterate through all prims multiple times (once per sim data type)
 
+            if "camera_rgb" in self.cfg.data_types:
+                show_img = prim.GetAttribute("debug_camera_rgb").Get()
+                if show_img==True:
+                    if not (str(i) in self._windows["camera_rgb"]):
+                        # create a window
+                        window = omni.ui.Window(self._prim_view.prim_paths[i] + "/camera_rgb", height=640, width=480)
+                        self._windows["camera_rgb"][str(i)] = window
+                        # create image provider
+                        self._img_providers["camera_rgb"][str(i)] = omni.ui.ByteImageProvider() # default format omni.ui.TextureFormat.RGBA8_UNORM
+
+                    frame = self._data.output["camera_rgb"][i].cpu().numpy()
+
+                    # update image of the window
+                    frame = frame.astype(np.uint8)
+                    frame = cv2.cvtColor(frame, cv2.COLOR_RGB2RGBA) #cv.COLOR_BGR2RGBA) COLOR_RGB2RGBA
+                    height, width, channels = frame.shape
+                    with self._windows["camera_rgb"][str(i)].frame:
+                        #self._img_providers[str(i)].set_data_array(frame, [width, height, channels]) #method signature: (numpy.ndarray[numpy.uint8], (width, height))
+                        self._img_providers["camera_rgb"][str(i)].set_bytes_data(frame.flatten().data, [width, height]) #method signature: (numpy.ndarray[numpy.uint8], (width, height))
+                        image = omni.ui.ImageWithProvider(self._img_providers["camera_rgb"][str(i)]) #, fill_policy=omni.ui.IwpFillPolicy.IWP_PRESERVE_ASPECT_FIT -> fill_policy by default: specifying the width and height of the item causes the image to be scaled to that size
+                elif str(i) in self._windows["camera_rgb"]:
+                    # remove window/img_provider from dictionary and destroy them
+                    self._windows["camera_rgb"].pop(str(i)).destroy()
+                    self._img_providers["camera_rgb"].pop(str(i)).destroy()
+
             if "camera_depth" in self.cfg.data_types:
                 show_img = prim.GetAttribute("_debug_camera_depth").Get()
                 if show_img==True:
                     if not (str(i) in self._windows["camera_depth"]):
                         # create a window
-                        window = omni.ui.Window(self._prim_view.prim_paths[i], height=640, width=480)
+                        window = omni.ui.Window(self._prim_view.prim_paths[i] +  "/camera_depth", height=640, width=480)
                         self._windows["camera_depth"][str(i)] = window
                         # create image provider
                         self._img_providers["camera_depth"][str(i)] = omni.ui.ByteImageProvider() # default format omni.ui.TextureFormat.RGBA8_UNORM

@@ -77,7 +77,12 @@ class UipcRLEnv(DirectRLEnv):
         if "cuda" in self.device:
             torch.cuda.set_device(self.device)
 
-        self.uipc_sim: UipcSim = UipcSim(self.cfg.uipc_sim)
+        # check if env is supposed to use UIPC simulation
+        if hasattr(self.cfg, "uipc_sim") and self.cfg.uipc_sim is not None:
+            # if self.cfg.uipc_sim is not None:
+            self.uipc_sim: UipcSim = UipcSim(self.cfg.uipc_sim)
+        else:
+            self.uipc_sim = None
 
         # print useful information
         print("[INFO]: Base environment:")
@@ -132,7 +137,8 @@ class UipcRLEnv(DirectRLEnv):
                 # this shouldn't cause an issue since later on, users do a reset over all the environments so the lazy buffers would be reset.
                 self.scene.update(dt=self.physics_dt)
 
-        self.uipc_sim.setup_sim()
+        if self.uipc_sim is not None:
+            self.uipc_sim.setup_sim()
 
         # check if debug visualization is has been implemented by the environment
         source_code = inspect.getsource(self._set_debug_vis_impl)
@@ -331,7 +337,8 @@ class UipcRLEnv(DirectRLEnv):
             # note: we assume the render interval to be the shortest accepted rendering interval.
             #    If a camera needs rendering at a faster frequency, this will lead to unexpected behavior.
             if self._sim_step_counter % self.cfg.sim.render_interval == 0 and is_rendering:
-                self.uipc_sim.update_render_meshes()
+                if self.uipc_sim is not None:
+                    self.uipc_sim.update_render_meshes()
                 self.sim.render()
 
             # update buffers at sim dt
@@ -355,7 +362,8 @@ class UipcRLEnv(DirectRLEnv):
             self.sim.forward()
             # if sensors are added to the scene, make sure we render to reflect changes in reset
             if self.sim.has_rtx_sensors() and self.cfg.rerender_on_reset:
-                self.uipc_sim.update_render_meshes()
+                if self.uipc_sim is not None:
+                    self.uipc_sim.update_render_meshes()
                 self.sim.render()
 
         # post-step: step interval event
@@ -419,7 +427,8 @@ class UipcRLEnv(DirectRLEnv):
         # run a rendering step of the simulator
         # if we have rtx sensors, we do not need to render again sin
         if not self.sim.has_rtx_sensors() and not recompute:
-            self.uipc_sim.update_render_meshes()
+            if self.uipc_sim is not None:
+                self.uipc_sim.update_render_meshes()
             self.sim.render()
         # decide the rendering mode
         if self.render_mode == "human" or self.render_mode is None:
