@@ -15,9 +15,9 @@
 
 **Keywords:** tactile sensing, gelsight, isaaclab, vision-based-tactile-sensor, vbts, reinforcement learning
 
->[!NOTE]
+> [!NOTE]
 > TacEx currently runs on Isaac Sim 4.5 and IsaacLab 2.1.
-> The installation was tested on Ubuntu 22.04
+> The installation was tested on Ubuntu 22.04 with a 4090 GPU and Driver Version 550.163.01 + Cuda 12.4
 
 # Installation
 To install it locally follow the [Local Installation Guide](https://git.ias.informatik.tu-darmstadt.de/tactile-sensing/tacex/-/wikis/Home/Local-Installation).
