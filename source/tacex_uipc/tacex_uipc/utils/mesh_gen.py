@@ -280,8 +280,9 @@ class MeshGenerator():
         if pv_api.HasPrimvar("primvars:st"):
             pv = pv_api.GetPrimvar("primvars:st")
             pv.SetInterpolation(UsdGeom.Tokens.faceVarying)
-            if uv_coor.size != pv.Get():
-                print("primvars:st array has the wrong size.")
+            # if uv_coor.size != pv.Get():
+            #     print("primvars:st array has the wrong size - updating it")
+            #     pv.Set(uv_coor)
         else:
             # set some values for the uv_coor variable, if no values exist
             pv = pv_api.CreatePrimvar(

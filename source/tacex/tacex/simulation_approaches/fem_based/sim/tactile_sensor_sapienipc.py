@@ -348,6 +348,7 @@ class VisionTactileSensorSapienIPC(TactileSensorSapienIPC):
         return marker_rotated_xy / 1000.0
 
     def _gen_marker_weight(self, marker_pts):
+        # determine facet that each marker belongs to
         surface_pts = self.get_init_surface_vertices_camera()[:, :2]
         marker_on_surface = in_hull(marker_pts, surface_pts)
         marker_pts = marker_pts[marker_on_surface]
@@ -369,6 +370,7 @@ class VisionTactileSensorSapienIPC(TactileSensorSapienIPC):
         marker_pts_surface_weight = []
         valid_marker_idx = []
 
+        # compute barycentric weight of each vertex
         for i in range(marker_pts.shape[0]):
             possible_face_ids = idx[i]
             p = marker_pts[i]

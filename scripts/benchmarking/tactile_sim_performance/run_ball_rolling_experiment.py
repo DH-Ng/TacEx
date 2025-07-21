@@ -7,7 +7,7 @@ parser = argparse.ArgumentParser(description="Ball rolling experiment with a Fra
 parser.add_argument("--num_envs", type=int, default=1, help="Number of environments to spawn. Default 1.")
 parser.add_argument("--env", type=str, default="physx_rigid", help="What type of env cfg should be used. Options: [physx_rigid, uipc, uipc_textured]. Defaults to physx_rigid")
 # parser.add_argument("--track_sys", type=bool, default=True, help="Whether to track system utilization.")
-parser.add_argument("--debug_vis", default=True, action="store_true", help="Whether to render tactile images in the# append AppLauncher cli args. Default True.")
+parser.add_argument("--debug_vis", default=False, action="store_true", help="Whether to render tactile images in the# append AppLauncher cli args. Default True.")
 AppLauncher.add_app_launcher_args(parser)
 
 # parse the arguments
@@ -79,7 +79,6 @@ def _get_utilization_percentages(reset: bool = False, max_values: list[float] = 
         gpu_memory_utilization_percent = None
 
     return max_values
-
 
 def run_simulator(env):
     """Runs the simulation loop."""
@@ -247,7 +246,7 @@ def main():
     # override configurations with non-hydra CLI arguments
     env_cfg.scene.num_envs = args_cli.num_envs if args_cli.num_envs is not None else env_cfg.scene.num_envs
     env_cfg.sim.device = args_cli.device if args_cli.device is not None else env_cfg.sim.device
-    env_cfg.gsmini.debug_vis = args_cli.debug_vis
+    env_cfg.gsmini.debug_vis = True#args_cli.debug_vis
 
     if args_cli.env == "physx_rigid":
         experiment = PhysXRigidEnv(env_cfg)

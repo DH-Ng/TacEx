@@ -215,11 +215,10 @@ class BallRollingEnvCfg(DirectRLEnvCfg):
         ),
         device = "cuda",
         debug_vis=True, # for rendering sensor output in the gui
-        # update Taxim cfg
         marker_motion_sim_cfg=None,
         data_types=["tactile_rgb"], #marker_motion
     )
-    # settings for optical sim
+    # change settings for optical sim
     gsmini.optical_sim_cfg = gsmini.optical_sim_cfg.replace(
         with_shadow=False,
         device="cuda",

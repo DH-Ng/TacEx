@@ -254,7 +254,7 @@ class UipcIsaacAttachments():
             raise RuntimeError(f"Could not find prim with path {isaac_mesh_path}. The body_name in the cfg might not exist.")
         init_prim = matching_prims[0]
 
-        pose = omni.usd.get_world_transform_matrix(init_prim) #omni.usd.utils.get_world_transform_matrix(init_prim)
+        pose = omni.usd.get_world_transform_matrix(init_prim)
         obj_position = pose.ExtractTranslation()
         obj_position = np.array([obj_position])
 

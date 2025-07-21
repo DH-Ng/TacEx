@@ -257,12 +257,12 @@ class BallRollingEnvCfg(DirectRLEnvCfg):
         data_types=["marker_motion"], #marker_motion
     )
     # settings for optical sim
-    # gsmini = gsmini.replace(
-    #     optical_sim_cfg = gsmini.optical_sim_cfg.replace(
-    #         with_shadow=False,
-    #         device="cpu",
-    #     )
-    # )
+    gsmini = gsmini.replace(
+        optical_sim_cfg = gsmini.optical_sim_cfg.replace(
+            with_shadow=False,
+            device="cpu",
+        )
+    )
 
     ik_controller_cfg = DifferentialIKControllerCfg(command_type="pose", use_relative_mode=False, ik_method="dls")
 

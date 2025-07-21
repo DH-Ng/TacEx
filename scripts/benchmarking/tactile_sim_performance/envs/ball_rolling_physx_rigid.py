@@ -180,13 +180,12 @@ class PhysXRigidEnvCfg(DirectRLEnvCfg):
         sensor_camera_cfg = GelSightMiniCfg.SensorCameraCfg(
             prim_path_appendix = "/Camera",
             update_period= 0,
-            resolution = (32,32), #(120, 160),
+            resolution = (32, 32), #(120, 160),
             data_types = ["depth"],
             clipping_range = (0.024, 0.034),
         ),
         device = "cuda",
         debug_vis=True, # for rendering sensor output in the gui
-        # update Taxim cfg
         marker_motion_sim_cfg=None,
         data_types=["tactile_rgb"], #marker_motion
     )

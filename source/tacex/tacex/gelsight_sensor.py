@@ -42,23 +42,22 @@ from .simulation_approaches.gelsight_simulator import GelSightSimulator
 # from isaaclab.sensors.camera.camera import Camera
 # from isaaclab.sensors.camera.camera_cfg import CameraCfg
 
-
-
-
-
 if TYPE_CHECKING:
     from .gelsight_sensor_cfg import GelSightSensorCfg
 
 class GelSightSensor(SensorBase):
     cfg: GelSightSensorCfg
 
-    def __init__(self, cfg: GelSightSensorCfg):
+    def __init__(self, cfg: GelSightSensorCfg, gelpad_obj = None):
         self.cfg = cfg
 
         self._prim_view = None
 
         # sensor camera
         self.camera = None
+
+        # object which represents the gelpad
+        self.gelpad_obj = gelpad_obj
 
         self._indentation_depth: torch.tensor = None
 
@@ -322,8 +321,10 @@ class GelSightSensor(SensorBase):
         # set how the indentation depth should be computed
         if self.cfg.compute_indentation_depth_class == "optical_sim":
             self.compute_indentation_depth_func = self.optical_simulator.compute_indentation_depth
-        else:
+        elif self.cfg.compute_indentation_depth_class == "marker_motion_sim":
             self.compute_indentation_depth_func = self.marker_motion_simulator.compute_indentation_depth
+        else:
+            self.compute_indentation_depth_func = None
 
         # Create all env_ids buffer
         self._ALL_INDICES = torch.arange(self._num_envs, device=self._device, dtype=torch.long)
@@ -352,8 +353,9 @@ class GelSightSensor(SensorBase):
 
         # -- update camera buffer
         if self.camera is not None:
-            self.camera.update(dt=0.1)
-
+            self.camera._timestamp = self._timestamp
+            self.camera.update(dt=0, force_recompute=True)
+            
         if self.compute_indentation_depth_func is not None:
             # -- height_map
             self._get_height_map()
@@ -556,6 +558,7 @@ class GelSightSensor(SensorBase):
             self._data.output["height_map"][torch.isinf(self._data.output["height_map"])] = self.cfg.sensor_camera_cfg.clipping_range[1]
             # default unit is meter -> convert to mm for optical sim
             self._data.output["height_map"] *= 1000
+
             return self._data.output["height_map"]
         else:
             # not setting camera cfg means "no need for camera"
@@ -565,7 +568,9 @@ class GelSightSensor(SensorBase):
 
     def _show_height_map_inside_gui(self, index):
         plt.close()
-        height_map = self._data.output["height_map"][0].cpu().numpy()
+        height_map = self._data.output["height_map"][index].cpu().numpy()
+        np.save("height_map.npy", height_map)
+        
         X = np.arange(0, height_map.shape[0])
         Y = np.arange(0, height_map.shape[1])
         X, Y = np.meshgrid(X, Y)
@@ -573,7 +578,7 @@ class GelSightSensor(SensorBase):
         fig, ax = plt.subplots(subplot_kw={"projection": "3d"})
         ax.plot_surface(X, Y, Z.T)
         # plt.show()
-        print("saving img")
+        print("saving height_map img")
         plt.savefig(f"height_map{index}.png")
 
     """

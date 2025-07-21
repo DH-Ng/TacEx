@@ -225,6 +225,9 @@ class UipcSim():
 
         self.stage = usdrt.Usd.Stage.Attach(omni.usd.get_context().get_stage_id())
 
+        # for updating render meshes
+        self.sio = SceneIO(self.scene)
+        
     def __del__(self):
         """Unsubscribe from the callbacks."""
         # clear debug visualization
@@ -238,9 +241,6 @@ class UipcSim():
 
         # trans = geo_slot.geometry().transforms().view()
         # print("init trans ", trans)
-
-        # for updating render meshes
-        self.sio = SceneIO(self.scene)
 
         # for each obj, compute the global_system_id -> used to infer the objects vertex_offset in the global system
         for uipc_obj in self.uipc_objects:

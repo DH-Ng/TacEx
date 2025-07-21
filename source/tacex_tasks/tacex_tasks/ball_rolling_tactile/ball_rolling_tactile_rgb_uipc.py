@@ -631,15 +631,15 @@ class BallRollingTactileRGBUipcEnv(UipcRLEnv):
         plate = RigidObject(self.cfg.plate)
         self.scene.rigid_objects["plate"] = plate
 
+        # clone, filter, and replicate
+        self.scene.clone_environments(copy_from_source=False)
+        
         # sensors
         self._ee_frame = FrameTransformer(self.cfg.ee_frame_cfg)
         self.scene.sensors["ee_frame"] = self._ee_frame
 
         self.gsmini = GelSightSensor(self.cfg.gsmini)
         self.scene.sensors["gsmini"] = self.gsmini
-
-        # clone, filter, and replicate
-        self.scene.clone_environments(copy_from_source=False)
 
         # Ground-plane
         ground = AssetBaseCfg(
