@@ -93,8 +93,10 @@ class VisionTactileSensorUIPC():
         )
 
         self.init_vertices_camera = self.get_vertices_camera()
-        self.init_surface_vertices_gelpad = self.get_surface_vertices_world().clone() #self.get_surface_vertices_in_camera_frame()
-        self.reference_surface_vertices_camera = self.get_surface_vertices_in_camera_frame()
+        self.init_surface_vertices_gelpad = self.get_surface_vertices_world().clone()
+
+        self.init_surface_vertices_camera = self.get_surface_vertices_camera().clone()
+        self.reference_surface_vertices_camera = self.get_surface_vertices_camera().clone()
 
         # self.phong_shading_renderer = PhongShadingRenderer()
 
@@ -107,11 +109,43 @@ class VisionTactileSensorUIPC():
         return surf_v
     
     #todo find out whats wrong with this method -> frame coor. sys. seems to be wrong
-    def transform_to_camera_frame(self, input_vertices):
+    def transform_camera_to_world_frame(self, input_vertices):
+        self.camera._update_poses(self.camera._ALL_INDICES)
+        # math_utils.convert_camera_frame_orientation_convention
         cam_pos_w = self.camera._data.pos_w
-        cam_quat_w =  self.camera._data.quat_w_world
+        cam_quat_w =  self.camera._data.quat_w_ros #quat_w_opengl#quat_w_world
         v_cv = math_utils.transform_points(input_vertices, pos=cam_pos_w, quat=cam_quat_w)
         return v_cv
+
+    def transform_world_to_camera_frame(self, input_vertices):
+        self.camera._update_poses(self.camera._ALL_INDICES)
+        # math_utils.convert_camera_frame_orientation_convention
+        cam_pos_w = self.camera._data.pos_w
+        cam_quat_w = self.camera._data.quat_w_ros
+        cam_quat_w_inv = math_utils.quat_inv(cam_quat_w)
+
+        rot_inv = math_utils.matrix_from_quat(cam_quat_w_inv)
+        # convert to batched
+        if rot_inv.dim() == 2:
+            rot_inv = rot_inv[None]  # (3, 3) -> (1, 3, 3)
+        
+        t_target = input_vertices - cam_pos_w
+        # convert to batched #todo fix it for multi env
+        t_target = t_target[None, :, :]  # (N, 3) -> (N, 1, 3)
+
+        v_cv = torch.matmul(rot_inv, t_target.transpose_(1, 2))
+        v_cv = v_cv.transpose_(1, 2)
+        #todo fix it for multi env
+        v_cv = v_cv[0]
+        return v_cv
+    
+    def transform_to_camera_image_plane(self, input_vertices):
+        intrinsic_matrices = self.camera._data.intrinsic_matrices
+        vertices_img_plane = math_utils.project_points(input_vertices, intrinsic_matrices)
+        return vertices_img_plane
+
+    def get_init_surface_vertices_camera(self):
+        return self.transform_world_to_camera_frame(self.get_surface_vertices_world()).clone()
 
     def transform_to_init_gelpad_frame(self, input_vertices):
         world_tf = self.gelpad_obj.init_world_transform
@@ -120,28 +154,28 @@ class VisionTactileSensorUIPC():
 
         vertices_gelpad_frame = math_utils.transform_points(input_vertices, pos=pos_w, quat=quat_w)
         return vertices_gelpad_frame
-    
-    def transform_to_camera_image_plane(self, input_vertices):
-        intrinsic_matrices = self.camera._data.intrinsic_matrices
-        vertices_img_plane = math_utils.project_points(input_vertices, intrinsic_matrices)
-        return vertices_img_plane
-
-    def get_vertices_camera(self):
-        v = self.get_vertices_world()
-        v_cv = self.transform_to_camera_frame(v)
-        return v_cv
-
+            
     def get_surface_vertices_in_gelpad_frame(self):
         v = self.get_surface_vertices_world()
         v_cv = self.transform_to_init_gelpad_frame(v)
         return v_cv
-
+    
     def get_init_surface_vertices_gelpad(self):
         return self.init_surface_vertices_gelpad.clone()
 
+    def get_vertices_camera(self):
+        v = self.get_vertices_world()
+        v_cv = self.transform_world_to_camera_frame(v)
+        return v_cv     
+
+    def get_surface_vertices_camera(self):
+        v = self.get_surface_vertices_world()
+        v_cv = self.transform_world_to_camera_frame(v)
+        return v_cv
+    
     def set_reference_surface_vertices_camera(self):
         self.reference_surface_vertices_camera = (
-            self.get_surface_vertices_in_camera_frame().clone()
+            self.get_surface_vertices_camera().clone()
         )
 
     def _gen_marker_grid(self):
@@ -162,20 +196,20 @@ class VisionTactileSensorUIPC():
         )
 
         marker_x_start = (
-            -math.ceil((8 + marker_translation_x) / marker_interval)  # 16.5
+            -math.ceil((6 + marker_translation_x) / marker_interval)  # 16.5
             * marker_interval
             + marker_translation_x
         )
         marker_x_end = (
-            math.ceil((8 - marker_translation_x) / marker_interval) * marker_interval
+            math.ceil((6 - marker_translation_x) / marker_interval) * marker_interval
             + marker_translation_x
         )
         marker_y_start = (
-            -math.ceil((6 + marker_translation_y) / marker_interval) * marker_interval
+            -math.ceil((8 + marker_translation_y) / marker_interval) * marker_interval
             + marker_translation_y
         )
         marker_y_end = (
-            math.ceil((6 - marker_translation_y) / marker_interval) * marker_interval
+            math.ceil((8 - marker_translation_y) / marker_interval) * marker_interval
             + marker_translation_y
         )
 
@@ -217,23 +251,27 @@ class VisionTactileSensorUIPC():
         )
 
         marker_rotated_xy = marker_xy @ rot_mat.T
+
         return marker_rotated_xy / 1000.0
 
     def _gen_marker_weight(self, marker_pts):
         # filter out markers which cannot be on the mesh surface
-        surface_pts = self.get_init_surface_vertices_gelpad()
+        # surface_pts = self.get_init_surface_vertices_gelpad()
+        surface_pts = self.init_surface_vertices_camera[:, :2]
+
+        # surface_pts = self.transform_world_to_camera_frame(self.get_surface_vertices_world())[:, :2]
 
         surface_pts = surface_pts.cpu().numpy()
-        draw.clear_points()
+        # draw.clear_points()
         # points = np.array(surface_pts)
-        # # points[:, 2] = 0
+        # points[:, 2] = 0
         # draw.draw_points(points, [(255,0,255,0.5)]*points.shape[0], [30]*points.shape[0])
 
-        marker_pts = np.hstack((marker_pts, np.zeros((63,1))))
-        marker_pts = self.transform_to_init_gelpad_frame(torch.tensor(marker_pts, device="cuda:0", dtype=torch.float32)).cpu().numpy()
-        marker_pts = marker_pts[:, :2]
+        # marker_pts = np.hstack((marker_pts, np.zeros((63,1))))
+        # # marker_pts = self.transform_to_camera_frame(torch.tensor(marker_pts, device="cuda:0", dtype=torch.float32)).cpu().numpy()
         # draw.draw_points(marker_pts, [(255,0,0,0.5)]*marker_pts.shape[0], [30]*marker_pts.shape[0])
-
+        # marker_pts = marker_pts[:, :2]
+        
         marker_on_surface = in_hull(marker_pts, surface_pts[:, :2])
         marker_pts = marker_pts[marker_on_surface]
         
@@ -241,7 +279,7 @@ class VisionTactileSensorUIPC():
         triangles = np.array(usdrt.UsdGeom.Mesh(self.gelpad_obj.fabric_prim).GetFaceVertexIndicesAttr().Get()).reshape(-1, 3)
         f_centers = []
         for tri in triangles:
-            vertices = surface_pts[tri][:, :2]
+            vertices = surface_pts[tri]
             f_center = np.mean(vertices, axis=0)
             f_centers.append(f_center)
 
@@ -311,16 +349,31 @@ class VisionTactileSensorUIPC():
         marker_grid = self._gen_marker_grid()
         
         marker_pts_surface_idx, marker_pts_surface_weight = self._gen_marker_weight(marker_grid)
-        
+
+        # return torch.zeros(
+        #     (
+        #         1,
+        #         63,
+        #         63,
+        #         2 # two, because each marker at (row,col) has position value (y,x)
+        #     ),
+        #     device="cuda:0"
+        # )
         init_marker_pts = (
-            self.reference_surface_vertices_camera[marker_pts_surface_idx]
+            self.reference_surface_vertices_camera[marker_pts_surface_idx].cpu().numpy()
             * marker_pts_surface_weight[..., None]
         ).sum(1)
         curr_marker_pts = (
-            self.get_surface_vertices_in_camera_frame()[marker_pts_surface_idx]
+            self.get_surface_vertices_camera()[marker_pts_surface_idx].cpu().numpy()
             * marker_pts_surface_weight[..., None]
         ).sum(1)
 
+        # draw markers in sim world
+        draw.clear_points()
+        curr_marker_pts_3d = curr_marker_pts.copy()
+        curr_marker_pts_3d = self.transform_camera_to_world_frame(torch.tensor(curr_marker_pts_3d, device="cuda:0", dtype=torch.float32)).cpu().numpy()
+        draw.draw_points(curr_marker_pts_3d, [(255,0,0,0.5)]*curr_marker_pts_3d.shape[0], [30]*curr_marker_pts_3d.shape[0])
+                
         init_marker_uv = self.gen_marker_uv(init_marker_pts)
         curr_marker_uv = self.gen_marker_uv(curr_marker_pts)
         marker_mask = np.logical_and.reduce(
@@ -334,6 +387,15 @@ class VisionTactileSensorUIPC():
         marker_flow = np.stack([init_marker_uv, curr_marker_uv], axis=0)
         marker_flow = marker_flow[:, marker_mask]
 
+        return torch.zeros(
+            (
+                1,
+                63,
+                63,
+                2 # two, because each marker at (row,col) has position value (y,x)
+            ),
+            device="cuda:0"
+        )
         # post processing
         no_lose_tracking_mask = (
             np.random.rand(marker_flow.shape[1]) > self.marker_lose_tracking_probability

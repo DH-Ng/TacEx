@@ -235,7 +235,7 @@ class BallRollingEnvCfg(DirectRLEnvCfg):
         mesh_cfg=mesh_cfg,
         constitution_cfg=UipcObjectCfg.StableNeoHookeanCfg(),
     )
-    gelpad_attachment_cfg=UipcIsaacAttachmentsCfg(
+    gelpad_attachment_cfg=UipcIsaacAttachmentsCfg(  
         constraint_strength_ratio=100.0,
         body_name="gelsight_mini_case",
         debug_vis=False,

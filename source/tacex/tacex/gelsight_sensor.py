@@ -246,6 +246,7 @@ class GelSightSensor(SensorBase):
                     height=self.cfg.sensor_camera_cfg.resolution[1],
                     width=self.cfg.sensor_camera_cfg.resolution[0],
                     data_types= self.cfg.sensor_camera_cfg.data_types,
+                    update_latest_camera_pose=True, # needed for FEM based marker sim
                     spawn= None, # use camera which is part of the GelSight Mini Asset
                     # spawn=sim_utils.PinholeCameraCfg(
                     #    focal_length=24.0, focus_distance=400.0, horizontal_aperture=20.955, clipping_range=(0.1, 1.0e5)
