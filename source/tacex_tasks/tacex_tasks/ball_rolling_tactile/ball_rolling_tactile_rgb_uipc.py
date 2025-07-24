@@ -633,7 +633,7 @@ class BallRollingTactileRGBUipcEnv(UipcRLEnv):
 
         # clone, filter, and replicate
         self.scene.clone_environments(copy_from_source=False)
-        
+
         # sensors
         self._ee_frame = FrameTransformer(self.cfg.ee_frame_cfg)
         self.scene.sensors["ee_frame"] = self._ee_frame

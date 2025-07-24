@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 
 from pathlib import Path
@@ -33,19 +32,17 @@ from isaaclab.sim import PhysxCfg, SimulationCfg
 from isaaclab.sim.schemas.schemas_cfg import RigidBodyPropertiesCfg
 from isaaclab.utils import configclass
 from isaaclab.utils.assets import ISAAC_NUCLEUS_DIR
-
-
 from pxr import UsdGeom
 from tacex_assets import TACEX_ASSETS_DATA_DIR
 from tacex_assets.robots.franka.franka_gsmini_single_adapter_rigid import (
     FRANKA_PANDA_ARM_GSMINI_SINGLE_ADAPTER_HIGH_PD_CFG,
 )
 from tacex_assets.sensors.gelsight_mini.gelsight_mini_cfg import GelSightMiniCfg
+from tacex_uipc import UipcRLEnv
 
 from tacex import GelSightSensor, GelSightSensorCfg
+from tacex.simulation_approaches.fots import FOTSMarkerSimulatorCfg
 from tacex.simulation_approaches.gpu_taxim import TaximSimulatorCfg
-
-from tacex_uipc import UipcRLEnv
 
 from isaaclab.markers import POSITION_GOAL_MARKER_CFG  # isort: skip
 from isaaclab.markers import CUBOID_MARKER_CFG  # isort: skip
@@ -174,6 +171,12 @@ class PhysXRigidEnvCfg(DirectRLEnvCfg):
             },
         ),
     )
+
+    # setup marker for FOTS frame_transformer
+    marker_cfg = FRAME_MARKER_CFG.copy()
+    marker_cfg.markers["frame"].scale = (0.01, 0.01, 0.01)
+    marker_cfg.prim_path = "/Visuals/FrameTransformer"
+
     #MARK: GelSight Mini Config
     gsmini = GelSightMiniCfg(
         prim_path="/World/envs/env_.*/Robot/gelsight_mini_case",
@@ -186,8 +189,35 @@ class PhysXRigidEnvCfg(DirectRLEnvCfg):
         ),
         device = "cuda",
         debug_vis=True, # for rendering sensor output in the gui
-        marker_motion_sim_cfg=None,
-        data_types=["tactile_rgb"], #marker_motion
+        marker_motion_sim_cfg=FOTSMarkerSimulatorCfg(
+            lamb = [0.00125,0.00021,0.00038],
+            pyramid_kernel_size = [51, 21, 11, 5], #[11, 11, 11, 11, 11, 5],
+            kernel_size = 5,
+            marker_params = FOTSMarkerSimulatorCfg.MarkerParams(
+                num_markers_col=9,
+                num_markers_row=11,
+                num_markers=99,
+                x0=15,
+                y0=26,
+                dx=26,
+                dy=29
+            ),
+            tactile_img_res = (240, 320),
+            device = "cuda",
+            frame_transformer_cfg = FrameTransformerCfg(
+                prim_path="/World/envs/env_.*/Robot/gelsight_mini_gelpad", #"/World/envs/env_.*/Robot/gelsight_mini_case",
+                # you have to make sure that the asset frame center is correct, otherwise wrong shear/twist motions
+                source_frame_offset=OffsetCfg(
+                    # rot=(0.0, 0.92388, -0.38268, 0.0) # values for the robot used here
+                ),
+                target_frames=[
+                    FrameTransformerCfg.FrameCfg(prim_path="/World/envs/env_.*/ball")
+                ],
+                debug_vis=True,
+                visualizer_cfg=marker_cfg,
+            )
+        ),
+        data_types=["tactile_rgb", "marker_motion"],
     )
     # settings for optical sim
     gsmini.optical_sim_cfg = gsmini.optical_sim_cfg.replace(
@@ -195,6 +225,9 @@ class PhysXRigidEnvCfg(DirectRLEnvCfg):
         device="cuda",
         tactile_img_res=(480, 640),
     )
+
+    data_types=["marker_motion"], #marker_motion
+
     ik_controller_cfg = DifferentialIKControllerCfg(command_type="pose", use_relative_mode=False, ik_method="dls")
 
     ball_radius = 0.005
@@ -351,7 +384,7 @@ class PhysXRigidEnv(UipcRLEnv):
     def _pre_physics_step(self, actions: torch.Tensor):
         # update movement pattern according to the ball position
         ball_pos = self.object.data.root_pos_w - self.scene.env_origins
-       
+
         # change goal
         if (self.step_count+1) % self.num_step_goal_change == 0:
             self.current_goal_idx = (self.current_goal_idx+1)  % len(self.pattern_offsets)

@@ -76,7 +76,7 @@ FRANKA_PANDA_ARM_WITH_ONE_GSMINI_CFG = ArticulationCfg(
 )
 """Configuration of Franka Emika Panda robot with a single GelSight Mini sensor.
 
-Sensor case prim name: `gelsight_mini_case`  
+Sensor case prim name: `gelsight_mini_case`
 Gelpad prim name: `gelsight_mini_gelpad`
 """
 
@@ -86,7 +86,7 @@ FRANKA_PANDA_ARM_GSMINI_SINGLE_ADAPTER_HIGH_PD_CFG = FRANKA_PANDA_ARM_WITH_ONE_G
 
 This configuration is useful for task-space control using differential IK.
 
-Sensor case prim name: `gelsight_mini_case`  
+Sensor case prim name: `gelsight_mini_case`
 Gelpad prim name: `gelsight_mini_gelpad`
 """
 

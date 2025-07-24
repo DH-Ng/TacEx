@@ -184,7 +184,7 @@ class UipcObject(AssetBase):
             tet_points_world = (tet_points_world[:-1].T)
 
             self.init_world_transform = torch.tensor(np.array(tf_world).T.copy(), device=self.uipc_sim.cfg.device)
-            
+
             # uipc wants 2D array
             tet_indices = np.array(tet_indices).reshape(-1,4)
             tet_surf_indices = np.array(tet_surf_indices).reshape(-1,3)
@@ -202,13 +202,13 @@ class UipcObject(AssetBase):
             surf = extract_surface(mesh)
             tet_surf_points_world = surf.positions().view().reshape(-1,3)
             tet_surf_tri = surf.triangles().topo().view().reshape(-1).tolist()
-            
+
             MeshGenerator.update_usd_mesh(prim=usd_mesh, surf_points=tet_surf_points_world, triangles=tet_surf_tri)
 
             # enable contact for uipc meshes etc.
             # mesh = self.uipc_meshes[0] #todo code properly cloned envs (i.e. for instanced objects?)
             self._create_constitutions(mesh)
-    
+
             # setup mesh updates via Fabric
             fabric_prim = self.stage.GetPrimAtPath(usdrt.Sdf.Path(usd_mesh_path))
             if not fabric_prim:
@@ -231,7 +231,7 @@ class UipcObject(AssetBase):
             fabric_mesh_points_attr.Set(usdrt.Vt.Vec3fArray(tet_surf_points_world))
 
             self.fabric_prim = fabric_prim
-            
+
             # add fabric meshes to uipc sim class for updating the render meshes
             self._uipc_sim._fabric_meshes.append(fabric_prim)
 
@@ -398,7 +398,7 @@ class UipcObject(AssetBase):
         omni.log.info(f"Number of instances: {self.num_instances}")
 
         # create buffers
-        
+
         # container for data access
         if type(self.constitution) == StableNeoHookean:
             self._data: UipcObjectDeformableData = UipcObjectDeformableData(self._uipc_sim, self, self.device)

@@ -217,35 +217,33 @@ class BallRollingEnvCfg(DirectRLEnvCfg):
         sensor_camera_cfg = GelSightMiniCfg.SensorCameraCfg(
             prim_path_appendix = "/Camera",
             update_period= 0,
-            resolution = (60,80), #(120, 160),
+            resolution = (32,32), #(120, 160),
             data_types = ["depth"],
             clipping_range = (0.024, 0.034),
         ),
         device = "cuda",
         debug_vis=True, # for being able to see sensor output in the gui
-        #optical_sim_cfg=None,
-        # update Taxim cfg
-
         # update FOTS cfg
         marker_motion_sim_cfg=FOTSMarkerSimulatorCfg(
             lamb = [0.00125,0.00021,0.00038],
             pyramid_kernel_size = [51, 21, 11, 5], #[11, 11, 11, 11, 11, 5],
             kernel_size = 5,
             marker_params = FOTSMarkerSimulatorCfg.MarkerParams(
-                num_markers_col=20, #11,
-                num_markers_row=25, #9,
+                num_markers_col=9, #11,
+                num_markers_row=11, #9,
+                num_markers=99,
                 x0=15,
                 y0=26,
                 dx=26,
                 dy=29
             ),
-            tactile_img_res = (480, 640),
+            tactile_img_res = (240, 320),
             device = "cuda",
             frame_transformer_cfg = FrameTransformerCfg(
                 prim_path="/World/envs/env_.*/Robot/gelsight_mini_gelpad", #"/World/envs/env_.*/Robot/gelsight_mini_case",
                 # you have to make sure that the asset frame center is correct, otherwise wrong shear/twist motions
                 source_frame_offset=OffsetCfg(
-                    rot=(0.0, 0.92388, -0.38268, 0.0) # values for the robot used here
+                    # rot=(0.0, 0.92388, -0.38268, 0.0) # values for the robot used here
                 ),
                 target_frames=[
                     FrameTransformerCfg.FrameCfg(prim_path="/World/envs/env_.*/ball")
@@ -254,13 +252,13 @@ class BallRollingEnvCfg(DirectRLEnvCfg):
                 visualizer_cfg=marker_cfg,
             )
         ),
-        data_types=["marker_motion"], #marker_motion
+        data_types=["marker_motion", "tactile_rgb"],
     )
     # settings for optical sim
     gsmini = gsmini.replace(
         optical_sim_cfg = gsmini.optical_sim_cfg.replace(
             with_shadow=False,
-            device="cpu",
+            device="cuda:0",
         )
     )
 
@@ -632,6 +630,11 @@ def _get_utilization_percentages(reset: bool = False, max_values: list[float] = 
 def run_simulator(env: BallRollingEnv):
     """Runs the simulation loop."""
 
+    # for convenience, we directly turn on debug_vis
+    if env.cfg.gsmini.debug_vis:
+        for data_type in env.cfg.gsmini.data_types:
+            env.gsmini._prim_view.prims[0].GetAttribute(f"debug_{data_type}").Set(True)
+
     #! for time measurements
     timestamp = f"{datetime.datetime.now():%Y-%m-%d-%H_%M_%S}"
     output_dir = Path(__file__).parent.resolve()
@@ -763,7 +766,7 @@ def main():
     # Define simulation env
     env_cfg = BallRollingEnvCfg()
     # override configurations with non-hydra CLI arguments
-    env_cfg.scene.num_envs = args_cli.num_envs if args_cli.num_envs is not None else env_cfg.scene.num_envs
+    env_cfg.scene.num_envs = 1 # args_cli.num_envs if args_cli.num_envs is not None else env_cfg.scene.num_envs
     env_cfg.sim.device = args_cli.device if args_cli.device is not None else env_cfg.sim.device
     env_cfg.gsmini.debug_vis = args_cli.debug_vis
 

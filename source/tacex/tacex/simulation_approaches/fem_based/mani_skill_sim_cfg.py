@@ -26,13 +26,13 @@ class ManiSkillSimulatorCfg(GelSightSimulatorCfg):
     marker_pos_shift_range: Tuple[float, float] = (0.0, 0.0)
 
     marker_random_noise: float = 0.0
-    
+
     marker_lose_tracking_probability: float = 0.0
 
     normalize: bool = False
 
     marker_flow_size: int = 128
-    
+
     camera_params: Tuple[float, float, float, float, float] = (
         340,
         325,
@@ -51,8 +51,9 @@ class ManiSkillSimulatorCfg(GelSightSimulatorCfg):
     @configclass
     class MarkerParams:
         """Dimensions here are in mm (we assume that the world units are meters)"""
-        num_markers_col: int = 63
-        num_markers_row: int = 63
+        # num_markers_col: int = 63
+        # num_markers_row: int = 63
+        num_markers: int = 128
         x0: float = 0
         y0: float = 0
         dx: float = 0

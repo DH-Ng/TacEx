@@ -70,10 +70,6 @@ from isaacsim.core.prims import XFormPrim
 from isaacsim.core.utils.stage import get_current_stage
 from isaacsim.core.utils.torch.transformations import tf_combine, tf_inverse, tf_vector
 from pxr import Usd, UsdGeom
-
-from isaaclab.markers import POSITION_GOAL_MARKER_CFG  # isort: skip
-from isaaclab.markers import CUBOID_MARKER_CFG  # isort: skip
-
 from tacex_assets import TACEX_ASSETS_DATA_DIR
 from tacex_assets.robots.franka.franka_gsmini_single_adapter_uipc import (
     FRANKA_PANDA_ARM_GSMINI_SINGLE_ADAPTER_HIGH_PD_CFG,
@@ -91,9 +87,17 @@ from tacex_uipc import (
 from tacex_uipc.utils import TetMeshCfg
 
 from tacex import GelSightSensor, GelSightSensorCfg
+from tacex.simulation_approaches.fem_based import (
+    ManiSkillSimulator,
+    ManiSkillSimulatorCfg,
+)
 from tacex.simulation_approaches.gpu_taxim import TaximSimulatorCfg
 
-from tacex.simulation_approaches.fem_based import ManiSkillSimulator, ManiSkillSimulatorCfg
+from isaaclab.markers import POSITION_GOAL_MARKER_CFG  # isort: skip
+from isaaclab.markers import CUBOID_MARKER_CFG  # isort: skip
+
+
+
 
 
 class CustomEnvWindow(BaseEnvWindow):
@@ -211,13 +215,13 @@ class BallRollingEnvCfg(DirectRLEnvCfg):
     )
     ball = UipcObjectCfg(
         prim_path="/World/envs/env_.*/ball",
-        init_state=AssetBaseCfg.InitialStateCfg(pos=[0.5, 0, 0.15]), #rot=(0.72,-0.3,0.42,-0.45)
+        init_state=AssetBaseCfg.InitialStateCfg(pos=[0.5, 0, 0.05]), #rot=(0.72,-0.3,0.42,-0.45)
         spawn=sim_utils.UsdFileCfg(
             # usd_path="/workspace/tacex/source/tacex_assets/tacex_assets/data/Sensors/GelSight_Mini/Gelpad_low_res.usd",
             usd_path=f"{TACEX_ASSETS_DATA_DIR}/Props/ball_wood.usd",
         ),
         mesh_cfg=mesh_cfg,
-        constitution_cfg=UipcObjectCfg.StableNeoHookeanCfg()
+        constitution_cfg=UipcObjectCfg.AffineBodyConstitutionCfg()
     )
 
     robot: ArticulationCfg = FRANKA_PANDA_ARM_GSMINI_SINGLE_ADAPTER_HIGH_PD_CFG.replace(
@@ -227,7 +231,7 @@ class BallRollingEnvCfg(DirectRLEnvCfg):
     mesh_cfg = TetMeshCfg(
         stop_quality=8,
         max_its=100,
-        edge_length_r=1/15,
+        edge_length_r=1/20,
         # epsilon_r=0.01
     )
     gelpad_cfg = UipcObjectCfg(
@@ -235,7 +239,7 @@ class BallRollingEnvCfg(DirectRLEnvCfg):
         mesh_cfg=mesh_cfg,
         constitution_cfg=UipcObjectCfg.StableNeoHookeanCfg(),
     )
-    gelpad_attachment_cfg=UipcIsaacAttachmentsCfg(  
+    gelpad_attachment_cfg=UipcIsaacAttachmentsCfg(
         constraint_strength_ratio=100.0,
         body_name="gelsight_mini_case",
         debug_vis=False,
@@ -260,7 +264,7 @@ class BallRollingEnvCfg(DirectRLEnvCfg):
     gsmini.optical_sim_cfg = gsmini.optical_sim_cfg.replace(
         with_shadow=False,
         device="cuda",
-        tactile_img_res=(32, 32),
+        tactile_img_res=(240, 320),
     )
 
     # # frame for setting goal position
@@ -368,7 +372,7 @@ class BallRollingEnv(UipcRLEnv):
         VisualCuboid(
             prim_path="/World/envs/env_0/goal",
             size=0.01,
-            position=np.array([0.5, 0.0, 0.15]),
+            position=np.array([0.5, 0.0, 0.075]),
             orientation=np.array([0, 1, 0, 0]),
             color=np.array([255.0, 0.0, 0.0])
         )
@@ -382,7 +386,7 @@ class BallRollingEnv(UipcRLEnv):
         # gelpad simulated via uipc
         self._uipc_gelpad = UipcObject(self.cfg.gelpad_cfg, self.uipc_sim)
         self.scene.uipc_objects["uipc_gelpad"] = self._uipc_gelpad
-        
+
         self.ball = UipcObject(self.cfg.ball, self.uipc_sim)
 
         # create attachment
@@ -430,7 +434,7 @@ class BallRollingEnv(UipcRLEnv):
 
         # reset robot state
         joint_pos = self._robot.data.default_joint_pos[env_ids]
-    
+
         joint_vel = torch.zeros_like(joint_pos)
         self._robot.set_joint_position_target(joint_pos, env_ids=env_ids)
         self._robot.write_joint_state_to_sim(joint_pos, joint_vel, env_ids=env_ids)
@@ -547,6 +551,12 @@ def _get_utilization_percentages(reset: bool = False, max_values: list[float] = 
 
 def run_simulator(env: BallRollingEnv):
     """Runs the simulation loop."""
+
+
+    # for convenience, we directly turn on debug_vis
+    if env.cfg.gsmini.debug_vis:
+        for data_type in env.cfg.gsmini.data_types:
+            env.gsmini._prim_view.prims[0].GetAttribute(f"debug_{data_type}").Set(True)
 
     #! for time measurements
     timestamp = f"{datetime.datetime.now():%Y-%m-%d-%H_%M_%S}"

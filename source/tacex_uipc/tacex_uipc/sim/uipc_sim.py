@@ -20,6 +20,7 @@ except:
 import numpy as np
 import uipc
 import warp as wp
+from tacex_uipc.objects import UipcObject
 from tacex_uipc.utils import MeshGenerator
 from uipc import AngleAxis, Logger, Quaternion, Timer, Transform, Vector3, builtin, view
 from uipc.core import Engine, Scene, SceneIO, World
@@ -33,7 +34,6 @@ from uipc.geometry import (
 )
 from uipc.unit import GPa, MPa
 
-from tacex_uipc.objects import UipcObject
 
 @configclass
 class UipcSimCfg:
@@ -227,7 +227,7 @@ class UipcSim():
 
         # for updating render meshes
         self.sio = SceneIO(self.scene)
-        
+
     def __del__(self):
         """Unsubscribe from the callbacks."""
         # clear debug visualization

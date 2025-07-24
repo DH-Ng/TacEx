@@ -309,11 +309,20 @@ class GelSightSensor(SensorBase):
                 device=self.cfg.device
             )
         if "marker_motion" in self.cfg.data_types:
+            # self._data.output["marker_motion"]= torch.zeros(
+            #     (
+            #         self._num_envs,
+            #         self.cfg.marker_motion_sim_cfg.marker_params.num_markers_row,
+            #         self.cfg.marker_motion_sim_cfg.marker_params.num_markers_col,
+            #         2 # two, because each marker at (row,col) has position value (y,x)
+            #     ),
+            #     device=self.cfg.device
+            # )
             self._data.output["marker_motion"]= torch.zeros(
                 (
                     self._num_envs,
-                    self.cfg.marker_motion_sim_cfg.marker_params.num_markers_row,
-                    self.cfg.marker_motion_sim_cfg.marker_params.num_markers_col,
+                    2,
+                    self.cfg.marker_motion_sim_cfg.marker_params.num_markers,
                     2 # two, because each marker at (row,col) has position value (y,x)
                 ),
                 device=self.cfg.device
@@ -356,7 +365,7 @@ class GelSightSensor(SensorBase):
         if self.camera is not None:
             self.camera._timestamp = self._timestamp
             self.camera.update(dt=0, force_recompute=True)
-            
+
         if self.compute_indentation_depth_func is not None:
             # -- height_map
             self._get_height_map()
@@ -571,7 +580,7 @@ class GelSightSensor(SensorBase):
         plt.close()
         height_map = self._data.output["height_map"][index].cpu().numpy()
         np.save("height_map.npy", height_map)
-        
+
         X = np.arange(0, height_map.shape[0])
         Y = np.arange(0, height_map.shape[1])
         X, Y = np.meshgrid(X, Y)
