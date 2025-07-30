@@ -105,6 +105,8 @@ class TaximSimulator(GelSightSimulator):
             orig_hm_fmt=False,
         ).movedim(1, 3) #*255).type(torch.uint8)
 
+        tactile_rgb = self.tactile_rgb_img[0].cpu().numpy()
+
         return self.tactile_rgb_img
 
     def compute_indentation_depth(self):
@@ -168,7 +170,7 @@ class TaximSimulator(GelSightSimulator):
                 if show_img==True:
                     if not (str(i) in self._debug_windows):
                         # create a window
-                        window = omni.ui.Window(self.sensor._prim_view.prim_paths[i]+"/taxim_rgb", height=640, width=480)
+                        window = omni.ui.Window(self.sensor._prim_view.prim_paths[i]+"/taxim_rgb", height=self.cfg.tactile_img_res[1], width=self.cfg.tactile_img_res[0])
                         self._debug_windows[str(i)] = window
                         # create image provider
                         self._debug_img_providers[str(i)] = omni.ui.ByteImageProvider() # default format omni.ui.TextureFormat.RGBA8_UNORM

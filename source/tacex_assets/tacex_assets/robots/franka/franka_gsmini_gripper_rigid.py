@@ -80,12 +80,12 @@ FRANKA_PANDA_ARM_GSMINI_GRIPPER_CFG = ArticulationCfg(
 
 The gelpads are simulated via PhysX and rigid.
 
-Sensor case prim names:   
-- `gelsight_mini_case_left`  
+Sensor case prim names:
+- `gelsight_mini_case_left`
 - `gelsight_mini_case_right`
 
 Gelpad prim names:
-- `gelpad_left`  
+- `gelpad_left`
 - `gelpad_right`
 """
 
@@ -96,12 +96,12 @@ FRANKA_PANDA_ARM_GSMINI_GRIPPER_HIGH_PD_CFG = FRANKA_PANDA_ARM_GSMINI_GRIPPER_CF
 
 This configuration is useful for task-space control using differential IK.
 
-Sensor case prim names:   
-- `gelsight_mini_case_left`  
+Sensor case prim names:
+- `gelsight_mini_case_left`
 - `gelsight_mini_case_right`
 
 Gelpad prim names:
-- `gelpad_left`  
+- `gelpad_left`
 - `gelpad_right`
 """
 FRANKA_PANDA_ARM_GSMINI_GRIPPER_HIGH_PD_CFG.spawn.rigid_props.disable_gravity = True

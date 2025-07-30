@@ -42,23 +42,22 @@ from .simulation_approaches.gelsight_simulator import GelSightSimulator
 # from isaaclab.sensors.camera.camera import Camera
 # from isaaclab.sensors.camera.camera_cfg import CameraCfg
 
-
-
-
-
 if TYPE_CHECKING:
     from .gelsight_sensor_cfg import GelSightSensorCfg
 
 class GelSightSensor(SensorBase):
     cfg: GelSightSensorCfg
 
-    def __init__(self, cfg: GelSightSensorCfg):
+    def __init__(self, cfg: GelSightSensorCfg, gelpad_obj = None):
         self.cfg = cfg
 
         self._prim_view = None
 
         # sensor camera
         self.camera = None
+
+        # object which represents the gelpad
+        self.gelpad_obj = gelpad_obj
 
         self._indentation_depth: torch.tensor = None
 
@@ -247,6 +246,7 @@ class GelSightSensor(SensorBase):
                     height=self.cfg.sensor_camera_cfg.resolution[1],
                     width=self.cfg.sensor_camera_cfg.resolution[0],
                     data_types= self.cfg.sensor_camera_cfg.data_types,
+                    update_latest_camera_pose=True, # needed for FEM based marker sim
                     spawn= None, # use camera which is part of the GelSight Mini Asset
                     #! issue: clipping range doesnt matter for camera prim, if we dont spawn it
                     # spawn=sim_utils.PinholeCameraCfg(
@@ -310,11 +310,20 @@ class GelSightSensor(SensorBase):
                 device=self.cfg.device
             )
         if "marker_motion" in self.cfg.data_types:
+            # self._data.output["marker_motion"]= torch.zeros(
+            #     (
+            #         self._num_envs,
+            #         self.cfg.marker_motion_sim_cfg.marker_params.num_markers_row,
+            #         self.cfg.marker_motion_sim_cfg.marker_params.num_markers_col,
+            #         2 # two, because each marker at (row,col) has position value (y,x)
+            #     ),
+            #     device=self.cfg.device
+            # )
             self._data.output["marker_motion"]= torch.zeros(
                 (
                     self._num_envs,
-                    self.cfg.marker_motion_sim_cfg.marker_params.num_markers_row,
-                    self.cfg.marker_motion_sim_cfg.marker_params.num_markers_col,
+                    2,
+                    self.cfg.marker_motion_sim_cfg.marker_params.num_markers,
                     2 # two, because each marker at (row,col) has position value (y,x)
                 ),
                 device=self.cfg.device
@@ -323,8 +332,10 @@ class GelSightSensor(SensorBase):
         # set how the indentation depth should be computed
         if self.cfg.compute_indentation_depth_class == "optical_sim":
             self.compute_indentation_depth_func = self.optical_simulator.compute_indentation_depth
-        else:
+        elif self.cfg.compute_indentation_depth_class == "marker_motion_sim":
             self.compute_indentation_depth_func = self.marker_motion_simulator.compute_indentation_depth
+        else:
+            self.compute_indentation_depth_func = None
 
         # Create all env_ids buffer
         self._ALL_INDICES = torch.arange(self._num_envs, device=self._device, dtype=torch.long)
@@ -353,7 +364,8 @@ class GelSightSensor(SensorBase):
 
         # -- update camera buffer
         if self.camera is not None:
-            self.camera.update(dt=0.1)
+            self.camera._timestamp = self._timestamp
+            self.camera.update(dt=0, force_recompute=True)
 
         if self.compute_indentation_depth_func is not None:
             # -- height_map
@@ -437,7 +449,7 @@ class GelSightSensor(SensorBase):
                 if show_img==True:
                     if not (str(i) in self._windows["camera_rgb"]):
                         # create a window
-                        window = omni.ui.Window(self._prim_view.prim_paths[i] + "/camera_rgb", height=640, width=480)
+                        window = omni.ui.Window(self._prim_view.prim_paths[i] + "/camera_rgb", height=self.cfg.sensor_camera_cfg.resolution[1], width=self.cfg.sensor_camera_cfg.resolution[0])
                         self._windows["camera_rgb"][str(i)] = window
                         # create image provider
                         self._img_providers["camera_rgb"][str(i)] = omni.ui.ByteImageProvider() # default format omni.ui.TextureFormat.RGBA8_UNORM
@@ -462,7 +474,7 @@ class GelSightSensor(SensorBase):
                 if show_img==True:
                     if not (str(i) in self._windows["camera_depth"]):
                         # create a window
-                        window = omni.ui.Window(self._prim_view.prim_paths[i] +  "/camera_depth", height=640, width=480)
+                        window = omni.ui.Window(self._prim_view.prim_paths[i] +  "/camera_depth", height=self.cfg.sensor_camera_cfg.resolution[1], width=self.cfg.sensor_camera_cfg.resolution[0])
                         self._windows["camera_depth"][str(i)] = window
                         # create image provider
                         self._img_providers["camera_depth"][str(i)] = omni.ui.ByteImageProvider() # default format omni.ui.TextureFormat.RGBA8_UNORM
@@ -557,6 +569,7 @@ class GelSightSensor(SensorBase):
             self._data.output["height_map"][torch.isinf(self._data.output["height_map"])] = self.cfg.sensor_camera_cfg.clipping_range[1]
             # default unit is meter -> convert to mm for optical sim
             self._data.output["height_map"] *= 1000
+
             return self._data.output["height_map"]
         else:
             # not setting camera cfg means "no need for camera"
@@ -566,7 +579,9 @@ class GelSightSensor(SensorBase):
 
     def _show_height_map_inside_gui(self, index):
         plt.close()
-        height_map = self._data.output["height_map"][0].cpu().numpy()
+        height_map = self._data.output["height_map"][index].cpu().numpy()
+        np.save("height_map.npy", height_map)
+
         X = np.arange(0, height_map.shape[0])
         Y = np.arange(0, height_map.shape[1])
         X, Y = np.meshgrid(X, Y)
@@ -574,7 +589,7 @@ class GelSightSensor(SensorBase):
         fig, ax = plt.subplots(subplot_kw={"projection": "3d"})
         ax.plot_surface(X, Y, Z.T)
         # plt.show()
-        print("saving img")
+        print("saving height_map img")
         plt.savefig(f"height_map{index}.png")
 
     """

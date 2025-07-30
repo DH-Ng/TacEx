@@ -2,14 +2,12 @@ from __future__ import annotations
 
 import isaaclab.sim as sim_utils
 import torch
-
 from isaaclab.assets import ArticulationCfg, AssetBaseCfg
 from isaaclab.markers.config import FRAME_MARKER_CFG
 from isaaclab.sensors import FrameTransformerCfg
 from isaaclab.sensors.frame_transformer.frame_transformer_cfg import OffsetCfg
 from isaaclab.sim import PhysxCfg, SimulationCfg
 from isaaclab.utils import configclass
-
 from tacex_assets import TACEX_ASSETS_DATA_DIR
 from tacex_assets.robots.franka.franka_gsmini_single_adapter_uipc import (
     FRANKA_PANDA_ARM_GSMINI_SINGLE_ADAPTER_HIGH_PD_CFG,
@@ -25,7 +23,6 @@ from tacex_uipc import (
 from tacex_uipc.utils import TetMeshCfg
 
 from tacex import GelSightSensor
-
 from tacex.simulation_approaches.fots import FOTSMarkerSimulatorCfg
 from tacex.simulation_approaches.gpu_taxim import TaximSimulatorCfg
 
@@ -36,6 +33,7 @@ except:
     draw = None
 
 from .ball_rolling_physx_rigid import PhysXRigidEnv, PhysXRigidEnvCfg
+
 
 @configclass
 class UipcEnvCfg(PhysXRigidEnvCfg):
@@ -210,6 +208,6 @@ class UipcEnv(PhysXRigidEnv):
         self._uipc_gelpad.write_vertex_positions_to_sim(vertex_positions=self._uipc_gelpad.init_vertex_pos)
 
         self.step_count = 0
-        
+
         # reset goal
         self.current_goal_idx = 0

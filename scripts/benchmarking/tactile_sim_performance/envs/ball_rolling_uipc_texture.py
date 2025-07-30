@@ -1,15 +1,12 @@
 import isaaclab.sim as sim_utils
 import numpy as np
 import torch
-
 from isaaclab.assets import ArticulationCfg, AssetBaseCfg
-
 from isaaclab.markers.config import FRAME_MARKER_CFG
 from isaaclab.sensors import FrameTransformer, FrameTransformerCfg
 from isaaclab.sensors.frame_transformer.frame_transformer_cfg import OffsetCfg
-from isaaclab.sim import PhysxCfg, SimulationCfg, RenderCfg
+from isaaclab.sim import PhysxCfg, RenderCfg, SimulationCfg
 from isaaclab.utils import configclass
-
 from tacex_assets import TACEX_ASSETS_DATA_DIR
 from tacex_assets.robots.franka.franka_gsmini_single_adapter_uipc_textured import (
     FRANKA_PANDA_ARM_GSMINI_SINGLE_ADAPTER_HIGH_PD_CFG,
@@ -36,6 +33,7 @@ except:
     draw = None
 
 from .ball_rolling_physx_rigid import PhysXRigidEnv, PhysXRigidEnvCfg
+
 
 @configclass
 class UipcTexturedEnvCfg(PhysXRigidEnvCfg):

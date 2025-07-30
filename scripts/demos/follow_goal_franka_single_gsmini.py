@@ -73,6 +73,7 @@ from tacex_assets.sensors.gelsight_mini.gelsight_mini_cfg import GelSightMiniCfg
 
 from tacex import GelSightSensor, GelSightSensorCfg
 from tacex.simulation_approaches.gpu_taxim import TaximSimulatorCfg
+from tacex.simulation_approaches.fots import FOTSMarkerSimulatorCfg
 
 #  from isaaclab.controllers.differential_ik_cfg import DifferentialIKControllerCfg
 # from isaaclab.envs.mdp.actions.actions_cfg import DifferentialInverseKinematicsActionCfg
@@ -195,7 +196,7 @@ class BallRollingEnvCfg(DirectRLEnvCfg):
                 max_angular_velocity=1000.0,
                 max_linear_velocity=1000.0,
                 max_depenetration_velocity=5.0,
-                kinematic_enabled=False,
+                # kinematic_enabled=True,
                 disable_gravity=False,
             )
         )
@@ -204,26 +205,59 @@ class BallRollingEnvCfg(DirectRLEnvCfg):
     robot: ArticulationCfg = FRANKA_PANDA_ARM_GSMINI_SINGLE_ADAPTER_HIGH_PD_CFG.replace(
         prim_path="/World/envs/env_.*/Robot",
     )
+
+    #setup marker for FOTS frame_transformer
+    marker_cfg = FRAME_MARKER_CFG.copy()
+    marker_cfg.markers["frame"].scale = (0.01, 0.01, 0.01)
+    marker_cfg.prim_path = "/Visuals/FrameTransformer"
+
     gsmini = GelSightMiniCfg(
-        prim_path="/World/envs/env_.*/Robot/gelsight_mini_case",
-        sensor_camera_cfg = GelSightMiniCfg.SensorCameraCfg(
-            prim_path_appendix = "/Camera",
-            update_period= 0,
-            resolution = (32,32), #(120, 160),
-            data_types = ["depth"],
-            clipping_range = (0.024, 0.034),
-        ),
-        device = "cuda",
-        debug_vis=True, # for rendering sensor output in the gui
-        # update Taxim cfg
-        marker_motion_sim_cfg=None,
-        data_types=["tactile_rgb"], #marker_motion
+            prim_path="/World/envs/env_.*/Robot/gelsight_mini_case",
+            sensor_camera_cfg = GelSightMiniCfg.SensorCameraCfg(
+                prim_path_appendix = "/Camera",
+                update_period= 0,
+                resolution = (240,320), #(120, 160),
+                data_types = ["depth"],
+                clipping_range = (0.024, 0.034),
+            ),
+            device = "cuda",
+            debug_vis=True, # for being able to see sensor output in the gui
+            # update FOTS cfg
+            marker_motion_sim_cfg=FOTSMarkerSimulatorCfg(
+                lamb = [0.00125,0.00021,0.00038],
+                pyramid_kernel_size = [51, 21, 11, 5], #[11, 11, 11, 11, 11, 5],
+                kernel_size = 5,
+                marker_params = FOTSMarkerSimulatorCfg.MarkerParams(
+                    num_markers_col=9, #11,
+                    num_markers_row=11, #9,
+                    num_markers=99,
+                    x0=15,
+                    y0=26,
+                    dx=26,
+                    dy=29
+                ),
+                tactile_img_res = (240, 320),
+                device = "cuda",
+                frame_transformer_cfg = FrameTransformerCfg(
+                    prim_path="/World/envs/env_.*/Robot/gelsight_mini_gelpad", #"/World/envs/env_.*/Robot/gelsight_mini_case",
+                    # you have to make sure that the asset frame center is correct, otherwise wrong shear/twist motions
+                    source_frame_offset=OffsetCfg(
+                        # rot=(0.0, 0.92388, -0.38268, 0.0) # values for the robot used here
+                    ),
+                    target_frames=[
+                        FrameTransformerCfg.FrameCfg(prim_path="/World/envs/env_.*/ball")
+                    ],
+                    debug_vis=True,
+                    visualizer_cfg=marker_cfg,
+                )
+            ),
+        data_types=["marker_motion", "tactile_rgb"],
     )
-    # settings for optical sim
+    # change settings for optical sim
     gsmini.optical_sim_cfg = gsmini.optical_sim_cfg.replace(
         with_shadow=False,
         device="cuda",
-        tactile_img_res=(32, 32),
+        tactile_img_res=(240, 320),
     )
 
     ik_controller_cfg = DifferentialIKControllerCfg(command_type="pose", use_relative_mode=False, ik_method="dls")
@@ -323,11 +357,12 @@ class BallRollingEnv(DirectRLEnv):
         )
 
         VisualCuboid(
-            prim_path="/World/envs/env_0/goal",
+            prim_path="/Goal",
             size=0.01,
-            position=np.array([0.5, 0.0, 0.15]),
+            position=np.array([0.5, 0.0, 0.0155]),
             orientation=np.array([0, 1, 0, 0]),
-            color=np.array([255.0, 0.0, 0.0])
+            color=np.array([255.0, 0.0, 0.0]),
+            visible=False
         )
 
 
@@ -505,6 +540,10 @@ def _get_utilization_percentages(reset: bool = False, max_values: list[float] = 
 
 def run_simulator(env: BallRollingEnv):
     """Runs the simulation loop."""
+    # for convenience, we directly turn on debug_vis
+    if env.cfg.gsmini.debug_vis:
+        for data_type in env.cfg.gsmini.data_types:
+            env.gsmini._prim_view.prims[0].GetAttribute(f"debug_{data_type}").Set(True)
 
     #! for time measurements
     timestamp = f"{datetime.datetime.now():%Y-%m-%d-%H_%M_%S}"
@@ -527,7 +566,7 @@ def run_simulator(env: BallRollingEnv):
 
     env.reset()
 
-    env.goal_prim_view = XFormPrim(prim_paths_expr="/World/envs/env_.*/goal", name="goals", usd=True)
+    env.goal_prim_view = XFormPrim(prim_paths_expr="/Goal", name="Goal", usd=True)
 
     # Simulation loop
     while simulation_app.is_running():

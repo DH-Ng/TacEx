@@ -439,7 +439,7 @@ class BallRollingEnv(DirectRLEnv):
         )
 
         VisualCuboid(
-            prim_path="/World/envs/env_0/goal",
+            prim_path="/Goal",
             size=0.01,
             position=np.array([0.5, 0.0, 0.15]),
             orientation=np.array([0, 1, 0, 0]),
@@ -648,7 +648,7 @@ def run_simulator(env: BallRollingEnv):
 
     env.reset()
 
-    env.goal_prim_view = XFormPrim(prim_paths_expr="/World/envs/env_.*/goal", name="goals", usd=True)
+    env.goal_prim_view = XFormPrim(prim_paths_expr="/Goal", name="Goal", usd=True)
 
     # Simulation loop
     while simulation_app.is_running():

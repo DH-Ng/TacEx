@@ -178,9 +178,12 @@ class UipcObject(AssetBase):
                     tet_points, tet_indices, surf_points, tet_surf_indices = mesh_gen.generate_tet_mesh_for_prim(usd_mesh)
 
             # transform local tet points to world coor
-            tf_world = np.array(omni.usd.get_world_transform_matrix(usd_mesh))
-            tet_points_world = tf_world.T @ np.vstack((tet_points.T, np.ones(tet_points.shape[0])))
+            tf_world = omni.usd.get_world_transform_matrix(usd_mesh)
+
+            tet_points_world =  np.array(tf_world).T @ np.vstack((tet_points.T, np.ones(tet_points.shape[0])))
             tet_points_world = (tet_points_world[:-1].T)
+
+            self.init_world_transform = torch.tensor(np.array(tf_world).T.copy(), device=self.uipc_sim.cfg.device)
 
             # uipc wants 2D array
             tet_indices = np.array(tet_indices).reshape(-1,4)
@@ -227,6 +230,8 @@ class UipcObject(AssetBase):
             fabric_mesh_points_attr = fabric_prim.GetAttribute("points")
             fabric_mesh_points_attr.Set(usdrt.Vt.Vec3fArray(tet_surf_points_world))
 
+            self.fabric_prim = fabric_prim
+
             # add fabric meshes to uipc sim class for updating the render meshes
             self._uipc_sim._fabric_meshes.append(fabric_prim)
 
@@ -245,7 +250,6 @@ class UipcObject(AssetBase):
                 self._uipc_sim._system_vertex_offsets[self._system_name][-1] + self._vertex_count
             )
             self.local_system_id = len(self._uipc_sim._system_vertex_offsets[self._system_name])-1
-            print("local id ", self.local_system_id)
 
             # will be updated once _uipc_sim.setup_sim() is called
             self.global_system_id = 0
@@ -288,29 +292,14 @@ class UipcObject(AssetBase):
     """
 
     def reset(self, env_ids: Sequence[int] | None = None):
-        # resolve all indices
-        if env_ids is None:
-            env_ids = slice(None)
-        # reset external wrench
-        self._external_force_b[env_ids] = 0.0
-        self._external_torque_b[env_ids] = 0.0
+        #TODO implement this
+        pass
+        # # resolve all indices
+        # if env_ids is None:
+        #     env_ids = slice(None)
 
     def write_data_to_sim(self):
-        """Write external wrench to the simulation.
-
-        Note:
-            We write external wrench to the simulation here since this function is called before the simulation step.
-            This ensures that the external wrench is applied at every simulation step.
-        """
-        # write external wrench
-        if self.has_external_wrench:
-            self.root_physx_view.apply_forces_and_torques_at_position(
-                force_data=self._external_force_b.view(-1, 3),
-                torque_data=self._external_torque_b.view(-1, 3),
-                position_data=None,
-                indices=self._ALL_INDICES,
-                is_global=False,
-            )
+        pass
 
     def update(self, dt: float):
         self._data.update(dt)
@@ -408,13 +397,14 @@ class UipcObject(AssetBase):
         omni.log.info(f"UIPC body initialized at: {self.cfg.prim_path}.")
         omni.log.info(f"Number of instances: {self.num_instances}")
 
+        # create buffers
+
         # container for data access
         if type(self.constitution) == StableNeoHookean:
             self._data: UipcObjectDeformableData = UipcObjectDeformableData(self._uipc_sim, self, self.device)
         elif type(self.constitution) == AffineBodyConstitution:
             self._data: UipcObjectRigidData = UipcObjectRigidData(self._uipc_sim, self, self.device)
 
-        # create buffers
         self._create_buffers()
         # process configuration
         self._process_cfg()
@@ -430,10 +420,7 @@ class UipcObject(AssetBase):
         # constants
         self._ALL_INDICES = torch.arange(self.num_instances, dtype=torch.long, device=self.device)
 
-    #     # external forces and torques
-    #     self.has_external_wrench = False
-    #     self._external_force_b = torch.zeros((self.num_instances, self.num_bodies, 3), device=self.device)
-    #     self._external_torque_b = torch.zeros_like(self._external_force_b)
+        # self._data._nodal_pos_w = torch.zeros(self.num_instances, self._vertex_count)
 
     #     # set information about rigid body into data
     #     self._data.body_names = self.body_names
