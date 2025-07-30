@@ -248,6 +248,7 @@ class GelSightSensor(SensorBase):
                     data_types= self.cfg.sensor_camera_cfg.data_types,
                     update_latest_camera_pose=True, # needed for FEM based marker sim
                     spawn= None, # use camera which is part of the GelSight Mini Asset
+                    #! issue: clipping range doesnt matter for camera prim, if we dont spawn it
                     # spawn=sim_utils.PinholeCameraCfg(
                     #    focal_length=24.0, focus_distance=400.0, horizontal_aperture=20.955, clipping_range=(0.1, 1.0e5)
                     # ),
@@ -405,16 +406,16 @@ class GelSightSensor(SensorBase):
             for prim in self._prim_view.prims:
                 # creates USD attribut for each data type, which can be found in the Isaac GUI under "Raw Usd Properties -> "Extra Properties"
                 if "camera_depth" in self.cfg.data_types:
-                    attr = prim.CreateAttribute("debug_camera_depth", Sdf.ValueTypeNames.Bool)
+                    attr = prim.CreateAttribute("_debug_camera_depth", Sdf.ValueTypeNames.Bool)
                     attr.Set(False)
                 if "camera_rgb" in self.cfg.data_types:
                     attr = prim.CreateAttribute("debug_camera_rgb", Sdf.ValueTypeNames.Bool)
                     attr.Set(False)
                 if "tactile_rgb" in self.cfg.data_types:
-                    attr = prim.CreateAttribute("debug_tactile_rgb", Sdf.ValueTypeNames.Bool)
+                    attr = prim.CreateAttribute("_debug_tactile_rgb", Sdf.ValueTypeNames.Bool)
                     attr.Set(False)
                 if "marker_motion" in self.cfg.data_types:
-                    attr = prim.CreateAttribute("debug_marker_motion", Sdf.ValueTypeNames.Bool)
+                    attr = prim.CreateAttribute("_debug_marker_motion", Sdf.ValueTypeNames.Bool)
                     attr.Set(False)
 
             if not hasattr(self, "_windows"):
@@ -469,7 +470,7 @@ class GelSightSensor(SensorBase):
                     self._img_providers["camera_rgb"].pop(str(i)).destroy()
 
             if "camera_depth" in self.cfg.data_types:
-                show_img = prim.GetAttribute("debug_camera_depth").Get()
+                show_img = prim.GetAttribute("_debug_camera_depth").Get()
                 if show_img==True:
                     if not (str(i) in self._windows["camera_depth"]):
                         # create a window

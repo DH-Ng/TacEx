@@ -228,7 +228,7 @@ class FOTSMarkerSimulator(GelSightSimulator):
         # Update the GUI windows_prim_view
         for i, prim in enumerate(self.sensor._prim_view.prims):
             if "marker_motion" in self.sensor.cfg.data_types:
-                show_img = prim.GetAttribute("debug_marker_motion").Get()
+                show_img = prim.GetAttribute("_debug_marker_motion").Get()
                 if show_img==True:
                     if not (str(i) in self._debug_windows):
                         # create a window

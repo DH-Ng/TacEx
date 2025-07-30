@@ -331,26 +331,8 @@ class BallRollingEnvCfg(DirectRLEnvCfg):
         device="cuda",
         tactile_img_res=(32, 32),
     )
-    gsmini_right = GelSightMiniCfg(
+    gsmini_right = gsmini_left.replace(
         prim_path="/World/envs/env_.*/Robot/gelsight_mini_case_right",
-        sensor_camera_cfg = GelSightMiniCfg.SensorCameraCfg(
-            prim_path_appendix = "/Camera",
-            update_period= 0,
-            resolution = (32,32), #(120, 160),
-            data_types = ["depth"],
-            clipping_range = (0.024, 0.034),
-        ),
-        device = "cuda",
-        debug_vis=True, # for rendering sensor output in the gui
-        # update Taxim cfg
-        marker_motion_sim_cfg=None,
-        data_types=["tactile_rgb"], #marker_motion
-    )
-    # settings for optical sim
-    gsmini_right.optical_sim_cfg = gsmini_left.optical_sim_cfg.replace(
-        with_shadow=False,
-        device="cuda",
-        tactile_img_res=(32, 32),
     )
 
 

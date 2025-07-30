@@ -166,7 +166,7 @@ class TaximSimulator(GelSightSimulator):
         # Update the GUI windows
         for i, prim in enumerate(self.sensor.prim_view.prims):
             if "tactile_rgb" in self.sensor.cfg.data_types:
-                show_img = prim.GetAttribute("debug_tactile_rgb").Get()
+                show_img = prim.GetAttribute("_debug_tactile_rgb").Get()
                 if show_img==True:
                     if not (str(i) in self._debug_windows):
                         # create a window

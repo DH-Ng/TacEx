@@ -16,8 +16,8 @@ class GelSightSensorCfg(SensorBaseCfg):
     @configclass
     class Dimensions:
         """Dimensions here are in mm (we assume that the world units are meters)"""
-        width: float = 0.0,
-        length: float = 0.0,
+        width: float = 0.0
+        length: float = 0.0
         height: float = 0.0
     case_dimensions: Dimensions = Dimensions()
     gelpad_dimensions: Dimensions = Dimensions()
