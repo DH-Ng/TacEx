@@ -2,8 +2,8 @@
 Python module serving as a project/extension template.
 """
 
-from .objects import *
 from .envs import *
+from .objects import *
 from .sim import *
 
 # Register UI extensions.

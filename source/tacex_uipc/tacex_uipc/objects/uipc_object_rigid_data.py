@@ -18,6 +18,7 @@ from uipc import builtin
 
 if TYPE_CHECKING:
     from tacex_uipc.sim import UipcSim
+
     from .uipc_object import UipcObject
 
 class UipcObjectRigidData:
@@ -151,7 +152,7 @@ class UipcObjectRigidData:
         """
         # return self.nodal_pos_w.mean(dim=1)
         geom = self._uipc_sim.scene.geometries()
-        geo_slot, geo_slot_rest = geom.find(self._uipc_object.obj_id) #todo instead of finding obj, lets just save ref to geo_slot
+        geo_slot, geo_slot_rest = geom.find(self._uipc_object.obj_id) #todo instead of finding obj, lets just save ref to geo_slot in uipc_object
 
         # transformation is w.r.t. to inital pose
         # trans = geo_slot.geometry().instances().find(builtin.transform).view()

@@ -76,18 +76,37 @@ FRANKA_PANDA_ARM_GSMINI_GRIPPER_UIPC_CFG = ArticulationCfg(
     },
     soft_joint_pos_limit_factor=1.0,
 )
-"""Configuration of Franka Emika Panda robot with a Gripper and two GelSight Mini sensors."""
+"""Configuration of Franka Emika Panda robot with a Gripper and two GelSight Mini sensors.
 
+The gelpads are simulated via UIPC and rigid or soft.
+
+Sensor case prim names:
+- `gelsight_mini_case_left`
+- `gelsight_mini_case_right`
+
+Gelpad prim names:
+- `gelpad_left`
+- `gelpad_right`
+"""
 
 
 #todo shorten the name?
 FRANKA_PANDA_ARM_GSMINI_GRIPPER_HIGH_PD_UIPC_CFG = FRANKA_PANDA_ARM_GSMINI_GRIPPER_UIPC_CFG.copy()
+"""Configuration of Franka Emika Panda robot with stiffer PD control.
+
+This configuration is useful for task-space control using differential IK.
+
+Sensor case prim names:
+- `gelsight_mini_case_left`
+- `gelsight_mini_case_right`
+
+Gelpad prim names:
+- `gelpad_left`
+- `gelpad_right`
+"""
+
 FRANKA_PANDA_ARM_GSMINI_GRIPPER_HIGH_PD_UIPC_CFG.spawn.rigid_props.disable_gravity = True
 FRANKA_PANDA_ARM_GSMINI_GRIPPER_HIGH_PD_UIPC_CFG.actuators["panda_shoulder"].stiffness = 400.0
 FRANKA_PANDA_ARM_GSMINI_GRIPPER_HIGH_PD_UIPC_CFG.actuators["panda_shoulder"].damping = 80.0
 FRANKA_PANDA_ARM_GSMINI_GRIPPER_HIGH_PD_UIPC_CFG.actuators["panda_forearm"].stiffness = 400.0
 FRANKA_PANDA_ARM_GSMINI_GRIPPER_HIGH_PD_UIPC_CFG.actuators["panda_forearm"].damping = 80.0
-"""Configuration of Franka Emika Panda robot with stiffer PD control.
-
-This configuration is useful for task-space control using differential IK.
-"""

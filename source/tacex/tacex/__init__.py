@@ -1,5 +1,5 @@
 """
-Python module serving as a project/extension template.
+Python module for simulating GelSight sensors inside Isaac Sim/Lab
 """
 
 from .gelsight_sensor import GelSightSensor

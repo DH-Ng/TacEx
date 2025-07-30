@@ -17,4 +17,8 @@ class UipcEnvCfg(DirectRLEnvCfg):
 
     # UIPC simulation settings
 
-    uipc_sim: UipcSimCfg = UipcSimCfg()
+    uipc_sim: UipcSimCfg = None
+    """ Config for UIPC simulation.
+
+    None means, no uipc simulation and just the PhysX simulation from Isaac.
+    """

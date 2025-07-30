@@ -95,13 +95,6 @@ from tacex.simulation_approaches.gpu_taxim import TaximSimulatorCfg
 # from isaaclab.envs.mdp.actions.actions_cfg import DifferentialInverseKinematicsActionCfg
 
 
-
-
-
-
-
-
-
 class CustomEnvWindow(BaseEnvWindow):
     """Window manager for the RL environment."""
 
@@ -322,7 +315,9 @@ class BallRollingEnvCfg(DirectRLEnvCfg):
             usd_path=f"{TACEX_ASSETS_DATA_DIR}/Props/ball_wood.usd",
         ),
         mesh_cfg=mesh_cfg,
-        constitution_cfg=UipcObjectCfg.StableNeoHookeanCfg()
+        constitution_cfg=UipcObjectCfg.StableNeoHookeanCfg(
+            youngs_modulus=0.0005
+        )
     )
 
     robot: ArticulationCfg = FRANKA_PANDA_ARM_GSMINI_GRIPPER_HIGH_PD_UIPC_CFG.replace(
@@ -499,7 +494,7 @@ class BallRollingEnv(UipcRLEnv):
         )
 
         VisualCuboid(
-            prim_path="/World/envs/env_0/goal",
+            prim_path="/Goal",
             size=0.01,
             position=np.array([0.5, 0.0, 0.15]),
             orientation=np.array([0, 1, 0, 0]),
@@ -715,7 +710,7 @@ def run_simulator(env: BallRollingEnv):
 
     env.reset()
 
-    env.goal_prim_view = XFormPrim(prim_paths_expr="/World/envs/env_.*/goal", name="goals", usd=True)
+    env.goal_prim_view = XFormPrim(prim_paths_expr="/Goal", name="Goal", usd=True)
 
     # Simulation loop
     while simulation_app.is_running():

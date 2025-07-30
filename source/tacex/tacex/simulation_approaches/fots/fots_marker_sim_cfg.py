@@ -40,11 +40,12 @@ class FOTSMarkerSimulatorCfg(GelSightSimulatorCfg):
     @configclass
     class MarkerParams:
         """Dimensions here are in mm (we assume that the world units are meters)"""
-        num_markers_col: int = 0,
-        num_markers_row: int = 0,
-        x0: float = 0,
-        y0: float = 0,
-        dx: float = 0,
+        num_markers_col: int = 0
+        num_markers_row: int = 0
+        num_markers: int = 0
+        x0: float = 0
+        y0: float = 0
+        dx: float = 0
         dy: float = 0
     marker_params: MarkerParams = MarkerParams()
 

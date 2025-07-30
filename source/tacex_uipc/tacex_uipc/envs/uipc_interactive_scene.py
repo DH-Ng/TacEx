@@ -32,7 +32,6 @@ from isaaclab.terrains import TerrainImporter, TerrainImporterCfg
 from isaacsim.core.cloner import GridCloner
 from isaacsim.core.prims import XFormPrim
 from pxr import PhysxSchema
-
 from tacex_uipc.objects import UipcObject, UipcObjectCfg
 
 

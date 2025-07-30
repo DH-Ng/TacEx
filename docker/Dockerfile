@@ -60,6 +60,8 @@ ENV PATH=/usr/local/cuda/bin:$PATH
 
 # requirements compiling cuda code
 FROM nvcr.io/nvidia/cuda:12.4.0-devel-ubuntu22.04 AS cuda-devel
+# FROM nvcr.io/nvidia/cuda:12.2.0-devel-ubuntu22.04 AS cuda-devel for 3080 gpu
+
 
 # continue with TacEx container creation
 FROM base
@@ -68,7 +70,9 @@ COPY --from=cuda-devel /usr/local/cuda /usr/local/cuda
 # set extra convenience aliases for IsaacLab
 RUN echo "alias run=/isaac-sim/isaac-sim.streaming.sh" >> ${HOME}/.bashrc && \
     echo "alias lab=${ISAACLAB_PATH}/isaaclab.sh" >> ${HOME}/.bashrc
-ENV LIVESTREAM=1
+
+# for Omniverse Streaming Extension choose 1
+ENV LIVESTREAM=2
 
 # upgrade pip and create symlink to IsaacSim python
 RUN /isaac-sim/python.sh -m pip install --upgrade pip && \

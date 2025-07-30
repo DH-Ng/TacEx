@@ -1,0 +1,202 @@
+Sensor Config: 
+{
+  "class_type": "tacex.gelsight_sensor:GelSightSensor",
+  "prim_path": "/World/envs/env_.*/Robot/gelsight_mini_case",
+  "update_period": 0.0,
+  "history_length": 0,
+  "debug_vis": true,
+  "case_dimensions": {
+    "width": 0.032,
+    "length": 0.028,
+    "height": 0.024
+  },
+  "gelpad_dimensions": {
+    "width": 0.02075,
+    "length": 0.02525,
+    "height": 0.0045
+  },
+  "sensor_camera_cfg": {
+    "prim_path_appendix": "/Camera",
+    "update_period": 0,
+    "resolution": [
+      32,
+      32
+    ],
+    "data_types": [
+      "depth"
+    ],
+    "clipping_range": [
+      0.024,
+      0.034
+    ]
+  },
+  "data_types": [
+    "marker_motion"
+  ],
+  "optical_sim_cfg": {
+    "simulation_approach_class": "tacex.simulation_approaches.gpu_taxim.taxim_sim:TaximSimulator",
+    "device": "cuda:0",
+    "calib_folder_path": "/workspace/tacex/source/tacex_assets/tacex_assets/data/Sensors/GelSight_Mini/calibs/480x640",
+    "with_shadow": false,
+    "tactile_img_res": [
+      240,
+      320
+    ],
+    "gelpad_height": 0.0045,
+    "gelpad_to_camera_min_distance": 0.024
+  },
+  "marker_motion_sim_cfg": {
+    "simulation_approach_class": "tacex.simulation_approaches.fots.fots_marker_sim_with_frame_transformer:FOTSMarkerSimulator",
+    "device": "cuda",
+    "calib_folder_path": "",
+    "with_shadow": false,
+    "tactile_img_res": [
+      240,
+      320
+    ],
+    "lamb": [
+      0.00125,
+      0.00021,
+      0.00038
+    ],
+    "pyramid_kernel_size": [
+      51,
+      21,
+      11,
+      5
+    ],
+    "kernel_size": 5,
+    "marker_params": {
+      "num_markers_col": 9,
+      "num_markers_row": 11,
+      "num_markers": 99,
+      "x0": 15,
+      "y0": 26,
+      "dx": 26,
+      "dy": 29
+    },
+    "init_marker_pos": [
+      [
+        []
+      ],
+      [
+        []
+      ]
+    ],
+    "frame_transformer_cfg": {
+      "class_type": "isaaclab.sensors.frame_transformer.frame_transformer:FrameTransformer",
+      "prim_path": "/World/envs/env_.*/Robot/gelsight_mini_gelpad",
+      "update_period": 0.0,
+      "history_length": 0,
+      "debug_vis": true,
+      "source_frame_offset": {
+        "pos": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "rot": [
+          1.0,
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      "target_frames": [
+        {
+          "prim_path": "/World/envs/env_.*/ball",
+          "name": null,
+          "offset": {
+            "pos": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "rot": [
+              1.0,
+              0.0,
+              0.0,
+              0.0
+            ]
+          }
+        }
+      ],
+      "visualizer_cfg": {
+        "prim_path": "/Visuals/FrameTransformer",
+        "markers": {
+          "frame": {
+            "func": "isaaclab.sim.spawners.from_files.from_files:spawn_from_usd",
+            "visible": true,
+            "semantic_tags": null,
+            "copy_from_source": true,
+            "mass_props": null,
+            "deformable_props": null,
+            "rigid_props": null,
+            "collision_props": null,
+            "activate_contact_sensors": false,
+            "scale": [
+              0.01,
+              0.01,
+              0.01
+            ],
+            "articulation_props": null,
+            "fixed_tendons_props": null,
+            "joint_drive_props": null,
+            "visual_material_path": "material",
+            "visual_material": null,
+            "usd_path": "http://omniverse-content-production.s3-us-west-2.amazonaws.com/Assets/Isaac/4.5/Isaac/Props/UIElements/frame_prim.usd",
+            "variants": null
+          },
+          "connecting_line": {
+            "func": "isaaclab.sim.spawners.shapes.shapes:spawn_cylinder",
+            "visible": true,
+            "semantic_tags": null,
+            "copy_from_source": true,
+            "mass_props": null,
+            "rigid_props": null,
+            "collision_props": null,
+            "activate_contact_sensors": false,
+            "visual_material_path": "material",
+            "visual_material": {
+              "func": "isaaclab.sim.spawners.materials.visual_materials:spawn_preview_surface",
+              "diffuse_color": [
+                1.0,
+                1.0,
+                0.0
+              ],
+              "emissive_color": [
+                0.0,
+                0.0,
+                0.0
+              ],
+              "roughness": 1.0,
+              "metallic": 0.0,
+              "opacity": 1.0
+            },
+            "physics_material_path": "material",
+            "physics_material": null,
+            "radius": 0.002,
+            "height": 1.0,
+            "axis": "Z"
+          }
+        }
+      }
+    },
+    "ball_radius": 2.35,
+    "mm_to_pixel": 19.58
+  },
+  "compute_indentation_depth_class": "optical_sim",
+  "device": "cuda"
+}
+GPU Info: 
+Name: NVIDIA GeForce RTX 4090 Laptop GPU 
+Driver: 550.163.01 
+
+Performance data: 
+num_envs: 1 
+Total amount of 'in-contact' frames per env (ran pattern 10 times): 5878
+Total sim time: 444.6317ms 
+Avg physics_sim time for one frame per env:     54.4232ms 
+Avg tactile_sim time for one frame per env:     11.3927ms 
+
+| CPU:15.2% | RAM:69.7% | GPU Compute:24% | GPU Memory: 48.01% |

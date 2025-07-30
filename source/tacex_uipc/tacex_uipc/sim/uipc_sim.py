@@ -20,6 +20,7 @@ except:
 import numpy as np
 import uipc
 import warp as wp
+from tacex_uipc.objects import UipcObject
 from tacex_uipc.utils import MeshGenerator
 from uipc import AngleAxis, Logger, Quaternion, Timer, Transform, Vector3, builtin, view
 from uipc.core import Engine, Scene, SceneIO, World
@@ -33,7 +34,6 @@ from uipc.geometry import (
 )
 from uipc.unit import GPa, MPa
 
-from tacex_uipc.objects import UipcObject
 
 @configclass
 class UipcSimCfg:
@@ -225,6 +225,9 @@ class UipcSim():
 
         self.stage = usdrt.Usd.Stage.Attach(omni.usd.get_context().get_stage_id())
 
+        # for updating render meshes
+        self.sio = SceneIO(self.scene)
+
     def __del__(self):
         """Unsubscribe from the callbacks."""
         # clear debug visualization
@@ -238,9 +241,6 @@ class UipcSim():
 
         # trans = geo_slot.geometry().transforms().view()
         # print("init trans ", trans)
-
-        # for updating render meshes
-        self.sio = SceneIO(self.scene)
 
         # for each obj, compute the global_system_id -> used to infer the objects vertex_offset in the global system
         for uipc_obj in self.uipc_objects:

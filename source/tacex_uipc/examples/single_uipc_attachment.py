@@ -260,7 +260,6 @@ class BallRollingEnvCfg(DirectRLEnvCfg):
         ),
         device = "cuda",
         debug_vis=True, # for rendering sensor output in the gui
-        # update Taxim cfg
         marker_motion_sim_cfg=None,
         data_types=["tactile_rgb"], #marker_motion
     )
