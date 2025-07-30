@@ -106,7 +106,7 @@ class TaximSimulator(GelSightSimulator):
         ).movedim(1, 3) #*255).type(torch.uint8)
 
         tactile_rgb = self.tactile_rgb_img[0].cpu().numpy()
-        np.save("img.npy", tactile_rgb)
+
         return self.tactile_rgb_img
 
     def compute_indentation_depth(self):

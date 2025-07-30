@@ -125,9 +125,9 @@ class ManiSkillSimulator(GelSightSimulator):
                         # create image provider
                         self._debug_img_providers[str(i)] = omni.ui.ByteImageProvider() # default format omni.ui.TextureFormat.RGBA8_UNORM
 
-                    # marker_flow_i = self.sensor.data.output["marker_motion"][i]
-                    # frame = self._create_marker_img(marker_flow_i)
-                    frame = self.marker_motion_sim.get_marker_img()
+                   
+                    frame = self._create_marker_img(self.sensor.data.output["marker_motion"][i])
+                    # frame = self.marker_motion_sim.get_marker_img()
 
                     # create tactile rgb img with markers
                     if "tactile_rgb" in self.sensor.cfg.data_types:
@@ -149,14 +149,18 @@ class ManiSkillSimulator(GelSightSimulator):
     def _create_marker_img(self, marker_data):
         """Visualization of marker flow like in the orignal FOTS simulation.
 
+        Marker data needs to have the shape [2, num_markers, 2]
+        - dim=0: init and current markers
+        - dim=2: x and y values of the marker position
+
         Args:
             marker_data: marker flow data with shape [2, num_markers, 2]
         """
-        # for visualization
-        color = (255, 255, 255)
-        arrow_scale = 0.001 #10 #0.0001 #0.25
+        # for visualization -> white background with black dots
+        color = (0, 0, 0)
+        arrow_scale = 5 #10 #0.0001 #0.25
 
-        frame = np.zeros((self.cfg.tactile_img_res[1],self.cfg.tactile_img_res[0])).astype(np.uint8)
+        frame = np.ones((self.cfg.tactile_img_res[1],self.cfg.tactile_img_res[0])).astype(np.uint8)
 
         # marker data has shape [2, num_markers, 2], where first dim = init and current marker position
         init_marker_pos = marker_data[0].cpu().numpy()
@@ -164,11 +168,11 @@ class ManiSkillSimulator(GelSightSimulator):
 
         num_markers = marker_data.shape[1]
         for marker_index in range(num_markers):
-            init_x_pos = int(init_marker_pos[marker_index][1])  # x is column-wise definied
-            init_y_pos = int(init_marker_pos[marker_index][0])  # y row-wise
+            init_x_pos = int(init_marker_pos[marker_index][0])  
+            init_y_pos = int(init_marker_pos[marker_index][1]) 
 
-            x_pos = int(current_marker_pos[marker_index][1])    # x is column-wise definied
-            y_pos = int(current_marker_pos[marker_index][0])    # y row-wise
+            x_pos = int(current_marker_pos[marker_index][0])   
+            y_pos = int(current_marker_pos[marker_index][1])   
 
             if ((x_pos >= frame.shape[1])
                 or (x_pos < 0)
@@ -178,14 +182,10 @@ class ManiSkillSimulator(GelSightSimulator):
             # cv2.circle(frame,(column,row), 6, (255,255,255), 1, lineType=8)
 
             pt1 = (init_x_pos, init_y_pos)
-            # pt2 = (column+int(arrow_scale*(column-init_column)), row+int(arrow_scale*(row-init_row)))
-            pt2 = (x_pos, y_pos)
-            cv2.arrowedLine(frame, pt1, pt2, color, 2,  tipLength=0.1)
+            pt2 = (x_pos+arrow_scale*int(x_pos-init_x_pos), y_pos+arrow_scale*int(y_pos-init_y_pos))
+
+            cv2.arrowedLine(frame, pt1, pt2, color, 2,  tipLength=0.2)
 
         frame = cv2.normalize(frame, None, alpha = 0, beta = 255, norm_type = cv2.NORM_MINMAX, dtype = cv2.CV_32F)
 
-        # update image of the window
-        frame = frame.astype(np.uint8)
-        frame = cv2.cvtColor(frame, cv2.COLOR_RGB2RGBA)
-        height, width, channels = frame.shape
         return frame

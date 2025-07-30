@@ -448,7 +448,7 @@ class GelSightSensor(SensorBase):
                 if show_img==True:
                     if not (str(i) in self._windows["camera_rgb"]):
                         # create a window
-                        window = omni.ui.Window(self._prim_view.prim_paths[i] + "/camera_rgb", height=640, width=480)
+                        window = omni.ui.Window(self._prim_view.prim_paths[i] + "/camera_rgb", height=self.cfg.sensor_camera_cfg.resolution[1], width=self.cfg.sensor_camera_cfg.resolution[0])
                         self._windows["camera_rgb"][str(i)] = window
                         # create image provider
                         self._img_providers["camera_rgb"][str(i)] = omni.ui.ByteImageProvider() # default format omni.ui.TextureFormat.RGBA8_UNORM
@@ -473,7 +473,7 @@ class GelSightSensor(SensorBase):
                 if show_img==True:
                     if not (str(i) in self._windows["camera_depth"]):
                         # create a window
-                        window = omni.ui.Window(self._prim_view.prim_paths[i] +  "/camera_depth", height=640, width=480)
+                        window = omni.ui.Window(self._prim_view.prim_paths[i] +  "/camera_depth", height=self.cfg.sensor_camera_cfg.resolution[1], width=self.cfg.sensor_camera_cfg.resolution[0])
                         self._windows["camera_depth"][str(i)] = window
                         # create image provider
                         self._img_providers["camera_depth"][str(i)] = omni.ui.ByteImageProvider() # default format omni.ui.TextureFormat.RGBA8_UNORM

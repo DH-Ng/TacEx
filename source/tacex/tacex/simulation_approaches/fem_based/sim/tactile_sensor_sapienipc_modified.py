@@ -366,7 +366,7 @@ class VisionTactileSensorUIPC():
         #     self.camera_intrinsic,
         #     self.camera_distort_coeffs,
         # )[0].squeeze(1)
-        intrinsic_matrices = self.camera._data.intrinsic_matrices #todo intrinisc matrix is currently wrong
+        #intrinsic_matrices = self.camera._data.intrinsic_matrices #todo intrinisc matrix is currently wrong
         intrinsic_matrices = torch.tensor(self.camera_intrinsic, device="cuda:0")
         vertices_img_plane = math_utils.project_points(torch.tensor(marker_pts, device="cuda:0", dtype=torch.float32), intrinsic_matrices)
         marker_uv = vertices_img_plane[0, :, :2].cpu().numpy()
