@@ -40,6 +40,8 @@ class VisionTactileSensorUIPC():
         self,
         uipc_gelpad: UipcObject,
         camera,
+        tactile_img_width=320,
+        tactile_img_height=240,
         marker_interval_range: Tuple[float, float] = (2.0625, 2.0625),
         marker_rotation_range: float = 0.0,
         marker_translation_range: Tuple[float, float] = (0.0, 0.0),
@@ -48,19 +50,11 @@ class VisionTactileSensorUIPC():
         marker_lose_tracking_probability: float = 0.0,
         normalize: bool = False,
         num_markers: int = 128,
-        # camera_params: Tuple[float, float, float, float, float] = (
-        #     340,
-        #     325,
-        #     160,
-        #     125,
-        #     0.0,
-        # ),
-        # for upright tactile img
         camera_params: Tuple[float, float, float, float, float] = (
-            325,
             340,
-            125,
+            325,
             160,
+            125,
             0.0,
         ),
         **kwargs,
@@ -84,6 +78,9 @@ class VisionTactileSensorUIPC():
         self.camera = camera
 
         self.init_surface_vertices = self.get_surface_vertices_world()
+
+        self.tactile_img_width = tactile_img_width
+        self.tactile_img_height = tactile_img_height
 
         self.marker_interval_range = marker_interval_range
         self.marker_rotation_range = marker_rotation_range
@@ -116,7 +113,6 @@ class VisionTactileSensorUIPC():
 
         # self.phong_shading_renderer = PhongShadingRenderer()
 
-        self.patch_array_dict = copy.deepcopy(generate_patch_array())
 
     def get_vertices_world(self):
         v = self.gelpad_obj._data.nodal_pos_w
@@ -209,20 +205,20 @@ class VisionTactileSensorUIPC():
         )
 
         marker_x_start = (
-            -math.ceil((6 + marker_translation_x) / marker_interval)  # 16.5
+            -math.ceil((8 + marker_translation_x) / marker_interval)  # 16.5
             * marker_interval
             + marker_translation_x
         )
         marker_x_end = (
-            math.ceil((6 - marker_translation_x) / marker_interval) * marker_interval
+            math.ceil((16.5 - marker_translation_x) / marker_interval) * marker_interval
             + marker_translation_x
         )
         marker_y_start = (
-            -math.ceil((8 + marker_translation_y) / marker_interval) * marker_interval
+            -math.ceil((6 + marker_translation_y) / marker_interval) * marker_interval
             + marker_translation_y
         )
         marker_y_end = (
-            math.ceil((8 - marker_translation_y) / marker_interval) * marker_interval
+            math.ceil((6 - marker_translation_y) / marker_interval) * marker_interval
             + marker_translation_y
         )
 
@@ -281,7 +277,7 @@ class VisionTactileSensorUIPC():
 
         # set marker to be at gelpad by adding corresponding z values
         z = np.max(surface_pts[:, 2]) # to set pattern at the bottom of the gelpad, i.e. closer to camera: np.min(surface_pts[:, 2])
-        marker_pts = np.hstack((marker_pts, np.ones((63,1), dtype=np.float32)*z))
+        marker_pts = np.hstack((marker_pts, np.ones((marker_pts.shape[0], 1), dtype=np.float32)*z))
         # marker_pts = self.transform_to_camera_frame(torch.tensor(marker_pts, device="cuda:0", dtype=torch.float32)).cpu().numpy()
         # draw.draw_points(marker_pts, [(255,0,0,0.5)]*marker_pts.shape[0], [30]*marker_pts.shape[0])
 
@@ -397,9 +393,9 @@ class VisionTactileSensorUIPC():
         marker_mask = np.logical_and.reduce(
             [
                 init_marker_uv[:, 0] > 5,
-                init_marker_uv[:, 0] < 320, # img height
+                init_marker_uv[:, 0] < self.tactile_img_height,
                 init_marker_uv[:, 1] > 5,
-                init_marker_uv[:, 1] < 240, # img width
+                init_marker_uv[:, 1] < self.tactile_img_width,
             ]
         )
         marker_flow = np.stack([init_marker_uv, curr_marker_uv], axis=0)
@@ -430,7 +426,7 @@ class VisionTactileSensorUIPC():
             ]
 
         if self.normalize:
-            ret /= 160.0 # img height/2
+            ret /= self.tactile_img_width/2
             ret -= 1.0
 
         ret = torch.tensor(ret, device="cuda:0")
@@ -480,99 +476,3 @@ class VisionTactileSensorUIPC():
     #     self.render_component.enable()
 
     #     return depth
-
-    def draw_markers(self, marker_uv, marker_size=3, img_w=240, img_h=320):
-        marker_uv_compensated = marker_uv + np.array([0.5, 0.5])
-
-        marker_image = np.ones((img_h + 24, img_w + 24), dtype=np.uint8) * 255
-        for i in range(marker_uv_compensated.shape[0]):
-            uv = marker_uv_compensated[i]
-            u = uv[0] + 12
-            v = uv[1] + 12
-            patch_id_u = math.floor(
-                (u - math.floor(u)) * self.patch_array_dict["super_resolution_ratio"]
-            )
-            patch_id_v = math.floor(
-                (v - math.floor(v)) * self.patch_array_dict["super_resolution_ratio"]
-            )
-            patch_id_w = math.floor(
-                (marker_size - self.patch_array_dict["base_circle_radius"])
-                * self.patch_array_dict["super_resolution_ratio"]
-            )
-            current_patch = self.patch_array_dict["patch_array"][
-                patch_id_u, patch_id_v, patch_id_w
-            ]
-            patch_coord_u = math.floor(u) - 6
-            patch_coord_v = math.floor(v) - 6
-            if (
-                marker_image.shape[1] - 12 > patch_coord_u >= 0
-                and marker_image.shape[0] - 12 > patch_coord_v >= 0
-            ):
-                marker_image[
-                    patch_coord_v : patch_coord_v + 12,
-                    patch_coord_u : patch_coord_u + 12,
-                ] = current_patch
-        marker_image = marker_image[12:-12, 12:-12]
-
-        return marker_image
-
-def generate_patch_array(super_resolution_ratio=10):
-    circle_radius = 3
-    size_slot_num = 50
-    base_circle_radius = 1.5
-
-    patch_array = np.zeros(
-        (
-            super_resolution_ratio,
-            super_resolution_ratio,
-            size_slot_num,
-            4 * circle_radius,
-            4 * circle_radius,
-        ),
-        dtype=np.uint8,
-    )
-    for u in range(super_resolution_ratio):
-        for v in range(super_resolution_ratio):
-            for w in range(size_slot_num):
-                img_highres = (
-                    np.ones(
-                        (
-                            4 * circle_radius * super_resolution_ratio,
-                            4 * circle_radius * super_resolution_ratio,
-                        ),
-                        dtype=np.uint8,
-                    )
-                    * 255
-                )
-                center = np.array(
-                    [
-                        circle_radius * super_resolution_ratio * 2,
-                        circle_radius * super_resolution_ratio * 2,
-                    ],
-                    dtype=np.uint8,
-                )
-                center_offseted = center + np.array([u, v])
-                radius = round(base_circle_radius * super_resolution_ratio + w)
-                img_highres = cv2.circle(
-                    img_highres,
-                    tuple(center_offseted),
-                    radius,
-                    (0, 0, 0),
-                    thickness=cv2.FILLED,
-                    lineType=cv2.LINE_AA,
-                )
-                img_highres = cv2.GaussianBlur(img_highres, (17, 17), 15)
-                img_lowres = cv2.resize(
-                    img_highres,
-                    (4 * circle_radius, 4 * circle_radius),
-                    interpolation=cv2.INTER_CUBIC,
-                )
-                patch_array[u, v, w, ...] = img_lowres
-
-    return {
-        "base_circle_radius": base_circle_radius,
-        "circle_radius": circle_radius,
-        "size_slot_num": size_slot_num,
-        "patch_array": patch_array,
-        "super_resolution_ratio": super_resolution_ratio,
-    }

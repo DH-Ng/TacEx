@@ -122,7 +122,7 @@ class UipcEnvCfg(PhysXRigidEnvCfg):
         sensor_camera_cfg = GelSightMiniCfg.SensorCameraCfg(
             prim_path_appendix = "/Camera",
             update_period= 0,
-            resolution = (240,320), #(120, 160),
+            resolution = (320,240),
             data_types = ["depth"],
             clipping_range = (0.02, 0.034), #(0.024, 0.034),
         ),
@@ -136,7 +136,7 @@ class UipcEnvCfg(PhysXRigidEnvCfg):
     gsmini.optical_sim_cfg = gsmini.optical_sim_cfg.replace(
         with_shadow=False,
         device="cuda",
-        tactile_img_res=(240,320),
+        tactile_img_res=(640,480),
     )
     # update FOTS cfg
     marker_cfg = FRAME_MARKER_CFG.copy()
@@ -145,7 +145,7 @@ class UipcEnvCfg(PhysXRigidEnvCfg):
 
     gsmini.marker_motion_sim_cfg = gsmini.marker_motion_sim_cfg.replace(
         device="cuda",
-        tactile_img_res=(240,320),
+        tactile_img_res=(640,480),
         frame_transformer_cfg = FrameTransformerCfg(
             prim_path="/World/envs/env_.*/Robot/gelsight_mini_case", #"/World/envs/env_.*/Robot/gelsight_mini_case",
             # you have to make sure that the asset frame center is correct, otherwise wrong shear/twist motions

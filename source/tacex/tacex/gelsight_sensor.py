@@ -406,16 +406,16 @@ class GelSightSensor(SensorBase):
             for prim in self._prim_view.prims:
                 # creates USD attribut for each data type, which can be found in the Isaac GUI under "Raw Usd Properties -> "Extra Properties"
                 if "camera_depth" in self.cfg.data_types:
-                    attr = prim.CreateAttribute("_debug_camera_depth", Sdf.ValueTypeNames.Bool)
+                    attr = prim.CreateAttribute("debug_camera_depth", Sdf.ValueTypeNames.Bool)
                     attr.Set(False)
                 if "camera_rgb" in self.cfg.data_types:
                     attr = prim.CreateAttribute("debug_camera_rgb", Sdf.ValueTypeNames.Bool)
                     attr.Set(False)
                 if "tactile_rgb" in self.cfg.data_types:
-                    attr = prim.CreateAttribute("_debug_tactile_rgb", Sdf.ValueTypeNames.Bool)
+                    attr = prim.CreateAttribute("debug_tactile_rgb", Sdf.ValueTypeNames.Bool)
                     attr.Set(False)
                 if "marker_motion" in self.cfg.data_types:
-                    attr = prim.CreateAttribute("_debug_marker_motion", Sdf.ValueTypeNames.Bool)
+                    attr = prim.CreateAttribute("debug_marker_motion", Sdf.ValueTypeNames.Bool)
                     attr.Set(False)
 
             if not hasattr(self, "_windows"):
@@ -470,7 +470,7 @@ class GelSightSensor(SensorBase):
                     self._img_providers["camera_rgb"].pop(str(i)).destroy()
 
             if "camera_depth" in self.cfg.data_types:
-                show_img = prim.GetAttribute("_debug_camera_depth").Get()
+                show_img = prim.GetAttribute("debug_camera_depth").Get()
                 if show_img==True:
                     if not (str(i) in self._windows["camera_depth"]):
                         # create a window

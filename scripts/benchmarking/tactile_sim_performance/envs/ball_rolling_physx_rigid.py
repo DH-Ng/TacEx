@@ -183,7 +183,7 @@ class PhysXRigidEnvCfg(DirectRLEnvCfg):
         sensor_camera_cfg = GelSightMiniCfg.SensorCameraCfg(
             prim_path_appendix = "/Camera",
             update_period= 0,
-            resolution = (32, 32), #(120, 160),
+            resolution = (320, 240), #(120, 160),
             data_types = ["depth"],
             clipping_range = (0.024, 0.034),
         ),
@@ -202,7 +202,7 @@ class PhysXRigidEnvCfg(DirectRLEnvCfg):
                 dx=26,
                 dy=29
             ),
-            tactile_img_res = (240, 320),
+            tactile_img_res = (640, 480),
             device = "cuda",
             frame_transformer_cfg = FrameTransformerCfg(
                 prim_path="/World/envs/env_.*/Robot/gelsight_mini_gelpad", #"/World/envs/env_.*/Robot/gelsight_mini_case",
@@ -223,10 +223,8 @@ class PhysXRigidEnvCfg(DirectRLEnvCfg):
     gsmini.optical_sim_cfg = gsmini.optical_sim_cfg.replace(
         with_shadow=False,
         device="cuda",
-        tactile_img_res=(480, 640),
+        tactile_img_res=(640, 480),
     )
-
-    data_types=["marker_motion"], #marker_motion
 
     ik_controller_cfg = DifferentialIKControllerCfg(command_type="pose", use_relative_mode=False, ik_method="dls")
 

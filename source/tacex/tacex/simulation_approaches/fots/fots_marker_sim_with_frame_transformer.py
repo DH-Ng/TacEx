@@ -70,8 +70,8 @@ class FOTSMarkerSimulator(GelSightSimulator):
             mm2pix=self.cfg.mm_to_pixel,
             num_markers_col=self.cfg.marker_params.num_markers_col, #20, #11
             num_markers_row=self.cfg.marker_params.num_markers_row, #15, #9
-            tactile_img_width=self.cfg.tactile_img_res[0], # default 480
-            tactile_img_height=self.cfg.tactile_img_res[1], # default 640
+            tactile_img_width=self.cfg.tactile_img_res[0], 
+            tactile_img_height=self.cfg.tactile_img_res[1],
             lamb=[0.00125,0.0021,0.0038], #[0.00125,0.00021,0.00038],
             x0=self.cfg.marker_params.x0,
             y0=self.cfg.marker_params.y0
@@ -110,7 +110,7 @@ class FOTSMarkerSimulator(GelSightSimulator):
         height_map = self.sensor._data.output["height_map"] # height map has shape (height, width) cause row-column format
 
         # up/downscale height map if camera res different than tactile img res
-        if height_map.shape != (self.cfg.tactile_img_res[1], self.cfg.tactile_img_res[0]):
+        if (height_map.shape[1], height_map.shape[2]) != (self.cfg.tactile_img_res[1], self.cfg.tactile_img_res[0]):
             height_map = F.resize(height_map, (self.cfg.tactile_img_res[1], self.cfg.tactile_img_res[0]))
 
         if self._device == "cpu":
@@ -126,36 +126,33 @@ class FOTSMarkerSimulator(GelSightSimulator):
                 # compute contact center based on contact_mask
                 contact_points = torch.argwhere(contact_mask[env_id])
                 mean = torch.mean(contact_points.float(), dim=0).cpu().numpy()
-                #print("should be pix ", mean[1], mean[0])
+                # print("should be pix ", mean[1], mean[0])
                 # rows = height = y values
-                # mean[0] = (mean[0]-self.marker_motion_sim.tactile_img_height/2)/self.marker_motion_sim.mm2pix
-                # # columns = width = x values
-                # mean[1] = (mean[1]-self.marker_motion_sim.tactile_img_width/2)/self.marker_motion_sim.mm2pix
-
-                #self.sensor._data.output["traj"][h].append([mean[1], mean[0], self.theta[h].cpu().numpy()])
-                print("should be ", mean[1], mean[0])
+                mean[0] = (mean[0]-self.marker_motion_sim.tactile_img_height/2)/self.marker_motion_sim.mm2pix
+                # columns = width = x values
+                mean[1] = (mean[1]-self.marker_motion_sim.tactile_img_width/2)/self.marker_motion_sim.mm2pix
 
                 # rel position/orientation of obj to sensor
                 self.frame_transformer.update(dt=0.001)
-                rel_pos = self.frame_transformer.data.target_pos_source.cpu().numpy()[env_id, 0, :] # target_pos_source shape is (num_envs, num_targets, 3)
-                rel_pos *= 1000 # convert to mm
+                # rel_pos = self.frame_transformer.data.target_pos_source.cpu().numpy()[env_id, 0, :] # target_pos_source shape is (num_envs, num_targets, 3)
+                # rel_pos *= 1000 # convert to mm
                 
                 # print("rel_pos in pix ", self.cfg.mm_to_pixel*rel_pos[0] + self.marker_motion_sim.tactile_img_width/2, self.cfg.mm_to_pixel*rel_pos[1] + self.marker_motion_sim.tactile_img_height/2)
-                print("rel_pos ", rel_pos)
-                rel_orient = self.frame_transformer.data.target_quat_source[env_id] #!-> only one target_frame
+                # print("rel_pos ", rel_pos)
+                rel_orient = self.frame_transformer.data.target_quat_source[env_id] 
                 roll, pitch, yaw = euler_xyz_from_quat(rel_orient)
-                theta = yaw.cpu().numpy()
+
+                theta = yaw.cpu().numpy()[0] #!-> only use the first target_frame #TODO fix that?
                 print("rel yaw in deg ", np.rad2deg(theta))
 
-                # order of traj depends on the source frame. With our definition, we need [y,-x,theta]
-                # self.sensor._data.output["traj"][env_id].append([rel_pos[1], -rel_pos[0], theta])
-                self.sensor._data.output["traj"][env_id].append([rel_pos[1], -rel_pos[0], theta])
+                # order of traj depends on the source frame. With our camera placement, we need [-x,-y,theta]
+                # self.sensor._data.output["traj"][env_id].append([-rel_pos[0], -rel_pos[1], theta])
                 print("")
 
                 # traj takes [x,y,theta] values
-                # self.sensor._data.output["traj"][env_id].append([mean[1], mean[0], theta])
+                self.sensor._data.output["traj"][env_id].append([mean[1], mean[0], theta])
 
-                #todo vectorize with pytorch
+                #todo vectorize marker_sim method with pytorch
                 marker_x_pos, marker_y_pos = self.marker_motion_sim.marker_sim(
                     deformed_gel[env_id].cpu().numpy(),
                     contact_mask[env_id].cpu().numpy(),
@@ -228,20 +225,21 @@ class FOTSMarkerSimulator(GelSightSimulator):
         # Update the GUI windows_prim_view
         for i, prim in enumerate(self.sensor._prim_view.prims):
             if "marker_motion" in self.sensor.cfg.data_types:
-                show_img = prim.GetAttribute("_debug_marker_motion").Get()
+                show_img = prim.GetAttribute("debug_marker_motion").Get()
                 if show_img==True:
                     if not (str(i) in self._debug_windows):
                         # create a window
-                        window = omni.ui.Window(self.sensor._prim_view.prim_paths[i] + "/fots_marker", height=self.cfg.tactile_img_res[1], width=self.cfg.tactile_img_res[0])
+                        window = omni.ui.Window(self.sensor._prim_view.prim_paths[i] + "/fots_marker", width=self.cfg.tactile_img_res[0], height=self.cfg.tactile_img_res[1])
                         self._debug_windows[str(i)] = window
                         # create image provider
                         self._debug_img_providers[str(i)] = omni.ui.ByteImageProvider() # default format omni.ui.TextureFormat.RGBA8_UNORM
 
                     marker_flow_i = self.sensor.data.output["marker_motion"][i]
-                    frame = self._create_marker_img(marker_flow_i)
 
-                    # draw current markers like ManiSkill-ViTac
-                    # frame = self.draw_markers(marker_flow_i[1].cpu().numpy())
+                    frame = self._create_marker_img(marker_flow_i)
+                    
+                    ## draw current markers like ManiSkill-ViTac
+                    # frame = self.draw_markers(marker_flow_i[1].cpu().numpy(), img_w=self.cfg.tactile_img_res[0], img_h=self.cfg.tactile_img_res[1])
 
                     # create tactile rgb img with markers
                     if "tactile_rgb" in self.sensor.cfg.data_types:
@@ -313,13 +311,13 @@ class FOTSMarkerSimulator(GelSightSimulator):
             cv2.circle(frame,(center_x, center_y), 6, color, 1, lineType=8)
 
         frame = cv2.normalize(frame, None, alpha = 0, beta = 255, norm_type = cv2.NORM_MINMAX, dtype = cv2.CV_32F)
-        frame = frame[:self.cfg.tactile_img_res[1], :self.cfg.tactile_img_res[0]]
+        # frame = frame[:self.cfg.tactile_img_res[1], :self.cfg.tactile_img_res[0]]
         return frame
 
 ####
-# Visualization like ManiSkill-ViTac https://github.com/chuanyune/ManiSkill-ViTac2025/blob/a3d7df54bca9a2e57f34b37be3a3df36dc218915/Track_1/envs/tactile_sensor_sapienipc.py
+# Visualization from ManiSkill-ViTac https://github.com/chuanyune/ManiSkill-ViTac2025/blob/a3d7df54bca9a2e57f34b37be3a3df36dc218915/Track_1/envs/tactile_sensor_sapienipc.py
 ####
-    def draw_markers(self, marker_uv, marker_size=3, img_w=240, img_h=320):
+    def draw_markers(self, marker_uv, marker_size=3, img_w=320, img_h=240):
         marker_uv_compensated = marker_uv + np.array([0.5, 0.5])
 
         marker_image = np.ones((img_h + 24, img_w + 24), dtype=np.uint8) * 255

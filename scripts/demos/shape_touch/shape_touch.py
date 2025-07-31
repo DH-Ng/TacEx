@@ -202,7 +202,7 @@ def create_shapes_cfg() -> dict[str, RigidObjectCfg]:
                 )
             )
         )
-        break #todo remove
+
     return shapes
 
 @configclass
@@ -285,7 +285,7 @@ class BallRollingEnvCfg(DirectRLEnvCfg):
             sensor_camera_cfg = GelSightMiniCfg.SensorCameraCfg(
                 prim_path_appendix = "/Camera",
                 update_period= 0,
-                resolution = (240,320), #(120, 160),
+                resolution = (320,240), #(120, 160),
                 data_types = ["depth"],
                 clipping_range = (0.024, 0.034),
             ),
@@ -293,20 +293,20 @@ class BallRollingEnvCfg(DirectRLEnvCfg):
             debug_vis=True, # for being able to see sensor output in the gui
             # update FOTS cfg
             marker_motion_sim_cfg=FOTSMarkerSimulatorCfg(
-                lamb = [0.00125,0.00021,0.00038],
+                lamb = [0.00125,0.00021,0.0038],
                 # mm_to_pixel=10.0,
                 pyramid_kernel_size = [51, 21, 11, 5], #[11, 11, 11, 11, 11, 5],
                 kernel_size = 5,
                 marker_params = FOTSMarkerSimulatorCfg.MarkerParams(
-                    num_markers_col=20,#9, #11,
-                    num_markers_row=25,#11, #9,
-                    num_markers=500,#99,
+                    num_markers_col=11,
+                    num_markers_row=9,
+                    num_markers=99,
                     x0=15,
                     y0=26,
                     dx=26,
                     dy=29
                 ),
-                tactile_img_res = (240, 320),
+                tactile_img_res = (320, 240),
                 device = "cuda",
                 frame_transformer_cfg = FrameTransformerCfg(
                     prim_path="/World/envs/env_.*/Robot/gelsight_mini_gelpad", #"/World/envs/env_.*/Robot/gelsight_mini_case",
@@ -327,7 +327,7 @@ class BallRollingEnvCfg(DirectRLEnvCfg):
     gsmini.optical_sim_cfg = gsmini.optical_sim_cfg.replace(
         with_shadow=False,
         device="cuda",
-        tactile_img_res=(240, 320),
+        tactile_img_res = (320, 240),
     )
 
     ik_controller_cfg = DifferentialIKControllerCfg(command_type="pose", use_relative_mode=False, ik_method="dls")

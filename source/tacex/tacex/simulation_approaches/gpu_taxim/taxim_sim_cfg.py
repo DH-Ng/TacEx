@@ -18,11 +18,11 @@ class TaximSimulatorCfg(GelSightSimulatorCfg):
 
     with_shadow: bool = False
 
-    tactile_img_res: tuple = (240, 320)
+    tactile_img_res: tuple = (320, 240)
     """Resolution of the Tactile Image.
 
     Can be different from the Sensor Camera.
-    If this is the case, then height map from camera is going to be up/down sampled.
+    If this is the case, then height map from camera is up/down sampled.
     """
 
     gelpad_height: float = MISSING

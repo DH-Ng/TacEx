@@ -29,7 +29,7 @@ class GelSightMiniCfg(GelSightSensorCfg):
     sensor_camera_cfg: GelSightSensorCfg.SensorCameraCfg = GelSightSensorCfg.SensorCameraCfg(
         prim_path_appendix = "/Camera",
         update_period= 0,
-        resolution = (280, 320),
+        resolution = (320, 240),
         data_types = ["depth"],
         clipping_range = (0.024, 0.029),
     )
@@ -50,11 +50,11 @@ class GelSightMiniCfg(GelSightSensorCfg):
     """
 
     optical_sim_cfg = TaximSimulatorCfg(
-        calib_folder_path= f"{TACEX_ASSETS_DATA_DIR}/Sensors/GelSight_Mini/calibs/480x640",
+        calib_folder_path= f"{TACEX_ASSETS_DATA_DIR}/Sensors/GelSight_Mini/calibs/640x480",
         gelpad_height= gelpad_dimensions.height,
         gelpad_to_camera_min_distance= 0.024,
         with_shadow=False,
-        tactile_img_res=(240,320),
+        tactile_img_res=(320,240),
         device = "cuda",
     )
 
@@ -63,14 +63,14 @@ class GelSightMiniCfg(GelSightSensorCfg):
         pyramid_kernel_size = [51, 21, 11, 5], #[11, 11, 11, 11, 11, 5],
         kernel_size = 5,
         marker_params = FOTSMarkerSimulatorCfg.MarkerParams(
-            num_markers_col=20, #11,
-            num_markers_row=25, #9,
+            num_markers_col=11,
+            num_markers_row=9,
             x0=15,
             y0=26,
             dx=26,
             dy=29,
         ),
-        tactile_img_res=(240, 320),
+        tactile_img_res=(320,240),
         device = "cuda",
         frame_transformer_cfg = MISSING
     )

@@ -41,7 +41,7 @@ class ManiSkillSimulatorCfg(GelSightSimulatorCfg):
         0.0,
     )
 
-    tactile_img_res: tuple = (240, 320)
+    tactile_img_res: tuple = (320, 240)
     """Resolution of the Tactile Image.
 
     Can be different from the Sensor Camera.

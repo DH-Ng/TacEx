@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 import math
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -60,7 +61,9 @@ class ManiSkillSimulator(GelSightSimulator):
         self.marker_motion_sim: VisionTactileSensorUIPC = VisionTactileSensorUIPC(
             self.gelpad_uipc,
             self.camera,
-            self.cfg.marker_interval_range
+            tactile_img_width=self.cfg.tactile_img_res[0],
+            tactile_img_height=self.cfg.tactile_img_res[1],
+            marker_interval_range=self.cfg.marker_interval_range
         )
 
         self.marker_motion_sim._gen_marker_grid()
@@ -72,6 +75,9 @@ class ManiSkillSimulator(GelSightSimulator):
         dim=1: [initial, current] marker positions
         dim=3: [x,y] values of the markers
         """
+
+        # for visualization of the markers
+        self.patch_array_dict = copy.deepcopy(generate_patch_array())
 
     def marker_motion_simulation(self):
         marker_flow = self.marker_motion_sim.gen_marker_flow()
@@ -120,22 +126,28 @@ class ManiSkillSimulator(GelSightSimulator):
                 if show_img==True:
                     if not (str(i) in self._debug_windows):
                         # create a window
-                        window = omni.ui.Window(self.sensor._prim_view.prim_paths[i] + "/fem_marker", height=self.cfg.tactile_img_res[1], width=self.cfg.tactile_img_res[0])
+                        window = omni.ui.Window(self.sensor._prim_view.prim_paths[i] + "/fem_marker", width=self.cfg.tactile_img_res[0], height=self.cfg.tactile_img_res[1])
                         self._debug_windows[str(i)] = window
                         # create image provider
                         self._debug_img_providers[str(i)] = omni.ui.ByteImageProvider() # default format omni.ui.TextureFormat.RGBA8_UNORM
 
                    
-                    frame = self._create_marker_img(self.sensor.data.output["marker_motion"][i])
-                    # frame = self.marker_motion_sim.get_marker_img()
+                    marker_flow_i = self.sensor.data.output["marker_motion"][i]
+
+                    # frame = self._create_marker_img(marker_flow_i)
+                    ## draw current markers like ManiSkill-ViTac
+                    frame = self.draw_markers(marker_flow_i[1].cpu().numpy(), img_w=self.cfg.tactile_img_res[0], img_h=self.cfg.tactile_img_res[1])
 
                     # create tactile rgb img with markers
                     if "tactile_rgb" in self.sensor.cfg.data_types:
-                        tactile_rgb = self.sensor.data.output["tactile_rgb"][i].cpu().numpy()*255
-                        frame = tactile_rgb * np.dstack([frame.astype(np.float64) / 255] * 3)
+                        if self.sensor.cfg.optical_sim_cfg.tactile_img_res == self.sensor.cfg.marker_motion_sim_cfg.tactile_img_res:
+                            #todo add upscaling of tactile_rgb, if not same size
+                            tactile_rgb = self.sensor.data.output["tactile_rgb"][i].cpu().numpy()*255
+                            frame = tactile_rgb * np.dstack([frame.astype(np.float64) / 255] * 3)
 
                     frame = frame.astype(np.uint8)
                     frame = cv2.cvtColor(frame, cv2.COLOR_RGB2RGBA)
+                    
                     height, width, channels = frame.shape
 
                     with self._debug_windows[str(i)].frame:
@@ -158,7 +170,7 @@ class ManiSkillSimulator(GelSightSimulator):
         """
         # for visualization -> white background with black dots
         color = (0, 0, 0)
-        arrow_scale = 5 #10 #0.0001 #0.25
+        arrow_scale = 1 #10 #0.0001 #0.25
 
         frame = np.ones((self.cfg.tactile_img_res[1],self.cfg.tactile_img_res[0])).astype(np.uint8)
 
@@ -189,3 +201,102 @@ class ManiSkillSimulator(GelSightSimulator):
         frame = cv2.normalize(frame, None, alpha = 0, beta = 255, norm_type = cv2.NORM_MINMAX, dtype = cv2.CV_32F)
 
         return frame
+
+####
+# Visualization from ManiSkill-ViTac https://github.com/chuanyune/ManiSkill-ViTac2025/blob/a3d7df54bca9a2e57f34b37be3a3df36dc218915/Track_1/envs/tactile_sensor_sapienipc.py
+####
+    def draw_markers(self, marker_uv, marker_size=3, img_w=320, img_h=240):
+        marker_uv_compensated = marker_uv + np.array([0.5, 0.5])
+
+        marker_image = np.ones((img_h + 24, img_w + 24), dtype=np.uint8) * 255
+        for i in range(marker_uv_compensated.shape[0]):
+            uv = marker_uv_compensated[i]
+            u = uv[0] + 12
+            v = uv[1] + 12
+            patch_id_u = math.floor(
+                (u - math.floor(u)) * self.patch_array_dict["super_resolution_ratio"]
+            )
+            patch_id_v = math.floor(
+                (v - math.floor(v)) * self.patch_array_dict["super_resolution_ratio"]
+            )
+            patch_id_w = math.floor(
+                (marker_size - self.patch_array_dict["base_circle_radius"])
+                * self.patch_array_dict["super_resolution_ratio"]
+            )
+            current_patch = self.patch_array_dict["patch_array"][
+                patch_id_u, patch_id_v, patch_id_w
+            ]
+            patch_coord_u = math.floor(u) - 6
+            patch_coord_v = math.floor(v) - 6
+            if (
+                marker_image.shape[1] - 12 > patch_coord_u >= 0
+                and marker_image.shape[0] - 12 > patch_coord_v >= 0
+            ):
+                marker_image[
+                    patch_coord_v : patch_coord_v + 12,
+                    patch_coord_u : patch_coord_u + 12,
+                ] = current_patch
+        marker_image = marker_image[12:-12, 12:-12]
+
+        return marker_image
+
+def generate_patch_array(super_resolution_ratio=10):
+    circle_radius = 3
+    size_slot_num = 50
+    base_circle_radius = 1.5
+
+    patch_array = np.zeros(
+        (
+            super_resolution_ratio,
+            super_resolution_ratio,
+            size_slot_num,
+            4 * circle_radius,
+            4 * circle_radius,
+        ),
+        dtype=np.uint8,
+    )
+    for u in range(super_resolution_ratio):
+        for v in range(super_resolution_ratio):
+            for w in range(size_slot_num):
+                img_highres = (
+                    np.ones(
+                        (
+                            4 * circle_radius * super_resolution_ratio,
+                            4 * circle_radius * super_resolution_ratio,
+                        ),
+                        dtype=np.uint8,
+                    )
+                    * 255
+                )
+                center = np.array(
+                    [
+                        circle_radius * super_resolution_ratio * 2,
+                        circle_radius * super_resolution_ratio * 2,
+                    ],
+                    dtype=np.uint8,
+                )
+                center_offseted = center + np.array([u, v])
+                radius = round(base_circle_radius * super_resolution_ratio + w)
+                img_highres = cv2.circle(
+                    img_highres,
+                    tuple(center_offseted),
+                    radius,
+                    (0, 0, 0),
+                    thickness=cv2.FILLED,
+                    lineType=cv2.LINE_AA,
+                )
+                img_highres = cv2.GaussianBlur(img_highres, (17, 17), 15)
+                img_lowres = cv2.resize(
+                    img_highres,
+                    (4 * circle_radius, 4 * circle_radius),
+                    interpolation=cv2.INTER_CUBIC,
+                )
+                patch_array[u, v, w, ...] = img_lowres
+
+    return {
+        "base_circle_radius": base_circle_radius,
+        "circle_radius": circle_radius,
+        "size_slot_num": size_slot_num,
+        "patch_array": patch_array,
+        "super_resolution_ratio": super_resolution_ratio,
+    }

@@ -24,10 +24,10 @@ class MarkerMotion():
                 frame0_blur,
                 lamb,
                 mm2pix=19.58, #FOTS default is 19.58
-                num_markers_col=11,
-                num_markers_row=9,
-                tactile_img_width=240,
-                tactile_img_height=320,
+                num_markers_col=9,
+                num_markers_row=11,
+                tactile_img_width=320,
+                tactile_img_height=240,
                 x0=0,
                 y0=0,
                 is_flow=True):
@@ -83,7 +83,7 @@ class MarkerMotion():
 
         return dx, dy
 
-    def _twist(self, center_x, center_y, lamb, theta, xx, yy, theta_max_deg=180):
+    def _twist(self, center_x, center_y, lamb, theta, xx, yy, theta_max_deg=60):
         theta = np.clip(theta, -theta_max_deg / 180.0 * math.pi, theta_max_deg / 180.0 * math.pi)
 
         offset_x = xx - center_x
@@ -166,8 +166,8 @@ class MarkerMotion():
 
         # compute marker motion under normal load
         x_dd, y_dd = self._dilate(self.lamb[0], marker_x_pos, marker_y_pos)
-        new_x_pos = marker_x_pos + x_dd*0.0
-        new_y_pos = marker_y_pos + y_dd*0.0
+        new_x_pos = marker_x_pos + x_dd#*0.0
+        new_y_pos = marker_y_pos + y_dd#*0.0
 
         if len(traj) >= 2:
             # under shear load
@@ -181,8 +181,8 @@ class MarkerMotion():
                 marker_x_pos,
                 marker_y_pos
             )
-            # new_x_pos += x_ds
-            # new_y_pos += y_ds
+            new_x_pos += x_ds
+            new_y_pos += y_ds
 
             # # under twist load
             # print("theta diff ", np.rad2deg(traj[-1][2]-traj[0][2]))

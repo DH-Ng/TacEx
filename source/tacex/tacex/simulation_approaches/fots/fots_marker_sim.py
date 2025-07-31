@@ -110,7 +110,7 @@ class FOTSMarkerSimulator(GelSightSimulator):
         height_map = self.sensor._data.output["height_map"] # height map has shape (height, width) cause row-column format
 
         # up/downscale height map if camera res different than tactile img res
-        if height_map.shape != (self.cfg.tactile_img_res[1], self.cfg.tactile_img_res[0]):
+        if (height_map.shape[1], height_map.shape[2]) != (self.cfg.tactile_img_res[1], self.cfg.tactile_img_res[0]):
             height_map = F.resize(height_map, (self.cfg.tactile_img_res[1], self.cfg.tactile_img_res[0]))
 
         if self._device == "cpu":

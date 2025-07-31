@@ -161,7 +161,7 @@ class BallRollingEnvCfg(DirectRLEnvCfg):
         )
     )
 
-    # scene
+    # Scene
     scene: InteractiveSceneCfg = InteractiveSceneCfg(
         num_envs=1,
         env_spacing=1.5,
@@ -251,7 +251,7 @@ class BallRollingEnvCfg(DirectRLEnvCfg):
         sensor_camera_cfg = GelSightMiniCfg.SensorCameraCfg(
             prim_path_appendix = "/Camera",
             update_period= 0,
-            resolution = (32,32), #(120, 160),
+            resolution = (32, 24),
             data_types = ["depth"],
             clipping_range = (0.024, 0.034),
         ),
@@ -264,7 +264,7 @@ class BallRollingEnvCfg(DirectRLEnvCfg):
     gsmini.optical_sim_cfg = gsmini.optical_sim_cfg.replace(
         with_shadow=False,
         device="cuda",
-        tactile_img_res=(240, 320),
+        tactile_img_res=(320, 240),
     )
 
     # # frame for setting goal position

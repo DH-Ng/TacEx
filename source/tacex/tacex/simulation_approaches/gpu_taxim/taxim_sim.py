@@ -82,7 +82,7 @@ class TaximSimulator(GelSightSimulator):
         height_map = self.sensor._data.output["height_map"]
 
         # up/downscale height map if camera res different than tactile img res
-        if height_map.shape != (self.cfg.tactile_img_res[1], self.cfg.tactile_img_res[0]):
+        if (height_map.shape[1], height_map.shape[2])  != (self.cfg.tactile_img_res[1], self.cfg.tactile_img_res[0]):
             height_map = F.resize(height_map, (self.cfg.tactile_img_res[1], self.cfg.tactile_img_res[0]))
 
         if self._device == "cpu":
@@ -166,7 +166,7 @@ class TaximSimulator(GelSightSimulator):
         # Update the GUI windows
         for i, prim in enumerate(self.sensor.prim_view.prims):
             if "tactile_rgb" in self.sensor.cfg.data_types:
-                show_img = prim.GetAttribute("_debug_tactile_rgb").Get()
+                show_img = prim.GetAttribute("debug_tactile_rgb").Get()
                 if show_img==True:
                     if not (str(i) in self._debug_windows):
                         # create a window
