@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import math
+import numpy as np
 import warnings
 from pathlib import Path
 from typing import Any, Literal
@@ -8,7 +9,6 @@ from typing import Any, Literal
 import jax
 import jax.numpy as jnp
 import jaxlib.xla_extension
-import numpy as np
 
 from .calibration import CALIB_GELSIGHT
 from .taxim_impl import TaximImpl
@@ -39,9 +39,7 @@ class TaximJax(TaximImpl[jax.Array, jaxlib.xla_extension.Device | None]):
         # Polynomial calibration file
         data = np.load(str(calib_folder / "polycalib.npz"))
         # The order of RGB in the data got mixed up: grad_b and grad_r are switched
-        self.__poly_grad = (
-            jnp.stack([data["grad_b"], data["grad_g"], data["grad_r"]], axis=-1) / 255
-        )
+        self.__poly_grad = jnp.stack([data["grad_b"], data["grad_g"], data["grad_r"]], axis=-1) / 255
 
         gel_map = jnp.load(str(calib_folder / "gelmap.npy"))
         gel_map = (
@@ -69,9 +67,7 @@ class TaximJax(TaximImpl[jax.Array, jaxlib.xla_extension.Device | None]):
         # use a fan of angles around the direction
         fan_angle = self.sim_params.fan_angle
         num_fan_rays = int(fan_angle * 2 / self.sim_params.fan_precision)
-        self.__shadow_direction_fan_angles = direction[..., None] + jnp.linspace(
-            -fan_angle, fan_angle, num_fan_rays
-        )
+        self.__shadow_direction_fan_angles = direction[..., None] + jnp.linspace(-fan_angle, fan_angle, num_fan_rays)
 
         shadow_table = shadow_data["shadowTable"]
         # Append an extra empty entry for heights outside the range
@@ -86,10 +82,7 @@ class TaximJax(TaximImpl[jax.Array, jaxlib.xla_extension.Device | None]):
         max_shadow_table_len = max(map(len, shadow_table.reshape((-1,))))
         shadow_table_padded = (
             jnp.array(
-                [
-                    e + [jnp.inf] * (max_shadow_table_len - len(e))
-                    for e in shadow_table.reshape((-1,))
-                ],
+                [e + [jnp.inf] * (max_shadow_table_len - len(e)) for e in shadow_table.reshape((-1,))],
             ).reshape(shadow_table.shape + (-1,))
             / 255
         )
@@ -211,9 +204,7 @@ class TaximJax(TaximImpl[jax.Array, jaxlib.xla_extension.Device | None]):
             return jnp.clip(sim_img, 0, 1)
 
         # find shadow attachment area
-        kernel_size_float = np.array(
-            self.sim_params.shadow_attachment_kernel_size(shape)
-        )
+        kernel_size_float = np.array(self.sim_params.shadow_attachment_kernel_size(shape))
         kernel_size_float_total = np.round(kernel_size_float * 2).astype(np.int_)
         first_round = kernel_size_float_total // 2
         rounds = [first_round, kernel_size_float_total - first_round]
@@ -222,24 +213,19 @@ class TaximJax(TaximImpl[jax.Array, jaxlib.xla_extension.Device | None]):
             kernel = jnp.ones(tuple(np.flip(np.maximum(1, ks))))
             with warnings.catch_warnings():
                 warnings.filterwarnings("ignore", category=UserWarning)
-                dilated_mask = jax.scipy.signal.convolve(
-                    dilated_mask, kernel, mode="same"
-                )
+                dilated_mask = jax.scipy.signal.convolve(dilated_mask, kernel, mode="same")
         enlarged_mask = dilated_mask != 0
         boundary_contact_mask = enlarged_mask & ~contact_mask
 
         # get normal index to shadow table
         norm_map = grad_dir + np.pi
-        norm_idx = jnp.floor(norm_map / self.sim_params.discretize_precision).astype(
-            jnp.int32
-        )
+        norm_idx = jnp.floor(norm_map / self.sim_params.discretize_precision).astype(jnp.int32)
 
         # get height index to shadow table
         contact_height = self.__get_gel_map(shape) - deformed_gel
         contact_height_px = contact_height / self.sensor_params.pixmm
         height_idx = jnp.floor(
-            (contact_height_px * self.sensor_params.pixmm - self.__shadow_depth_0)
-            / self.sim_params.height_precision
+            (contact_height_px * self.sensor_params.pixmm - self.__shadow_depth_0) / self.sim_params.height_precision
         ).astype(jnp.int32)
         height_idx_shifted = height_idx + 6
         max_height_idx = self.__shadow_table_padded.shape[1] - 1
@@ -254,50 +240,34 @@ class TaximJax(TaximImpl[jax.Array, jaxlib.xla_extension.Device | None]):
         step_count = shadow_table_sel.shape[-2]
 
         # (x,y) coordinates of all pixels to attach shadow
-        y_coord, x_coord = jnp.meshgrid(
-            jnp.arange(height), jnp.arange(width), indexing="ij"
-        )
+        y_coord, x_coord = jnp.meshgrid(jnp.arange(height), jnp.arange(width), indexing="ij")
 
         chunk_size = self.__shadow_computation_chunk_size
         output_size = int(math.ceil(height * width / chunk_size)) * chunk_size
-        valid_coords_y, valid_coords_x = jnp.where(
-            boundary_contact_mask, size=output_size, fill_value=-1
-        )
+        valid_coords_y, valid_coords_x = jnp.where(boundary_contact_mask, size=output_size, fill_value=-1)
 
-        def cast_shadows(
-            steps: jax.Array, coords_y: jax.Array, coords_x: jax.Array, img: jax.Array
-        ) -> jax.Array:
+        def cast_shadows(steps: jax.Array, coords_y: jax.Array, coords_x: jax.Array, img: jax.Array) -> jax.Array:
             shadow_step = self.sim_params.shadow_step(shape)
             th = thetas[coords_y, coords_x]
             shadow_coords_x = (
-                coords_x[..., None, None]
-                + shadow_step[1] * (steps + 1) * jnp.cos(th)[..., None]
+                coords_x[..., None, None] + shadow_step[1] * (steps + 1) * jnp.cos(th)[..., None]
             ).astype(jnp.int32)
             shadow_coords_y = (
-                coords_y[..., None, None]
-                + shadow_step[0] * (steps + 1) * jnp.sin(th)[..., None]
+                coords_y[..., None, None] + shadow_step[0] * (steps + 1) * jnp.sin(th)[..., None]
             ).astype(jnp.int32)
             shadow_coords_in_bounds = (
-                (shadow_coords_x >= 0)
-                & (shadow_coords_x < width)
-                & (shadow_coords_y >= 0)
-                & (shadow_coords_y < height)
+                (shadow_coords_x >= 0) & (shadow_coords_x < width) & (shadow_coords_y >= 0) & (shadow_coords_y < height)
             )
             sc_x_clipped = jnp.clip(shadow_coords_x, 0, width - 1)
             sc_y_clipped = jnp.clip(shadow_coords_y, 0, height - 1)
             sc_valid = (
                 shadow_coords_in_bounds
                 & boundary_contact_mask[coords_y, coords_x, None, None]
-                & (
-                    deformed_gel_px[coords_y, coords_x, None, None]
-                    < deformed_gel_px[sc_y_clipped, sc_x_clipped]
-                )
+                & (deformed_gel_px[coords_y, coords_x, None, None] < deformed_gel_px[sc_y_clipped, sc_x_clipped])
             )
             sc_values = jnp.where(
                 sc_valid[..., None],
-                shadow_table_sel[
-                    coords_y[..., None, None], coords_x[..., None, None], steps, :
-                ],
+                shadow_table_sel[coords_y[..., None, None], coords_x[..., None, None], steps, :],
                 jnp.inf,
             )
             return img.at[sc_y_clipped, sc_x_clipped].min(sc_values)
@@ -324,9 +294,7 @@ class TaximJax(TaximImpl[jax.Array, jaxlib.xla_extension.Device | None]):
             )
 
         if self.__shadow_method == "fast":
-            sim_img_r = jax.lax.while_loop(
-                fast_cond_fn, fast_loop_body_fn, (0, sim_img_r)
-            )[1]
+            sim_img_r = jax.lax.while_loop(fast_cond_fn, fast_loop_body_fn, (0, sim_img_r))[1]
         else:
             sim_img_r = jax.lax.fori_loop(
                 0,
@@ -340,24 +308,18 @@ class TaximJax(TaximImpl[jax.Array, jaxlib.xla_extension.Device | None]):
             self.sim_params.shadow_blur_sigma(shape),
         )
         shadow_sim_img = shadow_sim + self.__get_background_img(shape)
-        shadow_sim_img_blurred = self.__gaussian_blur(
-            shadow_sim_img, self.sim_params.deform_final_sigma(shape)
-        )
+        shadow_sim_img_blurred = self.__gaussian_blur(shadow_sim_img, self.sim_params.deform_final_sigma(shape))
 
         return jnp.clip(shadow_sim_img_blurred, 0, 1)
 
     @classmethod
     def __get_gaussian_kernel1d(cls, sigma: float, kernel_size: int) -> jax.Array:
-        x = jnp.linspace(
-            -(kernel_size - 1) * 0.5, (kernel_size - 1) * 0.5, num=kernel_size
-        )
+        x = jnp.linspace(-(kernel_size - 1) * 0.5, (kernel_size - 1) * 0.5, num=kernel_size)
         pdf = jnp.exp(-0.5 * (x / sigma) ** 2)
         return pdf / pdf.sum()
 
     @classmethod
-    def __get_gaussian_kernel2d(
-        cls, kernel_size: tuple[int, int], sigma: tuple[float, float]
-    ) -> jax.Array:
+    def __get_gaussian_kernel2d(cls, kernel_size: tuple[int, int], sigma: tuple[float, float]) -> jax.Array:
         kernel1d_x = cls.__get_gaussian_kernel1d(sigma[0], kernel_size[0])
         kernel1d_y = cls.__get_gaussian_kernel1d(sigma[1], kernel_size[1])
         kernel2d = kernel1d_y[:, None] @ kernel1d_x[None, :]
@@ -375,11 +337,7 @@ class TaximJax(TaximImpl[jax.Array, jaxlib.xla_extension.Device | None]):
             sigma_np = np.array(sigma)
             # Ensure kernel size is odd
             kernel_size = (
-                np.round(
-                    np.sqrt(-2 * np.log(eps * np.sqrt(2 * np.pi) * sigma_np)) * sigma_np
-                ).astype(np.int_)
-                // 2
-                * 2
+                np.round(np.sqrt(-2 * np.log(eps * np.sqrt(2 * np.pi) * sigma_np)) * sigma_np).astype(np.int_) // 2 * 2
                 + 1
             ).tolist()
         kernel = cls.__get_gaussian_kernel2d(kernel_size, sigma)
@@ -393,9 +351,7 @@ class TaximJax(TaximImpl[jax.Array, jaxlib.xla_extension.Device | None]):
             method = "fft"
         else:
             method = "direct"
-        return jax.scipy.signal.convolve(
-            img_padded, kernel, mode="valid", method=method
-        )
+        return jax.scipy.signal.convolve(img_padded, kernel, mode="valid", method=method)
 
     @classmethod
     def __gaussian_blur(
@@ -414,9 +370,7 @@ class TaximJax(TaximImpl[jax.Array, jaxlib.xla_extension.Device | None]):
         :return: A HxWx3 array containing the blurred image.
         """
         if len(img.shape) >= 3 + int(has_channel_dim):
-            return jax.vmap(
-                lambda i: cls.__gaussian_blur_single(i, sigma, kernel_size)
-            )(img)
+            return jax.vmap(lambda i: cls.__gaussian_blur_single(i, sigma, kernel_size))(img)
         return cls.__gaussian_blur_single(img, sigma, kernel_size)
 
     def __process_initial_frame(self, f0: jax.Array):
@@ -426,9 +380,7 @@ class TaximJax(TaximImpl[jax.Array, jaxlib.xla_extension.Device | None]):
         :return: A HxWx3 array containing the processed initial frame.
         """
         # gaussian filtering with square kernel
-        f0_blurred = self.__gaussian_blur(
-            f0, self.sim_params.initial_frame_sigma(f0.shape[:2])
-        )
+        f0_blurred = self.__gaussian_blur(f0, self.sim_params.initial_frame_sigma(f0.shape[:2]))
 
         # Checking the difference between original and filtered image
         d_i = jnp.mean(f0_blurred - f0, axis=0)
@@ -439,9 +391,7 @@ class TaximJax(TaximImpl[jax.Array, jaxlib.xla_extension.Device | None]):
 
         return jnp.where((d_i < thresh)[0], fmp * f0_blurred + (1 - fmp) * f0, f0)
 
-    def __get_shifted_height_map(
-        self, pressing_depth_mm: float, height_map: jax.Array
-    ) -> jax.Array:
+    def __get_shifted_height_map(self, pressing_depth_mm: float, height_map: jax.Array) -> jax.Array:
         """
         Generate the shifted height map of the gel surface by interacting the object with the gel pad model. After
         shifting, the closest point of the height map will be pressing_depth_mm below the furthest point of the gel.
@@ -450,15 +400,9 @@ class TaximJax(TaximImpl[jax.Array, jaxlib.xla_extension.Device | None]):
         :return: Shifted height map in mm.
         """
         # shift the height map to interact with the object
-        return (
-            height_map
-            - height_map.min(axis=(-2, -1), keepdims=True)
-            - pressing_depth_mm
-        )
+        return height_map - height_map.min(axis=(-2, -1), keepdims=True) - pressing_depth_mm
 
-    def __compute_gel_pad_deformation(
-        self, height_map: jax.Array
-    ) -> tuple[jax.Array, jax.Array]:
+    def __compute_gel_pad_deformation(self, height_map: jax.Array) -> tuple[jax.Array, jax.Array]:
         """
         Compute the deformation of the gel pad.
         :param height_map: Height map of the object in mm.
@@ -473,10 +417,7 @@ class TaximJax(TaximImpl[jax.Array, jaxlib.xla_extension.Device | None]):
         joined_height_map = jnp.minimum(height_map, gel_map)
 
         # contact mask which is a little smaller than the real contact mask
-        mask = (
-            joined_height_map - gel_map
-            < -pressing_depth_mm * self.sim_params.contact_scale
-        ) & contact_mask
+        mask = (joined_height_map - gel_map < -pressing_depth_mm * self.sim_params.contact_scale) & contact_mask
 
         # approximate soft body deformation with pyramid gaussian_filter
         height_map_blurred = joined_height_map

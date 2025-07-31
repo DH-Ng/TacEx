@@ -6,14 +6,14 @@
 from __future__ import annotations
 
 import colorsys
+import numpy as np
 from contextlib import suppress
+from matplotlib import cm
 from typing import TYPE_CHECKING, Optional
 
 import carb
-import numpy as np
 import omni
 import omni.log
-from matplotlib import cm
 
 with suppress(ImportError):
     # isaacsim.gui is not available when running in headless mode.

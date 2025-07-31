@@ -27,9 +27,7 @@ def create_vector_attribute(prim: Usd.Prim, attribute_name: str) -> Usd.Attribut
     Returns:
         Usd.Attribute: An attribute created at specific prim.
     """
-    attr: Usd.Attribute = prim.CreateAttribute(
-        attribute_name, Sdf.ValueTypeNames.Float3
-    )
+    attr: Usd.Attribute = prim.CreateAttribute(attribute_name, Sdf.ValueTypeNames.Float3)
     return attr
 
 

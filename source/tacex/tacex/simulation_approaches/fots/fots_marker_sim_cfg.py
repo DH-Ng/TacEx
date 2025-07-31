@@ -1,7 +1,7 @@
+import torch
 from dataclasses import MISSING, dataclass
 from typing import TYPE_CHECKING, Any, Dict, List, Sequence, Tuple, Union
 
-import torch
 from isaaclab.sensors import FrameTransformerCfg, OffsetCfg
 from isaaclab.utils import class_to_dict, configclass, to_camel_case
 
@@ -9,6 +9,8 @@ from ..gelsight_simulator_cfg import GelSightSimulatorCfg
 from .fots_marker_sim_with_frame_transformer import FOTSMarkerSimulator
 
 """Configuration for a tactile RGB simulation with Taxim."""
+
+
 @configclass
 class FOTSMarkerSimulatorCfg(GelSightSimulatorCfg):
     simulation_approach_class: type = FOTSMarkerSimulator
@@ -30,8 +32,8 @@ class FOTSMarkerSimulatorCfg(GelSightSimulatorCfg):
     """Parameters for exponential functions used by FOTS for marker simulation"""
 
     # experimental params
-    ball_radius = 4.70/2 # mm
-    mm_to_pixel = 19.58 # units = pix/mm
+    ball_radius = 4.70 / 2  # mm
+    mm_to_pixel = 19.58  # units = pix/mm
 
     # optical simulation params
     pyramid_kernel_size: list[int] = []
@@ -40,6 +42,7 @@ class FOTSMarkerSimulatorCfg(GelSightSimulatorCfg):
     @configclass
     class MarkerParams:
         """Dimensions here are in mm (we assume that the world units are meters)"""
+
         num_markers_col: int = 11
         num_markers_row: int = 9
         num_markers: int = 99
@@ -47,9 +50,10 @@ class FOTSMarkerSimulatorCfg(GelSightSimulatorCfg):
         y0: float = 26.0
         dx: float = 26.0
         dy: float = 29.0
+
     marker_params: MarkerParams = MarkerParams()
 
-    init_marker_pos: tuple = ([[]],[[]])
+    init_marker_pos: tuple = ([[]], [[]])
     """Intial Marker positions.
 
     Tuple (xx_init pos, yy_init pos):

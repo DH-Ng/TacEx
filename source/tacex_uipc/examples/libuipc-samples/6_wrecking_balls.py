@@ -54,26 +54,15 @@ app_launcher = AppLauncher(args_cli)
 simulation_app = app_launcher.app
 
 import json
+import numpy as np
 import pathlib
 
-import isaaclab.sim as sim_utils
-import numpy as np
 import omni.usd
 import uipc
 import usdrt
-from isaaclab.utils.timer import Timer
 from pxr import Gf, Sdf, Usd, UsdGeom
 from tacex_uipc import UipcSim, UipcSimCfg
-from uipc import (
-    AngleAxis,
-    Logger,
-    Quaternion,
-    Transform,
-    Vector2,
-    Vector3,
-    builtin,
-    view,
-)
+from uipc import AngleAxis, Logger, Quaternion, Transform, Vector2, Vector3, builtin, view
 from uipc.constitution import AffineBodyConstitution
 from uipc.core import Engine, Scene, World
 from uipc.geometry import (
@@ -87,11 +76,12 @@ from uipc.geometry import (
 )
 from uipc.unit import GPa, MPa
 
+import isaaclab.sim as sim_utils
+from isaaclab.utils.timer import Timer
+
 
 def setup_base_scene(sim: sim_utils.SimulationContext):
-    """To make the scene pretty.
-
-    """
+    """To make the scene pretty."""
     # set upAxis to Y to match libuipc-samples
     stage = omni.usd.get_context().get_stage()
     UsdGeom.SetStageUpAxis(stage, UsdGeom.Tokens.y)
@@ -102,7 +92,7 @@ def setup_base_scene(sim: sim_utils.SimulationContext):
         prim_path="/World/defaultGroundPlane",
         cfg=cfg_ground,
         translation=[0, -1, 0],
-        orientation=[0.7071068, -0.7071068, 0, 0]
+        orientation=[0.7071068, -0.7071068, 0, 0],
     )
 
     # spawn distant light
@@ -111,6 +101,7 @@ def setup_base_scene(sim: sim_utils.SimulationContext):
         color=(0.75, 0.75, 0.75),
     )
     cfg_light_dome.func("/World/lightDome", cfg_light_dome, translation=(1, 10, 0))
+
 
 def setup_libuipc_scene(scene):
     tetmesh_dir = str(pathlib.Path(__file__).parent.resolve() / "tet_meshes")
@@ -127,19 +118,19 @@ def setup_libuipc_scene(scene):
 
     io = SimplicialComplexIO()
 
-    f = open(f'{str(pathlib.Path(__file__).parent.resolve())}/6_wrecking_ball.json')
+    f = open(f"{str(pathlib.Path(__file__).parent.resolve())}/6_wrecking_ball.json")
     wrecking_ball_scene = json.load(f)
 
-    cube = io.read(f'{tetmesh_dir}/cube.msh')
+    cube = io.read(f"{tetmesh_dir}/cube.msh")
     cube = process_surface(cube)
-    ball = io.read(f'{tetmesh_dir}/ball.msh')
+    ball = io.read(f"{tetmesh_dir}/ball.msh")
     ball = process_surface(ball)
-    link = io.read(f'{tetmesh_dir}/link.msh')
+    link = io.read(f"{tetmesh_dir}/link.msh")
     link = process_surface(link)
 
-    link_obj = scene.objects().create('links')
-    ball_obj = scene.objects().create('balls')
-    cube_obj = scene.objects().create('cubes')
+    link_obj = scene.objects().create("links")
+    ball_obj = scene.objects().create("balls")
+    cube_obj = scene.objects().create("cubes")
 
     abd.apply_to(cube, 10 * MPa)
     default_contact.apply_to(cube)
@@ -150,50 +141,55 @@ def setup_libuipc_scene(scene):
     abd.apply_to(link, 10 * MPa)
     default_contact.apply_to(link)
 
-    def build_mesh(json, obj: uipc.core.Object, mesh:SimplicialComplex):
+    def build_mesh(json, obj: uipc.core.Object, mesh: SimplicialComplex):
         t = Transform.Identity()
         position = Vector3.Zero()
-        if 'position' in json:
-            position[0] = json['position'][0]
-            position[1] = json['position'][1]
-            position[2] = json['position'][2]
+        if "position" in json:
+            position[0] = json["position"][0]
+            position[1] = json["position"][1]
+            position[2] = json["position"][2]
             t.translate(position)
 
         Q = Quaternion.Identity()
-        if 'rotation' in json:
+        if "rotation" in json:
             rotation = Vector3.Zero()
-            rotation[0] = json['rotation'][0]
-            rotation[1] = json['rotation'][1]
-            rotation[2] = json['rotation'][2]
+            rotation[0] = json["rotation"][0]
+            rotation[1] = json["rotation"][1]
+            rotation[2] = json["rotation"][2]
             rotation *= np.pi / 180
-            Q = AngleAxis(rotation[2][0], Vector3.UnitZ())  * AngleAxis(rotation[1][0], Vector3.UnitY()) * AngleAxis(rotation[0][0], Vector3.UnitX())
+            Q = (
+                AngleAxis(rotation[2][0], Vector3.UnitZ())
+                * AngleAxis(rotation[1][0], Vector3.UnitY())
+                * AngleAxis(rotation[0][0], Vector3.UnitX())
+            )
             t.rotate(Q)
 
         is_fixed = 0
-        if 'is_dof_fixed' in json:
-            is_fixed = json['is_dof_fixed']
+        if "is_dof_fixed" in json:
+            is_fixed = json["is_dof_fixed"]
 
         this_mesh = mesh.copy()
         view(this_mesh.transforms())[0] = t.matrix()
 
-        is_fixed_attr = this_mesh.instances().find('is_fixed')
+        is_fixed_attr = this_mesh.instances().find("is_fixed")
         view(is_fixed_attr)[0] = is_fixed
 
         obj.geometries().create(this_mesh)
 
     for obj in wrecking_ball_scene:
-        if obj['mesh'] == 'link.msh':
+        if obj["mesh"] == "link.msh":
             build_mesh(obj, link_obj, link)
-        elif obj['mesh'] == 'ball.msh':
+        elif obj["mesh"] == "ball.msh":
             build_mesh(obj, ball_obj, ball)
-        elif obj['mesh'] == 'cube.msh':
+        elif obj["mesh"] == "cube.msh":
             build_mesh(obj, cube_obj, cube)
+
 
 def main():
     """Main function."""
     # Initialize the simulation context
     sim_cfg = sim_utils.SimulationCfg(
-        dt=1/60,
+        dt=1 / 60,
         gravity=[0.0, -9.8, 0.0],
     )
     sim = sim_utils.SimulationContext(sim_cfg)
@@ -208,11 +204,7 @@ def main():
         ground_normal=[0, 1, 0],
         ground_height=-1.0,
         # logger_level="Info",
-        contact=UipcSimCfg.Contact(
-            default_friction_ratio=0.5,
-            default_contact_resistance=1.0,
-            d_hat=0.01
-        ),
+        contact=UipcSimCfg.Contact(default_friction_ratio=0.5, default_contact_resistance=1.0, d_hat=0.01),
         line_search=UipcSimCfg.LineSearch(max_iter=8),
         newton=UipcSimCfg.Newton(velocity_tol=0.2),
     )
@@ -242,14 +234,14 @@ def main():
         sim.render()
 
         if sim.is_playing():
-            if step==500:
+            if step == 500:
                 break
             print("")
             print("====================================================================================")
             print("====================================================================================")
             print("Step number ", step)
             if recover_sim:
-                if (uipc_sim.world.recover(uipc_sim.world.frame() + 1)):
+                if uipc_sim.world.recover(uipc_sim.world.frame() + 1):
                     uipc_sim.world.retrieve()
                     print("Replaying frame ", uipc_sim.world.frame() + 1)
                 else:

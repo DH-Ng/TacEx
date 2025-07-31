@@ -21,26 +21,16 @@ args_cli = parser.parse_args()
 app_launcher = AppLauncher(args_cli)
 simulation_app = app_launcher.app
 
-import isaaclab.sim as sim_utils
 import numpy as np
+
 import omni.usd
 import uipc
 import usdrt
-from isaaclab.utils.timer import Timer
 from pxr import Gf, Sdf, Usd, UsdGeom
 from tacex_uipc import UipcObject, UipcObjectCfg, UipcSim, UipcSimCfg
-from tacex_uipc.utils import (
-    MeshGenerator,
-    TetMeshCfg,
-    create_prim_for_uipc_scene_object,
-)
+from tacex_uipc.utils import MeshGenerator, TetMeshCfg, create_prim_for_uipc_scene_object
 from uipc import Animation, Vector3, builtin, view
-from uipc.constitution import (
-    AffineBodyConstitution,
-    ElasticModuli,
-    SoftPositionConstraint,
-    StableNeoHookean,
-)
+from uipc.constitution import AffineBodyConstitution, ElasticModuli, SoftPositionConstraint, StableNeoHookean
 from uipc.core import Engine, Scene, SceneIO, World
 from uipc.geometry import (
     GeometrySlot,
@@ -54,11 +44,12 @@ from uipc.geometry import (
 )
 from uipc.unit import GPa, MPa
 
+import isaaclab.sim as sim_utils
+from isaaclab.utils.timer import Timer
+
 
 def setup_base_scene(sim: sim_utils.SimulationContext):
-    """To make the scene pretty.
-
-    """
+    """To make the scene pretty."""
     # set upAxis to Y to match libuipc-samples
     stage = omni.usd.get_context().get_stage()
     UsdGeom.SetStageUpAxis(stage, UsdGeom.Tokens.y)
@@ -69,7 +60,7 @@ def setup_base_scene(sim: sim_utils.SimulationContext):
         prim_path="/World/defaultGroundPlane",
         cfg=cfg_ground,
         translation=[0, -0.5, 0],
-        orientation=[0.7071068, -0.7071068, 0, 0]
+        orientation=[0.7071068, -0.7071068, 0, 0],
     )
 
     # spawn distant light
@@ -79,31 +70,29 @@ def setup_base_scene(sim: sim_utils.SimulationContext):
     )
     cfg_light_dome.func("/World/lightDome", cfg_light_dome, translation=(1, 10, 0))
 
+
 def setup_libuipc_scene(scene):
     snh = StableNeoHookean()
     spc = SoftPositionConstraint()
-    tet_object = scene.objects().create('tet_object')
-    Vs = np.array([[0,1,0],
-                   [0,0,1],
-                   [-np.sqrt(3)/2, 0, -0.5],
-                   [np.sqrt(3)/2, 0, -0.5]])
-    Ts = np.array([[0,1,2,3]])
+    tet_object = scene.objects().create("tet_object")
+    Vs = np.array([[0, 1, 0], [0, 0, 1], [-np.sqrt(3) / 2, 0, -0.5], [np.sqrt(3) / 2, 0, -0.5]])
+    Ts = np.array([[0, 1, 2, 3]])
     tet = tetmesh(Vs, Ts)
     label_surface(tet)
     label_triangle_orient(tet)
     tet = flip_inward_triangles(tet)
     moduli = ElasticModuli.youngs_poisson(0.1 * MPa, 0.49)
     snh.apply_to(tet, moduli)
-    spc.apply_to(tet, 100) # constraint strength ratio
+    spc.apply_to(tet, 100)  # constraint strength ratio
     tet_object.geometries().create(tet)
 
     animator = scene.animator()
 
-    def animate_tet(info:Animation.UpdateInfo): # animation function
-        geo_slots:list[GeometrySlot] = info.geo_slots()
-        geo:SimplicialComplex = geo_slots[0].geometry()
-        rest_geo_slots:list[GeometrySlot] = info.rest_geo_slots()
-        rest_geo:SimplicialComplex = rest_geo_slots[0].geometry()
+    def animate_tet(info: Animation.UpdateInfo):  # animation function
+        geo_slots: list[GeometrySlot] = info.geo_slots()
+        geo: SimplicialComplex = geo_slots[0].geometry()
+        rest_geo_slots: list[GeometrySlot] = info.rest_geo_slots()
+        rest_geo: SimplicialComplex = rest_geo_slots[0].geometry()
 
         is_constrained = geo.vertices().find(builtin.is_constrained)
         is_constrained_view = view(is_constrained)
@@ -121,11 +110,12 @@ def setup_libuipc_scene(scene):
 
     animator.insert(tet_object, animate_tet)
 
+
 def main():
     """Main function."""
     # Initialize the simulation context
     sim_cfg = sim_utils.SimulationCfg(
-        dt=1/60,
+        dt=1 / 60,
         gravity=[0.0, -9.8, 0.0],
     )
     sim = sim_utils.SimulationContext(sim_cfg)
@@ -141,7 +131,7 @@ def main():
         contact=UipcSimCfg.Contact(
             default_friction_ratio=0.1,
             default_contact_resistance=1.0,
-        )
+        ),
     )
     uipc_sim = UipcSim(uipc_cfg)
 
@@ -183,6 +173,7 @@ def main():
             total_uipc_render_time += Timer.get_timer_info("render_update")
 
             step += 1
+
 
 if __name__ == "__main__":
     # run the main function

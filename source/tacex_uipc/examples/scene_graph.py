@@ -1,9 +1,11 @@
 import numpy as np
+
 import omni.usd
 import warp as wp
 from usdrt import Gf, Rt, Sdf, Usd, Vt
 
 wp.init()
+
 
 @wp.kernel
 def deform(positions: wp.array(dtype=wp.vec3), t: float):
@@ -11,15 +13,15 @@ def deform(positions: wp.array(dtype=wp.vec3), t: float):
 
     x = positions[tid]
     offset = -wp.sin(x[0])
-    scale = wp.sin(t)*10.0
+    scale = wp.sin(t) * 10.0
 
-    x = x + wp.vec3(0.0, offset*scale, 0.0)
+    x = x + wp.vec3(0.0, offset * scale, 0.0)
 
     positions[tid] = x
 
+
 def deform_mesh_with_warp(stage_id, path, time):
-    """Use Warp to deform a Mesh prim
-    """
+    """Use Warp to deform a Mesh prim"""
 
     if path is None:
         return "Nothing selected"
@@ -42,13 +44,7 @@ def deform_mesh_with_warp(stage_id, path, time):
     warparray = wp.array(pointsarray, dtype=wp.vec3, device="cuda")
     # print("points ", warparray)
 
-    wp.launch(
-        kernel=deform,
-        dim=len(pointsarray),
-        inputs=[warparray, time],
-        device="cuda"
-    )
-
+    wp.launch(kernel=deform, dim=len(pointsarray), inputs=[warparray, time], device="cuda")
 
     points.Set(Vt.Vec3fArray(warparray.numpy()))
 

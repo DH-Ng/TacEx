@@ -15,27 +15,30 @@
 
 import copy
 import math
+import numpy as np
+import torch
 from typing import Tuple
 
 import cv2
-import isaaclab.utils.math as math_utils
-import numpy as np
-import torch
 import usdrt
 import usdrt.UsdGeom
 from sklearn.neighbors import NearestNeighbors
 from tacex_uipc.objects import UipcObject
 from tacex_uipc.sim import UipcSim
 
+import isaaclab.utils.math as math_utils
+
 from .utils.geometry import in_hull
 
 try:
     from isaacsim.util.debug_draw import _debug_draw
+
     draw = _debug_draw.acquire_debug_draw_interface()
 except:
     draw = None
 
-class VisionTactileSensorUIPC():
+
+class VisionTactileSensorUIPC:
     def __init__(
         self,
         uipc_gelpad: UipcObject,
@@ -101,9 +104,7 @@ class VisionTactileSensorUIPC():
             ],
             dtype=np.float32,
         )
-        self.camera_distort_coeffs = np.array(
-            [camera_params[4], 0, 0, 0, 0], dtype=np.float32
-        )
+        self.camera_distort_coeffs = np.array([camera_params[4], 0, 0, 0, 0], dtype=np.float32)
 
         self.init_vertices_camera = self.get_vertices_camera()
         self.init_surface_vertices_gelpad = self.get_surface_vertices_world().clone()
@@ -113,7 +114,6 @@ class VisionTactileSensorUIPC():
 
         # self.phong_shading_renderer = PhongShadingRenderer()
 
-
     def get_vertices_world(self):
         v = self.gelpad_obj._data.nodal_pos_w
         return v
@@ -122,12 +122,12 @@ class VisionTactileSensorUIPC():
         surf_v = self.gelpad_obj._data.surf_nodal_pos_w
         return surf_v
 
-    #todo find out whats wrong with this method -> frame coor. sys. seems to be wrong
+    # todo find out whats wrong with this method -> frame coor. sys. seems to be wrong
     def transform_camera_to_world_frame(self, input_vertices):
         self.camera._update_poses(self.camera._ALL_INDICES)
         # math_utils.convert_camera_frame_orientation_convention
         cam_pos_w = self.camera._data.pos_w
-        cam_quat_w =  self.camera._data.quat_w_ros #quat_w_opengl#quat_w_world
+        cam_quat_w = self.camera._data.quat_w_ros  # quat_w_opengl#quat_w_world
         v_cv = math_utils.transform_points(input_vertices, pos=cam_pos_w, quat=cam_quat_w)
         return v_cv
 
@@ -149,7 +149,7 @@ class VisionTactileSensorUIPC():
 
         v_cv = torch.matmul(rot_inv, t_target.transpose_(1, 2))
         v_cv = v_cv.transpose_(1, 2)
-        #todo fix it for multi env
+        # todo fix it for multi env
         v_cv = v_cv[0]
         return v_cv
 
@@ -183,44 +183,30 @@ class VisionTactileSensorUIPC():
         return v_cv
 
     def set_reference_surface_vertices_camera(self):
-        self.reference_surface_vertices_camera = (
-            self.get_surface_vertices_camera().clone()
-        )
+        self.reference_surface_vertices_camera = self.get_surface_vertices_camera().clone()
 
     def _gen_marker_grid(self):
-        marker_interval = (
-            self.marker_interval_range[1] - self.marker_interval_range[0]
-        ) * np.random.rand(1)[0] + self.marker_interval_range[0]
-        marker_rotation_angle = (
-            2 * self.marker_rotation_range * np.random.rand(1)
-            - self.marker_rotation_range
-        )
+        marker_interval = (self.marker_interval_range[1] - self.marker_interval_range[0]) * np.random.rand(1)[
+            0
+        ] + self.marker_interval_range[0]
+        marker_rotation_angle = 2 * self.marker_rotation_range * np.random.rand(1) - self.marker_rotation_range
         marker_translation_x = (
-            2 * self.marker_translation_range[0] * np.random.rand(1)[0]
-            - self.marker_translation_range[0]
+            2 * self.marker_translation_range[0] * np.random.rand(1)[0] - self.marker_translation_range[0]
         )
         marker_translation_y = (
-            2 * self.marker_translation_range[1] * np.random.rand(1)[0]
-            - self.marker_translation_range[1]
+            2 * self.marker_translation_range[1] * np.random.rand(1)[0] - self.marker_translation_range[1]
         )
 
         marker_x_start = (
-            -math.ceil((8 + marker_translation_x) / marker_interval)  # 16.5
-            * marker_interval
-            + marker_translation_x
+            -math.ceil((8 + marker_translation_x) / marker_interval) * marker_interval + marker_translation_x  # 16.5
         )
         marker_x_end = (
-            math.ceil((16.5 - marker_translation_x) / marker_interval) * marker_interval
-            + marker_translation_x
+            math.ceil((16.5 - marker_translation_x) / marker_interval) * marker_interval + marker_translation_x
         )
         marker_y_start = (
-            -math.ceil((6 + marker_translation_y) / marker_interval) * marker_interval
-            + marker_translation_y
+            -math.ceil((6 + marker_translation_y) / marker_interval) * marker_interval + marker_translation_y
         )
-        marker_y_end = (
-            math.ceil((6 - marker_translation_y) / marker_interval) * marker_interval
-            + marker_translation_y
-        )
+        marker_y_end = math.ceil((6 - marker_translation_y) / marker_interval) * marker_interval + marker_translation_y
 
         marker_x = np.linspace(
             marker_x_start,
@@ -240,13 +226,11 @@ class VisionTactileSensorUIPC():
         # print(marker_num)
 
         marker_pos_shift_x = (
-            np.random.rand(marker_num) * self.marker_pos_shift_range[0] * 2
-            - self.marker_pos_shift_range[0]
+            np.random.rand(marker_num) * self.marker_pos_shift_range[0] * 2 - self.marker_pos_shift_range[0]
         )
 
         marker_pos_shift_y = (
-            np.random.rand(marker_num) * self.marker_pos_shift_range[1] * 2
-            - self.marker_pos_shift_range[1]
+            np.random.rand(marker_num) * self.marker_pos_shift_range[1] * 2 - self.marker_pos_shift_range[1]
         )
 
         marker_xy[:, 0] += marker_pos_shift_x
@@ -276,8 +260,10 @@ class VisionTactileSensorUIPC():
         # draw.draw_points(points, [(255,0,255,0.5)]*points.shape[0], [30]*points.shape[0])
 
         # set marker to be at gelpad by adding corresponding z values
-        z = np.max(surface_pts[:, 2]) # to set pattern at the bottom of the gelpad, i.e. closer to camera: np.min(surface_pts[:, 2])
-        marker_pts = np.hstack((marker_pts, np.ones((marker_pts.shape[0], 1), dtype=np.float32)*z))
+        z = np.max(
+            surface_pts[:, 2]
+        )  # to set pattern at the bottom of the gelpad, i.e. closer to camera: np.min(surface_pts[:, 2])
+        marker_pts = np.hstack((marker_pts, np.ones((marker_pts.shape[0], 1), dtype=np.float32) * z))
         # marker_pts = self.transform_to_camera_frame(torch.tensor(marker_pts, device="cuda:0", dtype=torch.float32)).cpu().numpy()
         # draw.draw_points(marker_pts, [(255,0,0,0.5)]*marker_pts.shape[0], [30]*marker_pts.shape[0])
 
@@ -286,7 +272,9 @@ class VisionTactileSensorUIPC():
         marker_pts = marker_pts[marker_on_surface]
 
         # extract faces of the mesh surface
-        triangles = np.array(usdrt.UsdGeom.Mesh(self.gelpad_obj.fabric_prim).GetFaceVertexIndicesAttr().Get()).reshape(-1, 3)
+        triangles = np.array(usdrt.UsdGeom.Mesh(self.gelpad_obj.fabric_prim).GetFaceVertexIndicesAttr().Get()).reshape(
+            -1, 3
+        )
         f_centers = []
         for tri in triangles:
             vertices = surface_pts[tri]
@@ -296,9 +284,7 @@ class VisionTactileSensorUIPC():
         # points = np.array(f_centers)
         # draw.draw_points(points, [(0,255,255,0.5)]*points.shape[0], [30]*points.shape[0])
 
-        nbrs = NearestNeighbors(n_neighbors=4, algorithm="ball_tree").fit(
-            f_centers
-        )
+        nbrs = NearestNeighbors(n_neighbors=4, algorithm="ball_tree").fit(f_centers)
         distances, face_idx = nbrs.kneighbors(marker_pts)
 
         # after nearest neighbors, just look at xy components
@@ -319,17 +305,13 @@ class VisionTactileSensorUIPC():
                 w12 = np.linalg.inv(A) @ (p - p0)
                 if possible_face_id == possible_face_ids[0]:
                     marker_pts_surface_idx.append(triangles[possible_face_id])
-                    marker_pts_surface_weight.append(
-                        np.array([1 - w12.sum(), w12[0], w12[1]])
-                    )
+                    marker_pts_surface_weight.append(np.array([1 - w12.sum(), w12[0], w12[1]]))
                     valid_marker_idx.append(i)
                     if w12[0] >= 0 and w12[1] >= 0 and w12[0] + w12[1] <= 1:
                         break
                 elif w12[0] >= 0 and w12[1] >= 0 and w12[0] + w12[1] <= 1:
                     marker_pts_surface_idx[-1] = triangles[possible_face_id]
-                    marker_pts_surface_weight[-1] = np.array(
-                        [1 - w12.sum(), w12[0], w12[1]]
-                    )
+                    marker_pts_surface_weight[-1] = np.array([1 - w12.sum(), w12[0], w12[1]])
                     valid_marker_idx[-1] = i
                     break
 
@@ -338,12 +320,12 @@ class VisionTactileSensorUIPC():
         marker_pts_surface_idx = np.stack(marker_pts_surface_idx)
         marker_pts_surface_weight = np.stack(marker_pts_surface_weight)
         assert np.allclose(
-            (
-                surface_pts[marker_pts_surface_idx]
-                * marker_pts_surface_weight[..., None]
-            ).sum(1)[:, :2],
+            (surface_pts[marker_pts_surface_idx] * marker_pts_surface_weight[..., None]).sum(1)[:, :2],
             marker_pts,
-        ), f"max err: {np.abs((surface_pts[marker_pts_surface_idx] * marker_pts_surface_weight[..., None]).sum(1)[:, :2] - marker_pts).max()}"
+        ), (
+            "max err:"
+            f" {np.abs((surface_pts[marker_pts_surface_idx] * marker_pts_surface_weight[..., None]).sum(1)[:, :2] - marker_pts).max()}"
+        )
 
         return marker_pts_surface_idx, marker_pts_surface_weight
 
@@ -362,9 +344,11 @@ class VisionTactileSensorUIPC():
         #     self.camera_intrinsic,
         #     self.camera_distort_coeffs,
         # )[0].squeeze(1)
-        #intrinsic_matrices = self.camera._data.intrinsic_matrices #todo intrinisc matrix is currently wrong
+        # intrinsic_matrices = self.camera._data.intrinsic_matrices #todo intrinisc matrix is currently wrong
         intrinsic_matrices = torch.tensor(self.camera_intrinsic, device="cuda:0")
-        vertices_img_plane = math_utils.project_points(torch.tensor(marker_pts, device="cuda:0", dtype=torch.float32), intrinsic_matrices)
+        vertices_img_plane = math_utils.project_points(
+            torch.tensor(marker_pts, device="cuda:0", dtype=torch.float32), intrinsic_matrices
+        )
         marker_uv = vertices_img_plane[0, :, :2].cpu().numpy()
         return marker_uv
 
@@ -385,8 +369,14 @@ class VisionTactileSensorUIPC():
         # draw markers in sim world
         draw.clear_points()
         curr_marker_pts_3d = curr_marker_pts.copy()
-        curr_marker_pts_3d = self.transform_camera_to_world_frame(torch.tensor(curr_marker_pts_3d, device="cuda:0", dtype=torch.float32)).cpu().numpy()
-        draw.draw_points(curr_marker_pts_3d, [(255,0,0,0.5)]*curr_marker_pts_3d.shape[0], [30]*curr_marker_pts_3d.shape[0])
+        curr_marker_pts_3d = (
+            self.transform_camera_to_world_frame(torch.tensor(curr_marker_pts_3d, device="cuda:0", dtype=torch.float32))
+            .cpu()
+            .numpy()
+        )
+        draw.draw_points(
+            curr_marker_pts_3d, [(255, 0, 0, 0.5)] * curr_marker_pts_3d.shape[0], [30] * curr_marker_pts_3d.shape[0]
+        )
 
         init_marker_uv = self.gen_marker_uv(init_marker_pts)
         curr_marker_uv = self.gen_marker_uv(curr_marker_pts)
@@ -402,9 +392,7 @@ class VisionTactileSensorUIPC():
         marker_flow = marker_flow[:, marker_mask]
 
         # post processing
-        no_lose_tracking_mask = (
-            np.random.rand(marker_flow.shape[1]) > self.marker_lose_tracking_probability
-        )
+        no_lose_tracking_mask = np.random.rand(marker_flow.shape[1]) > self.marker_lose_tracking_probability
         marker_flow = marker_flow[:, no_lose_tracking_mask, :]
         noise = np.random.randn(*marker_flow.shape) * self.marker_random_noise
         marker_flow += noise
@@ -412,21 +400,15 @@ class VisionTactileSensorUIPC():
         original_point_num = marker_flow.shape[1]
 
         if original_point_num >= self.num_markers:
-            chosen = np.random.choice(
-                original_point_num, self.num_markers, replace=False
-            )
+            chosen = np.random.choice(original_point_num, self.num_markers, replace=False)
             ret = marker_flow[:, chosen, ...]
         else:
-            ret = np.zeros(
-                (marker_flow.shape[0], self.num_markers, marker_flow.shape[-1])
-            )
+            ret = np.zeros((marker_flow.shape[0], self.num_markers, marker_flow.shape[-1]))
             ret[:, :original_point_num, :] = marker_flow.copy()
-            ret[:, original_point_num:, :] = ret[
-                :, original_point_num - 1 : original_point_num, :
-            ]
+            ret[:, original_point_num:, :] = ret[:, original_point_num - 1 : original_point_num, :]
 
         if self.normalize:
-            ret /= self.tactile_img_width/2
+            ret /= self.tactile_img_width / 2
             ret -= 1.0
 
         ret = torch.tensor(ret, device="cuda:0")

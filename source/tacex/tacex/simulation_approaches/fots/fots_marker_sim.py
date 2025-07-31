@@ -2,17 +2,18 @@ from __future__ import annotations
 
 import copy
 import math
+import numpy as np
+import torch
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 import cv2
-import numpy as np
 import omni
-import torch
 import torchvision.transforms.functional as F
+
+import isaaclab.utils.math as math_utils
 from isaaclab.sensors import FrameTransformer, FrameTransformerCfg
 from isaaclab.utils.math import euler_xyz_from_quat
-import isaaclab.utils.math as math_utils
 
 from ...gelsight_sensor import GelSightSensor
 from ..gelsight_simulator import GelSightSimulator
@@ -23,11 +24,13 @@ from .sim import MarkerMotion
 if TYPE_CHECKING:
     from .fots_marker_sim_cfg import FOTSMarkerSimulatorCfg
 
+
 class FOTSMarkerSimulator(GelSightSimulator):
     """Wraps around the FOTS simulation for marker simulation of GelSight sensors inside Isaac Sim.
 
     The class uses an instance of the gpu_taxim simulator for generating the deformed height map.
     """
+
     cfg: FOTSMarkerSimulatorCfg
 
     def __init__(self, sensor: GelSightSensor, cfg: FOTSMarkerSimulatorCfg):
@@ -57,33 +60,38 @@ class FOTSMarkerSimulator(GelSightSimulator):
         """
 
         # use Taxim for gpu based operations
-        if ((self.sensor.optical_simulator is not None)
-            and (type(self.sensor.optical_simulator) is TaximSimulator)):
+        if (self.sensor.optical_simulator is not None) and (type(self.sensor.optical_simulator) is TaximSimulator):
             self._taxim: TaximTorch = self.sensor.optical_simulator._taxim
         else:
-            raise RuntimeError("Currently FOTS simulation approach has to be used in combination with GPU-Taxim as optical-simulator.")
+            raise RuntimeError(
+                "Currently FOTS simulation approach has to be used in combination with GPU-Taxim as optical-simulator."
+            )
 
         # tactile rgb image without indentation
         bg_img = self._taxim.background_img.movedim(0, 2).cpu().numpy()
         self.marker_motion_sim = MarkerMotion(
             frame0_blur=bg_img,
             mm2pix=self.cfg.mm_to_pixel,
-            num_markers_col=self.cfg.marker_params.num_markers_col, #20, #11
-            num_markers_row=self.cfg.marker_params.num_markers_row, #15, #9
-            tactile_img_width=self.cfg.tactile_img_res[0], # default 480
-            tactile_img_height=self.cfg.tactile_img_res[1], # default 640
-            lamb=[0.00125,0.0021,0.0038], #[0.00125,0.00021,0.00038],
+            num_markers_col=self.cfg.marker_params.num_markers_col,  # 20, #11
+            num_markers_row=self.cfg.marker_params.num_markers_row,  # 15, #9
+            tactile_img_width=self.cfg.tactile_img_res[0],  # default 480
+            tactile_img_height=self.cfg.tactile_img_res[1],  # default 640
+            lamb=[0.00125, 0.0021, 0.0038],  # [0.00125,0.00021,0.00038],
             x0=self.cfg.marker_params.x0,
-            y0=self.cfg.marker_params.y0
+            y0=self.cfg.marker_params.y0,
         )
 
-        self.init_marker_pos = np.stack((self.marker_motion_sim.init_marker_x_pos, self.marker_motion_sim.init_marker_y_pos), axis=-1)
+        self.init_marker_pos = np.stack(
+            (self.marker_motion_sim.init_marker_x_pos, self.marker_motion_sim.init_marker_y_pos), axis=-1
+        )
         self.init_marker_pos = self.init_marker_pos.reshape(-1, 2)
         # if camera resolution is different than the tactile RGB res, scale img
         self.img_res = self.cfg.tactile_img_res
 
         # create buffers
-        self.marker_data = torch.zeros((self.sensor._num_envs, 2, self.cfg.marker_params.num_markers, 2), device=self._device)
+        self.marker_data = torch.zeros(
+            (self.sensor._num_envs, 2, self.cfg.marker_params.num_markers, 2), device=self._device
+        )
         """Marker flow data. Shape is [num_envs, 2, num_markers, 2]
 
         dim=1: [initial, current] marker positions
@@ -107,7 +115,9 @@ class FOTSMarkerSimulator(GelSightSimulator):
 
     def marker_motion_simulation(self):
         self._indentation_depth = self.sensor._indentation_depth
-        height_map = self.sensor._data.output["height_map"] # height map has shape (height, width) cause row-column format
+        height_map = self.sensor._data.output[
+            "height_map"
+        ]  # height map has shape (height, width) cause row-column format
 
         # up/downscale height map if camera res different than tactile img res
         if (height_map.shape[1], height_map.shape[2]) != (self.cfg.tactile_img_res[1], self.cfg.tactile_img_res[0]):
@@ -120,29 +130,31 @@ class FOTSMarkerSimulator(GelSightSimulator):
         height_map_shifted = self._taxim._TaximTorch__get_shifted_height_map(self._indentation_depth, height_map)
         deformed_gel, contact_mask = self._taxim._TaximTorch__compute_gel_pad_deformation(height_map_shifted)
         deformed_gel = deformed_gel.max() - deformed_gel
-        
+
         for env_id in range(deformed_gel.shape[0]):
             if self._indentation_depth[env_id].item() > 0.0:
                 # compute contact center based on contact_mask
                 contact_points = torch.argwhere(contact_mask[env_id])
                 mean = torch.mean(contact_points.float(), dim=0).cpu().numpy()
-                #print("should be pix ", mean[1], mean[0])
+                # print("should be pix ", mean[1], mean[0])
                 # rows = height = y values
                 # mean[0] = (mean[0]-self.marker_motion_sim.tactile_img_height/2)/self.marker_motion_sim.mm2pix
                 # # columns = width = x values
                 # mean[1] = (mean[1]-self.marker_motion_sim.tactile_img_width/2)/self.marker_motion_sim.mm2pix
 
-                #self.sensor._data.output["traj"][h].append([mean[1], mean[0], self.theta[h].cpu().numpy()])
+                # self.sensor._data.output["traj"][h].append([mean[1], mean[0], self.theta[h].cpu().numpy()])
                 print("should be ", mean[1], mean[0])
 
                 # rel position/orientation of obj to sensor
                 self.frame_transformer.update(dt=0.001)
-                rel_pos = self.frame_transformer.data.target_pos_source.cpu().numpy()[env_id, 0, :] # target_pos_source shape is (num_envs, num_targets, 3)
-                rel_pos *= 1000 # convert to mm
-                
+                rel_pos = self.frame_transformer.data.target_pos_source.cpu().numpy()[
+                    env_id, 0, :
+                ]  # target_pos_source shape is (num_envs, num_targets, 3)
+                rel_pos *= 1000  # convert to mm
+
                 # print("rel_pos in pix ", self.cfg.mm_to_pixel*rel_pos[0] + self.marker_motion_sim.tactile_img_width/2, self.cfg.mm_to_pixel*rel_pos[1] + self.marker_motion_sim.tactile_img_height/2)
                 print("rel_pos ", rel_pos)
-                rel_orient = self.frame_transformer.data.target_quat_source[env_id] #!-> only one target_frame
+                rel_orient = self.frame_transformer.data.target_quat_source[env_id]  #!-> only one target_frame
                 roll, pitch, yaw = euler_xyz_from_quat(rel_orient)
                 theta = yaw.cpu().numpy()
                 print("rel yaw in deg ", np.rad2deg(theta))
@@ -155,18 +167,18 @@ class FOTSMarkerSimulator(GelSightSimulator):
                 # traj takes [x,y,theta] values
                 # self.sensor._data.output["traj"][env_id].append([mean[1], mean[0], theta])
 
-                #todo vectorize with pytorch
+                # todo vectorize with pytorch
                 marker_x_pos, marker_y_pos = self.marker_motion_sim.marker_sim(
                     deformed_gel[env_id].cpu().numpy(),
                     contact_mask[env_id].cpu().numpy(),
-                    self.sensor._data.output["traj"][env_id]
+                    self.sensor._data.output["traj"][env_id],
                 )
             else:
                 self.sensor._data.output["traj"][env_id] = []
                 marker_x_pos = self.marker_motion_sim.init_marker_x_pos
                 marker_y_pos = self.marker_motion_sim.init_marker_y_pos
 
-            marker_pos = np.stack((marker_x_pos, marker_y_pos), axis=-1).reshape(-1,2)
+            marker_pos = np.stack((marker_x_pos, marker_y_pos), axis=-1).reshape(-1, 2)
             self.marker_data[env_id, 1] = torch.tensor(marker_pos, device=self._device)
 
         return self.marker_data
@@ -196,7 +208,7 @@ class FOTSMarkerSimulator(GelSightSimulator):
         self.init_marker_pos = (self.marker_motion_sim.init_marker_x_pos, self.marker_motion_sim.init_marker_y_pos)
 
     def _set_debug_vis_impl(self, debug_vis: bool):
-        """ Creates an USD attribute for the sensor asset, which can visualize the tactile image.
+        """Creates an USD attribute for the sensor asset, which can visualize the tactile image.
 
         Select the GelSight sensor case whose output you want to see in the Isaac Sim GUI,
         i.e. the `gelsight_mini_case` Xform (not the mesh!).
@@ -214,7 +226,7 @@ class FOTSMarkerSimulator(GelSightSimulator):
                 # dict of windows that show the simulated tactile images, if the attribute of the sensor asset is turned on
                 self._debug_windows = {}
                 self._debug_img_providers = {}
-                #todo check if we can make implementation more efficient than dict of dicts
+                # todo check if we can make implementation more efficient than dict of dicts
                 if "marker_motion" in self.sensor.cfg.data_types:
                     self._debug_windows = {}
                     self._debug_img_providers = {}
@@ -229,13 +241,19 @@ class FOTSMarkerSimulator(GelSightSimulator):
         for i, prim in enumerate(self.sensor._prim_view.prims):
             if "marker_motion" in self.sensor.cfg.data_types:
                 show_img = prim.GetAttribute("debug_marker_motion").Get()
-                if show_img==True:
+                if show_img == True:
                     if not (str(i) in self._debug_windows):
                         # create a window
-                        window = omni.ui.Window(self.sensor._prim_view.prim_paths[i] + "/fots_marker", height=self.cfg.tactile_img_res[1], width=self.cfg.tactile_img_res[0])
+                        window = omni.ui.Window(
+                            self.sensor._prim_view.prim_paths[i] + "/fots_marker",
+                            height=self.cfg.tactile_img_res[1],
+                            width=self.cfg.tactile_img_res[0],
+                        )
                         self._debug_windows[str(i)] = window
                         # create image provider
-                        self._debug_img_providers[str(i)] = omni.ui.ByteImageProvider() # default format omni.ui.TextureFormat.RGBA8_UNORM
+                        self._debug_img_providers[str(i)] = (
+                            omni.ui.ByteImageProvider()
+                        )  # default format omni.ui.TextureFormat.RGBA8_UNORM
 
                     marker_flow_i = self.sensor.data.output["marker_motion"][i]
                     frame = self._create_marker_img(marker_flow_i)
@@ -245,9 +263,12 @@ class FOTSMarkerSimulator(GelSightSimulator):
 
                     # create tactile rgb img with markers
                     if "tactile_rgb" in self.sensor.cfg.data_types:
-                        if self.sensor.cfg.optical_sim_cfg.tactile_img_res == self.sensor.cfg.marker_motion_sim_cfg.tactile_img_res:
-                            #todo add upscaling of tactile_rgb, if not same size
-                            tactile_rgb = self.sensor.data.output["tactile_rgb"][i].cpu().numpy()*255
+                        if (
+                            self.sensor.cfg.optical_sim_cfg.tactile_img_res
+                            == self.sensor.cfg.marker_motion_sim_cfg.tactile_img_res
+                        ):
+                            # todo add upscaling of tactile_rgb, if not same size
+                            tactile_rgb = self.sensor.data.output["tactile_rgb"][i].cpu().numpy() * 255
                             frame = tactile_rgb * np.dstack([frame.astype(np.float64) / 255] * 3)
 
                     frame = frame.astype(np.uint8)
@@ -256,9 +277,13 @@ class FOTSMarkerSimulator(GelSightSimulator):
                     height, width, channels = frame.shape
 
                     with self._debug_windows[str(i)].frame:
-                        #self._img_providers[str(i)].set_data_array(frame, [width, height, channels]) #method signature: (numpy.ndarray[numpy.uint8], (width, height))
-                        self._debug_img_providers[str(i)].set_bytes_data(frame.flatten().data, [width, height]) #method signature: (numpy.ndarray[numpy.uint8], (width, height))
-                        image = omni.ui.ImageWithProvider(self._debug_img_providers[str(i)]) #, fill_policy=omni.ui.IwpFillPolicy.IWP_PRESERVE_ASPECT_FIT -> fill_policy by default: specifying the width and height of the item causes the image to be scaled to that size
+                        # self._img_providers[str(i)].set_data_array(frame, [width, height, channels]) #method signature: (numpy.ndarray[numpy.uint8], (width, height))
+                        self._debug_img_providers[str(i)].set_bytes_data(
+                            frame.flatten().data, [width, height]
+                        )  # method signature: (numpy.ndarray[numpy.uint8], (width, height))
+                        image = omni.ui.ImageWithProvider(
+                            self._debug_img_providers[str(i)]
+                        )  # , fill_policy=omni.ui.IwpFillPolicy.IWP_PRESERVE_ASPECT_FIT -> fill_policy by default: specifying the width and height of the item causes the image to be scaled to that size
                 elif str(i) in self._debug_windows:
                     # remove window/img_provider from dictionary and destroy them
                     self._debug_windows.pop(str(i)).destroy()
@@ -293,32 +318,35 @@ class FOTSMarkerSimulator(GelSightSimulator):
             x_pos = int(current_marker_pos[marker_index][0])
             y_pos = int(current_marker_pos[marker_index][1])
 
-            if ((x_pos >= frame.shape[1])
-                or (x_pos < 0)
-                or (y_pos >= frame.shape[0])
-                or (y_pos < 0)):
+            if (x_pos >= frame.shape[1]) or (x_pos < 0) or (y_pos >= frame.shape[0]) or (y_pos < 0):
                 continue
             # cv2.circle(frame,(init_y_pos,init_x_pos), 6, (255,255,255), 1, lineType=8)
 
             pt1 = (init_x_pos, init_y_pos)
-            pt2 = (x_pos+arrow_scale*int(x_pos-init_x_pos), y_pos+arrow_scale*int(y_pos-init_y_pos))
+            pt2 = (x_pos + arrow_scale * int(x_pos - init_x_pos), y_pos + arrow_scale * int(y_pos - init_y_pos))
             # pt2 = (x_pos, y_pos)
-            cv2.arrowedLine(frame, pt1, pt2, color, 2,  tipLength=0.2)
+            cv2.arrowedLine(frame, pt1, pt2, color, 2, tipLength=0.2)
 
         # draw current contact point
         if len(self.sensor._data.output["traj"][0]) > 0:
             traj = self.sensor._data.output["traj"][0]
-            center_x = int(self.sensor._data.output["traj"][0][-1][0]*self.marker_motion_sim.mm2pix + self.marker_motion_sim.tactile_img_width/2)
-            center_y = int(self.sensor._data.output["traj"][0][-1][1]*self.marker_motion_sim.mm2pix + self.marker_motion_sim.tactile_img_height/2)
-            cv2.circle(frame,(center_x, center_y), 6, color, 1, lineType=8)
+            center_x = int(
+                self.sensor._data.output["traj"][0][-1][0] * self.marker_motion_sim.mm2pix
+                + self.marker_motion_sim.tactile_img_width / 2
+            )
+            center_y = int(
+                self.sensor._data.output["traj"][0][-1][1] * self.marker_motion_sim.mm2pix
+                + self.marker_motion_sim.tactile_img_height / 2
+            )
+            cv2.circle(frame, (center_x, center_y), 6, color, 1, lineType=8)
 
-        frame = cv2.normalize(frame, None, alpha = 0, beta = 255, norm_type = cv2.NORM_MINMAX, dtype = cv2.CV_32F)
-        frame = frame[:self.cfg.tactile_img_res[1], :self.cfg.tactile_img_res[0]]
+        frame = cv2.normalize(frame, None, alpha=0, beta=255, norm_type=cv2.NORM_MINMAX, dtype=cv2.CV_32F)
+        frame = frame[: self.cfg.tactile_img_res[1], : self.cfg.tactile_img_res[0]]
         return frame
 
-####
-# Visualization like ManiSkill-ViTac https://github.com/chuanyune/ManiSkill-ViTac2025/blob/a3d7df54bca9a2e57f34b37be3a3df36dc218915/Track_1/envs/tactile_sensor_sapienipc.py
-####
+    ####
+    # Visualization like ManiSkill-ViTac https://github.com/chuanyune/ManiSkill-ViTac2025/blob/a3d7df54bca9a2e57f34b37be3a3df36dc218915/Track_1/envs/tactile_sensor_sapienipc.py
+    ####
     def draw_markers(self, marker_uv, marker_size=3, img_w=240, img_h=320):
         marker_uv_compensated = marker_uv + np.array([0.5, 0.5])
 
@@ -327,25 +355,16 @@ class FOTSMarkerSimulator(GelSightSimulator):
             uv = marker_uv_compensated[i]
             u = uv[0] + 12
             v = uv[1] + 12
-            patch_id_u = math.floor(
-                (u - math.floor(u)) * self.patch_array_dict["super_resolution_ratio"]
-            )
-            patch_id_v = math.floor(
-                (v - math.floor(v)) * self.patch_array_dict["super_resolution_ratio"]
-            )
+            patch_id_u = math.floor((u - math.floor(u)) * self.patch_array_dict["super_resolution_ratio"])
+            patch_id_v = math.floor((v - math.floor(v)) * self.patch_array_dict["super_resolution_ratio"])
             patch_id_w = math.floor(
                 (marker_size - self.patch_array_dict["base_circle_radius"])
                 * self.patch_array_dict["super_resolution_ratio"]
             )
-            current_patch = self.patch_array_dict["patch_array"][
-                patch_id_u, patch_id_v, patch_id_w
-            ]
+            current_patch = self.patch_array_dict["patch_array"][patch_id_u, patch_id_v, patch_id_w]
             patch_coord_u = math.floor(u) - 6
             patch_coord_v = math.floor(v) - 6
-            if (
-                marker_image.shape[1] - 12 > patch_coord_u >= 0
-                and marker_image.shape[0] - 12 > patch_coord_v >= 0
-            ):
+            if marker_image.shape[1] - 12 > patch_coord_u >= 0 and marker_image.shape[0] - 12 > patch_coord_v >= 0:
                 marker_image[
                     patch_coord_v : patch_coord_v + 12,
                     patch_coord_u : patch_coord_u + 12,
@@ -353,6 +372,7 @@ class FOTSMarkerSimulator(GelSightSimulator):
         marker_image = marker_image[12:-12, 12:-12]
 
         return marker_image
+
 
 def generate_patch_array(super_resolution_ratio=10):
     circle_radius = 3

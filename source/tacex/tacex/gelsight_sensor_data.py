@@ -1,7 +1,6 @@
+import numpy as np
 from dataclasses import MISSING, dataclass
 from typing import TYPE_CHECKING, Any, Dict, List, Tuple, Union
-
-import numpy as np
 
 
 @dataclass

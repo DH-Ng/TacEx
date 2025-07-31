@@ -6,23 +6,28 @@
 from __future__ import annotations
 
 import math
+import torch
 from typing import Dict
+
+from isaacsim.core.utils.stage import get_current_stage
+from isaacsim.core.utils.torch.transformations import tf_combine, tf_inverse, tf_vector
+from pxr import UsdGeom
+
+# from tactile_sim import GsMiniSensorCfg, GsMiniSensor
+from tacex_assets import TACEX_ASSETS_DATA_DIR
+from tacex_assets.robots.franka.franka_gsmini_single_adapter_rigid import (
+    FRANKA_PANDA_ARM_GSMINI_SINGLE_ADAPTER_HIGH_PD_CFG,
+)
+from tacex_assets.sensors.gelsight_mini.gelsight_mini_cfg import GelSightMiniCfg
+from tacex_tasks.utils import DirectLiveVisualizer
 
 # for Domain Randomization
 import isaaclab.envs.mdp as mdp
 import isaaclab.sim as sim_utils
 import isaaclab.utils.math as lab_math
 import isaaclab.utils.math as math_utils
-import torch
 from isaaclab.actuators.actuator_cfg import ImplicitActuatorCfg
-from isaaclab.assets import (
-    Articulation,
-    ArticulationCfg,
-    AssetBase,
-    AssetBaseCfg,
-    RigidObject,
-    RigidObjectCfg,
-)
+from isaaclab.assets import Articulation, ArticulationCfg, AssetBase, AssetBaseCfg, RigidObject, RigidObjectCfg
 from isaaclab.controllers.differential_ik import DifferentialIKController
 from isaaclab.controllers.differential_ik_cfg import DifferentialIKControllerCfg
 from isaaclab.envs import DirectRLEnv, DirectRLEnvCfg, ViewerCfg
@@ -54,17 +59,6 @@ from isaaclab.utils.noise import (
     UniformNoiseCfg,
     gaussian_noise,
 )
-from isaacsim.core.utils.stage import get_current_stage
-from isaacsim.core.utils.torch.transformations import tf_combine, tf_inverse, tf_vector
-from pxr import UsdGeom
-
-# from tactile_sim import GsMiniSensorCfg, GsMiniSensor
-from tacex_assets import TACEX_ASSETS_DATA_DIR
-from tacex_assets.robots.franka.franka_gsmini_single_adapter_rigid import (
-    FRANKA_PANDA_ARM_GSMINI_SINGLE_ADAPTER_HIGH_PD_CFG,
-)
-from tacex_assets.sensors.gelsight_mini.gelsight_mini_cfg import GelSightMiniCfg
-from tacex_tasks.utils import DirectLiveVisualizer
 
 from tacex import GelSightSensor
 from tacex.simulation_approaches.fots import FOTSMarkerSimulator, FOTSMarkerSimulatorCfg
@@ -74,11 +68,8 @@ from tacex.simulation_approaches.gpu_taxim import TaximSimulatorCfg
 # from isaaclab.envs.mdp.actions.actions_cfg import DifferentialInverseKinematicsActionCfg
 
 
-
-
 from isaaclab.markers import POSITION_GOAL_MARKER_CFG  # isort: skip
 from isaaclab.markers import CUBOID_MARKER_CFG  # isort: skip
-
 
 
 class CustomEnvWindow(BaseEnvWindow):
@@ -100,13 +91,14 @@ class CustomEnvWindow(BaseEnvWindow):
                     # add command manager visualization
                     self._create_debug_vis_ui_element("targets", self.env)
 
+
 @configclass
 class EventCfg:
     robot_physics_material = EventTerm(
         func=mdp.randomize_rigid_body_material,
         # workaround for having compliant properties on gelpad:
         # - we set compliant contact as default material
-        #- but overwrite all the other materials (ball, sensor case, plate) by using the
+        # - but overwrite all the other materials (ball, sensor case, plate) by using the
         # randomization functions here -> they create new materials without compliant contact
         mode="reset",
         params={
@@ -183,6 +175,8 @@ class EventCfg:
             "num_buckets": 250,
         },
     )
+
+
 @configclass
 class BallRollingTactileRGBCfg(DirectRLEnvCfg):
 
@@ -204,13 +198,13 @@ class BallRollingTactileRGBCfg(DirectRLEnvCfg):
     decimation = 1
     # simulation
     sim: SimulationCfg = SimulationCfg(
-        dt=1/60,
+        dt=1 / 60,
         render_interval=decimation,
-        #device="cpu",
+        # device="cpu",
         physx=PhysxCfg(
-            enable_ccd=True, # needed for more stable ball_rolling
+            enable_ccd=True,  # needed for more stable ball_rolling
             # bounce_threshold_velocity=10000,
-            gpu_max_rigid_contact_count=2 ** 23,
+            gpu_max_rigid_contact_count=2**23,
         ),
         physics_material=sim_utils.RigidBodyMaterialCfg(
             friction_combine_mode="multiply",
@@ -274,9 +268,9 @@ class BallRollingTactileRGBCfg(DirectRLEnvCfg):
                 max_angular_velocity=1000.0,
                 max_linear_velocity=1000.0,
                 max_depenetration_velocity=5.0,
-                kinematic_enabled=True
-            )
-        )
+                kinematic_enabled=True,
+            ),
+        ),
     )
 
     marker_cfg = FRAME_MARKER_CFG.copy()
@@ -291,9 +285,9 @@ class BallRollingTactileRGBCfg(DirectRLEnvCfg):
                 prim_path="/World/envs/env_.*/Robot/panda_hand",
                 name="end_effector",
                 offset=OffsetCfg(
-                    pos=(0.0, 0.0, 0.131), # 0ffset from panda hand frame origin to gelpad top
-                    rot=(0.0, 0.0, 1.0, 0.0)
-                    #rot=(0, 0.92388, -0.38268, 0) # our panda hand asset has rotation from (180,0,-45) -> we substract 180 for defining the rotation limits
+                    pos=(0.0, 0.0, 0.131),  # 0ffset from panda hand frame origin to gelpad top
+                    rot=(0.0, 0.0, 1.0, 0.0),
+                    # rot=(0, 0.92388, -0.38268, 0) # our panda hand asset has rotation from (180,0,-45) -> we substract 180 for defining the rotation limits
                 ),
             ),
         ],
@@ -301,18 +295,18 @@ class BallRollingTactileRGBCfg(DirectRLEnvCfg):
 
     # rigid body ball
     object: RigidObjectCfg = RigidObjectCfg(
-        prim_path= "/World/envs/env_.*/rigid_ball",
-        init_state=RigidObjectCfg.InitialStateCfg(pos=(0.25, -0.35, 0.0051+0.0025)),
+        prim_path="/World/envs/env_.*/rigid_ball",
+        init_state=RigidObjectCfg.InitialStateCfg(pos=(0.25, -0.35, 0.0051 + 0.0025)),
         spawn=sim_utils.UsdFileCfg(
             usd_path=f"{TACEX_ASSETS_DATA_DIR}/Props/ball_wood.usd",
-            #scale=(2, 1, 0.6),
+            # scale=(2, 1, 0.6),
             rigid_props=RigidBodyPropertiesCfg(
-                    solver_position_iteration_count=16,
-                    solver_velocity_iteration_count=1,
-                    max_angular_velocity=1000.0,
-                    max_linear_velocity=1000.0,
-                    max_depenetration_velocity=5.0,
-                    disable_gravity=False,
+                solver_position_iteration_count=16,
+                solver_velocity_iteration_count=1,
+                max_angular_velocity=1000.0,
+                max_linear_velocity=1000.0,
+                max_depenetration_velocity=5.0,
+                disable_gravity=False,
             ),
         ),
     )
@@ -320,25 +314,27 @@ class BallRollingTactileRGBCfg(DirectRLEnvCfg):
     # sensors
     gsmini = GelSightMiniCfg(
         prim_path="/World/envs/env_.*/Robot/gelsight_mini_case",
-        sensor_camera_cfg = GelSightMiniCfg.SensorCameraCfg(
-            prim_path_appendix = "/Camera",
-            update_period= 0,
-            resolution = (32, 32), #(48, 64),
-            data_types = ["depth"],
-            clipping_range = (0.015, 0.029), #(0.024, 0.029), make min value little bit smaller, due to penetration issues
+        sensor_camera_cfg=GelSightMiniCfg.SensorCameraCfg(
+            prim_path_appendix="/Camera",
+            update_period=0,
+            resolution=(32, 32),  # (48, 64),
+            data_types=["depth"],
+            clipping_range=(
+                0.015,
+                0.029,
+            ),  # (0.024, 0.029), make min value little bit smaller, due to penetration issues
         ),
-        device = "cuda",
-        debug_vis=True, # for being able to see sensor output in the gui
+        device="cuda",
+        debug_vis=True,  # for being able to see sensor output in the gui
         # update Taxim cfg
         optical_sim_cfg=TaximSimulatorCfg(
-            calib_folder_path= f"{TACEX_ASSETS_DATA_DIR}/Sensors/GelSight_Mini/calibs/480x640",
-            gelpad_height= GelSightMiniCfg().gelpad_dimensions.height,
+            calib_folder_path=f"{TACEX_ASSETS_DATA_DIR}/Sensors/GelSight_Mini/calibs/480x640",
+            gelpad_height=GelSightMiniCfg().gelpad_dimensions.height,
             gelpad_to_camera_min_distance=0.024,
             with_shadow=False,
-            tactile_img_res = (32, 32),
-            device = "cuda",
+            tactile_img_res=(32, 32),
+            device="cuda",
         ),
-
         # update FOTS cfg
         marker_motion_sim_cfg=None,
         # marker_motion_sim_cfg=FOTSMarkerSimulatorCfg(
@@ -364,12 +360,12 @@ class BallRollingTactileRGBCfg(DirectRLEnvCfg):
         #         debug_vis=False,
         #     )
         # ),
-        data_types=["tactile_rgb"], #marker_motion
+        data_types=["tactile_rgb"],  # marker_motion
     )
 
     # noise models
     action_noise_model: NoiseModelCfg = NoiseModelCfg(
-        noise_cfg = UniformNoiseCfg(n_min=-0.001, n_max=0.001, operation="add")
+        noise_cfg=UniformNoiseCfg(n_min=-0.001, n_max=0.001, operation="add")
     )
     # observation_noise_model =
     # at every time-step add gaussian noise + bias. The bias is a gaussian sampled at reset
@@ -377,23 +373,32 @@ class BallRollingTactileRGBCfg(DirectRLEnvCfg):
     #   noise_cfg=GaussianNoiseCfg(mean=0.0, std=0.002, operation="add"),
     #   bias_noise_cfg=GaussianNoiseCfg(mean=0.0, std=0.0001, operation="abs"),
     # )
-    #-- curently doesnt work with dictionary observation
+    # -- curently doesnt work with dictionary observation
     gaussian_noise_cfg: GaussianNoiseCfg = GaussianNoiseCfg(mean=0.0, std=0.002, operation="add")
 
-    #MARK: reward cfg
+    # MARK: reward cfg
     reward_cfg = {
         "at_obj_reward": {"weight": 0.25, "min_depth": 0.5, "max_depth": 4.0},
         "centering_error": {"weight": -0.05},
         "off_the_ground_penalty": {"weight": -15, "max_height": 0.025},
-        "height_reward": {"weight": 0.15, "std": 0.4901,  "alpha": 0.00067, "target_height_cm": 1.225, "min_height": 0.002}, # target height: 1cm + 0.25cm - 0.125cm
+        "height_reward": {
+            "weight": 0.15,
+            "std": 0.4901,
+            "alpha": 0.00067,
+            "target_height_cm": 1.225,
+            "min_height": 0.002,
+        },  # target height: 1cm + 0.25cm - 0.125cm
         "orient_reward": {"weight": -1.25},
         # for solving the task
         "ee_goal_tracking": {"weight": 0.75, "std": 0.2, "std_fine": 0.36},
-        "obj_goal_tracking": {"weight": 0.75, "std": 0.6}, #0.2
+        "obj_goal_tracking": {"weight": 0.75, "std": 0.6},  # 0.2
         # "obj_goal_tracking": {"weight": -0.0108, "w": 0.0482, "v": 0.7870, "alpha": 0.0083},
         "obj_goal_fine_tracking": {"weight": 1.25, "std": 0.2},
         "obj_goal_super_fine_tracking": {"weight": 1.75, "std": 0.08},
-        "success_reward": {"weight": 5.0, "threshold": 0.005}, # 0.0025 we count it as a sucess when dist obj <-> goal is less than the threshold
+        "success_reward": {
+            "weight": 5.0,
+            "threshold": 0.005,
+        },  # 0.0025 we count it as a sucess when dist obj <-> goal is less than the threshold
         # penalties for nice behavior
         "action_rate_penalty": {"weight": -1e-4},
         "joint_vel_penalty": {"weight": -1e-4},
@@ -401,19 +406,19 @@ class BallRollingTactileRGBCfg(DirectRLEnvCfg):
 
     # goal_randomization_range_x = [-0.25, 0.25] #[-0.25, 0.25]
     # goal_randomization_range_y = [-0.35, 0.35] #[-0.35, 0.35]
-    goal_randomization_range_x = [0.0, 0.5] #[-0.25, 0.25]
-    goal_randomization_range_y = [0.0, 0.7] #[-0.35, 0.35]
+    goal_randomization_range_x = [0.0, 0.5]  # [-0.25, 0.25]
+    goal_randomization_range_y = [0.0, 0.7]  # [-0.35, 0.35]
     # env
-    episode_length_s = 8.3333*2 # 1000 timesteps per episode (dt = 1/60 -> 1500*(1/60)=8.3333*3)
-    action_space = 6 # we use relative task_space actions: (dx, dy, dz, droll, dpitch) -> dyaw is ommitted
+    episode_length_s = 8.3333 * 2  # 1000 timesteps per episode (dt = 1/60 -> 1500*(1/60)=8.3333*3)
+    action_space = 6  # we use relative task_space actions: (dx, dy, dz, droll, dpitch) -> dyaw is ommitted
     observation_space = {
-        "proprio_obs": 14, #16, # 3 for ee pos, 2 for orient (roll, pitch), 2 for init goal-pos (x,y), 5 for actions
-        "vision_obs": [32,32,3], # from tactile sensor
+        "proprio_obs": 14,  # 16, # 3 for ee pos, 2 for orient (roll, pitch), 2 for init goal-pos (x,y), 5 for actions
+        "vision_obs": [32, 32, 3],  # from tactile sensor
     }
     state_space = 0
-    action_scale = 0.05 # [cm]
+    action_scale = 0.05  # [cm]
 
-    ball_radius = 0.005 # don't change, because rewards (e.g. height reward) are tuned for this ball size
+    ball_radius = 0.005  # don't change, because rewards (e.g. height reward) are tuned for this ball size
 
     x_bounds = (0.2, 0.8)
     y_bounds = (-0.4, 0.4)
@@ -425,21 +430,22 @@ class BallRollingTactileRGBCfg(DirectRLEnvCfg):
             "min": 0.00,
             "max": 0.00,
             "num_levels": 10,
-            "threshold": 550.0, # if episode reward is this high, then go to next level
+            "threshold": 550.0,  # if episode reward is this high, then go to next level
         },
         "action_rate_penalty": {
             "min": 0,
             "max": 1e-5,
             "num_levels": 30,
-            "threshold": 5500.0, #
+            "threshold": 5500.0,  #
         },
         "joint_vel_penalty": {
             "min": 0,
             "max": 1e-5,
             "num_levels": 30,
-            "threshold": 5500.0, #
-        }
+            "threshold": 5500.0,  #
+        },
     }
+
 
 class BallRollingTactileRGBEnv(DirectRLEnv):
     """RL env in which the robot has to push/roll a ball to a goal position.
@@ -447,6 +453,7 @@ class BallRollingTactileRGBEnv(DirectRLEnv):
     This base env uses (absolute) joint positions.
     Absolute joint pos and vel are used for the observations.
     """
+
     # pre-physics step calls
     #   |-- _pre_physics_step(action)
     #   |-- _apply_action()
@@ -494,16 +501,18 @@ class BallRollingTactileRGBEnv(DirectRLEnv):
 
         self._goal_pos_b = torch.zeros((self.num_envs, 3), device=self.device)
         # make height of goal pos fixed
-        self._goal_pos_b[:, 2] = self.cfg.ball_radius*2 + 0.0025 # plate height above ground = 0.0025
-        self._goal_orient = torch.zeros((self.num_envs, 4), device=self.device) # goal orient is [0.70711,0,0,0.70711], i.e. upright ee (x=0, y=0, z=90°)
+        self._goal_pos_b[:, 2] = self.cfg.ball_radius * 2 + 0.0025  # plate height above ground = 0.0025
+        self._goal_orient = torch.zeros(
+            (self.num_envs, 4), device=self.device
+        )  # goal orient is [0.70711,0,0,0.70711], i.e. upright ee (x=0, y=0, z=90°)
         self._goal_orient[:, 0] = 0.70711
         self._goal_orient[:, 3] = 0.70711
 
-        self._time_out  = torch.zeros(self.num_envs, device=self.device, dtype=torch.bool)
+        self._time_out = torch.zeros(self.num_envs, device=self.device, dtype=torch.bool)
 
-        self.object_ee_distance = torch.zeros((self.num_envs,1), device=self.device)
-        self.ee_goal_distance = torch.zeros((self.num_envs,1), device=self.device)
-        self.obj_goal_distance = torch.zeros((self.num_envs,1), device=self.device)
+        self.object_ee_distance = torch.zeros((self.num_envs, 1), device=self.device)
+        self.ee_goal_distance = torch.zeros((self.num_envs, 1), device=self.device)
+        self.obj_goal_distance = torch.zeros((self.num_envs, 1), device=self.device)
 
         # for training curriculum
         self.curriculum_levels = {
@@ -515,38 +524,52 @@ class BallRollingTactileRGBEnv(DirectRLEnv):
             self.cfg.curriculum_cfg["goal_randomization_range"]["min"],
             self.cfg.curriculum_cfg["goal_randomization_range"]["max"],
             self.cfg.curriculum_cfg["goal_randomization_range"]["num_levels"],
-            device=self.device
+            device=self.device,
         )
         self._action_rate_penalty_curr = torch.linspace(
             self.cfg.curriculum_cfg["action_rate_penalty"]["min"],
             self.cfg.curriculum_cfg["action_rate_penalty"]["max"],
             self.cfg.curriculum_cfg["action_rate_penalty"]["num_levels"],
-            device=self.device
+            device=self.device,
         )
         self._joint_vel_penalty_curr = torch.linspace(
             self.cfg.curriculum_cfg["joint_vel_penalty"]["min"],
             self.cfg.curriculum_cfg["joint_vel_penalty"]["max"],
             self.cfg.curriculum_cfg["joint_vel_penalty"]["num_levels"],
-            device=self.device
+            device=self.device,
         )
         # for the curr. level conditions
         self._total_episode_rew = torch.zeros(self.num_envs, device=self.device)
 
-
         if self.cfg.debug_vis:
             # add plots
             self.visualizers = {
-                "Actions": DirectLiveVisualizer(self.cfg.debug_vis, self.num_envs, self._window, visualizer_name="Actions"),
-                "Observations": DirectLiveVisualizer(self.cfg.debug_vis, self.num_envs, self._window, visualizer_name="Observations"),
-                "Rewards": DirectLiveVisualizer(self.cfg.debug_vis, self.num_envs, self._window, visualizer_name="Rewards"),
-                "Metrics": DirectLiveVisualizer(self.cfg.debug_vis, self.num_envs, self._window, visualizer_name="Metrics"),
+                "Actions": DirectLiveVisualizer(
+                    self.cfg.debug_vis, self.num_envs, self._window, visualizer_name="Actions"
+                ),
+                "Observations": DirectLiveVisualizer(
+                    self.cfg.debug_vis, self.num_envs, self._window, visualizer_name="Observations"
+                ),
+                "Rewards": DirectLiveVisualizer(
+                    self.cfg.debug_vis, self.num_envs, self._window, visualizer_name="Rewards"
+                ),
+                "Metrics": DirectLiveVisualizer(
+                    self.cfg.debug_vis, self.num_envs, self._window, visualizer_name="Metrics"
+                ),
             }
             self.visualizers["Actions"].terms["actions"] = self.actions
 
-            self.visualizers["Observations"].terms["ee_pos"] = torch.zeros((self.num_envs,3))
-            self.visualizers["Observations"].terms["ee_rot"] = torch.zeros((self.num_envs,3))
-            self.visualizers["Observations"].terms["goal"] = torch.zeros((self.num_envs,2))
-            self.visualizers["Observations"].terms["sensor_output"] = torch.zeros((self.num_envs, self.cfg.observation_space["vision_obs"][0], self.cfg.observation_space["vision_obs"][1],self.cfg.observation_space["vision_obs"][2]))
+            self.visualizers["Observations"].terms["ee_pos"] = torch.zeros((self.num_envs, 3))
+            self.visualizers["Observations"].terms["ee_rot"] = torch.zeros((self.num_envs, 3))
+            self.visualizers["Observations"].terms["goal"] = torch.zeros((self.num_envs, 2))
+            self.visualizers["Observations"].terms["sensor_output"] = torch.zeros(
+                (
+                    self.num_envs,
+                    self.cfg.observation_space["vision_obs"][0],
+                    self.cfg.observation_space["vision_obs"][1],
+                    self.cfg.observation_space["vision_obs"][2],
+                )
+            )
 
             self.visualizers["Rewards"].terms["rewards"] = torch.zeros((self.num_envs, 11))
             self.visualizers["Rewards"].terms_names["rewards"] = [
@@ -561,7 +584,7 @@ class BallRollingTactileRGBEnv(DirectRLEnv):
                 "obj_goal_super_fine_tracking",
                 "success_reward",
                 "too_far_penalty",
-                "total"
+                "total",
             ]
 
             self.visualizers["Metrics"].terms["ee_height"] = torch.zeros(self.num_envs)
@@ -577,7 +600,7 @@ class BallRollingTactileRGBEnv(DirectRLEnv):
         # add handle for debug visualization (this is set to a valid handle inside set_debug_vis)
         self.set_debug_vis(self.cfg.debug_vis)
 
-    #MARK: setup
+    # MARK: setup
     def _setup_scene(self):
         self._robot = Articulation(self.cfg.robot)
         self.scene.articulations["robot"] = self._robot
@@ -604,19 +627,16 @@ class BallRollingTactileRGBEnv(DirectRLEnv):
             init_state=AssetBaseCfg.InitialStateCfg(pos=(0, 0, 0)),
             spawn=sim_utils.GroundPlaneCfg(
                 physics_material=sim_utils.RigidBodyMaterialCfg(
-                friction_combine_mode="multiply",
-                restitution_combine_mode="multiply",
-                static_friction=1.0,
-                dynamic_friction=1.0,
-                restitution=0.0,
+                    friction_combine_mode="multiply",
+                    restitution_combine_mode="multiply",
+                    static_friction=1.0,
+                    dynamic_friction=1.0,
+                    restitution=0.0,
                 ),
             ),
         )
         ground.spawn.func(
-            ground.prim_path,
-            ground.spawn,
-            translation=ground.init_state.pos,
-            orientation=ground.init_state.rot
+            ground.prim_path, ground.spawn, translation=ground.init_state.pos, orientation=ground.init_state.rot
         )
 
         # add lights
@@ -637,14 +657,13 @@ class BallRollingTactileRGBEnv(DirectRLEnv):
         # )
         # sim_utils.bind_physics_material("/World/envs/env_.*/Robot/gelsight_mini_gelpad", "/World/Materials/gelpad")
 
-
-    #MARK: pre-physics step calls
+    # MARK: pre-physics step calls
 
     def _pre_physics_step(self, actions: torch.Tensor):
         self.prev_actions[:] = self.actions
         self.actions[:] = actions.clamp(-1.0, 1.0)
         #! preprocess the action and turn it into IK action
-        self.processed_actions[:, :] = self.actions*self.cfg.action_scale
+        self.processed_actions[:, :] = self.actions * self.cfg.action_scale
 
         # obtain ee positions and orientation w.r.t root (=base) frame
         ee_pos_curr_b, ee_quat_curr_b = self._compute_frame_pose()
@@ -667,37 +686,29 @@ class BallRollingTactileRGBEnv(DirectRLEnv):
 
     # post-physics step calls
 
-    #MARK: dones
-    def _get_dones(self) -> tuple[torch.Tensor, torch.Tensor]: # which environment is done
+    # MARK: dones
+    def _get_dones(self) -> tuple[torch.Tensor, torch.Tensor]:  # which environment is done
         obj_pos = self.object.data.root_link_pos_w - self.scene.env_origins
         out_of_bounds_x = (obj_pos[:, 0] < self.cfg.x_bounds[0]) | (obj_pos[:, 0] > self.cfg.x_bounds[1])
         out_of_bounds_y = (obj_pos[:, 1] < self.cfg.y_bounds[0]) | (obj_pos[:, 1] > self.cfg.y_bounds[1])
 
-        obj_goal_distance = torch.norm(self._goal_pos_b[:, :2] - obj_pos[:,:2], dim=1)
+        obj_goal_distance = torch.norm(self._goal_pos_b[:, :2] - obj_pos[:, :2], dim=1)
         obj_too_far_away = obj_goal_distance > 0.75
 
-        ee_frame_pos = self._ee_frame.data.target_pos_w[..., 0, :] - self.scene.env_origins # end-effector positions in world frame: (num_envs, 3)
+        ee_frame_pos = (
+            self._ee_frame.data.target_pos_w[..., 0, :] - self.scene.env_origins
+        )  # end-effector positions in world frame: (num_envs, 3)
         ee_too_far_away = torch.norm(obj_pos - ee_frame_pos, dim=1) > self.cfg.too_far_away_threshold
 
         # reset when ee orient is too large
         ee_frame_orient = euler_xyz_from_quat(self._ee_frame.data.target_quat_source[..., 0, :])
         x = wrap_to_pi(ee_frame_orient[0])
         y = wrap_to_pi(ee_frame_orient[1])
-        orient_cond = (
-            (torch.abs(x) > math.pi/4)
-            | (torch.abs(y) > math.pi/4)
-        )
+        orient_cond = (torch.abs(x) > math.pi / 4) | (torch.abs(y) > math.pi / 4)
 
         min_height = ee_frame_pos[:, 2] < self.cfg.min_height_threshold
 
-        reset_cond = (
-            out_of_bounds_x
-            | out_of_bounds_y
-            | obj_too_far_away
-            | ee_too_far_away
-            | orient_cond
-            | min_height
-        )
+        reset_cond = out_of_bounds_x | out_of_bounds_y | obj_too_far_away | ee_too_far_away | orient_cond | min_height
 
         # #! new goal position, if sucess
         # success_env = (obj_goal_distance < self.cfg.success_reward["threshold"]).nonzero(as_tuple=False).squeeze(-1)
@@ -711,10 +722,11 @@ class BallRollingTactileRGBEnv(DirectRLEnv):
         #     # reset episode length
         #     self.episode_length_buf[success_env] = 0
 
-        self._time_out = self.episode_length_buf >= self.max_episode_length - 1 # episode length limit
+        self._time_out = self.episode_length_buf >= self.max_episode_length - 1  # episode length limit
 
         return reset_cond, self._time_out
-    #MARK: reset
+
+    # MARK: reset
     def _reset_idx(self, env_ids: torch.Tensor | None):
         # # log task metrics
         # self.extras["log"] = {
@@ -725,21 +737,18 @@ class BallRollingTactileRGBEnv(DirectRLEnv):
 
         # don't do full reset for env where time_out, but robot still in contact with ball
         in_contact = self.gsmini.indentation_depth > 0
-        partial_reset_env_ids = (in_contact & self._time_out)
+        partial_reset_env_ids = in_contact & self._time_out
 
-        full_reset_env_ids = (self.reset_buf & torch.logical_not(partial_reset_env_ids)).nonzero(as_tuple=False).squeeze(-1)
+        full_reset_env_ids = (
+            (self.reset_buf & torch.logical_not(partial_reset_env_ids)).nonzero(as_tuple=False).squeeze(-1)
+        )
 
         # reset buffers
         super()._reset_idx(env_ids)
 
         # spawn obj at initial position
         obj_pos = self.object.data.default_root_state[full_reset_env_ids]
-        obj_pos[:, :2] += sample_uniform(
-            -0.00025,
-            0.00025,
-            (len(full_reset_env_ids), 2),
-            self.device
-        )
+        obj_pos[:, :2] += sample_uniform(-0.00025, 0.00025, (len(full_reset_env_ids), 2), self.device)
         obj_pos[:, :3] += self.scene.env_origins[full_reset_env_ids]
         self.object.write_root_state_to_sim(obj_pos, env_ids=full_reset_env_ids)
 
@@ -752,16 +761,20 @@ class BallRollingTactileRGBEnv(DirectRLEnv):
         # set commands: random target position
         self._goal_pos_b[env_ids, :2] = self.object.data.default_root_state[env_ids, :2]
         self._goal_pos_b[env_ids, 0] += sample_uniform(
-            self.cfg.goal_randomization_range_x[0] - self._goal_random_curr[self.curriculum_levels["goal_randomization_range"]],
-            self.cfg.goal_randomization_range_x[1] + self._goal_random_curr[self.curriculum_levels["goal_randomization_range"]],
+            self.cfg.goal_randomization_range_x[0]
+            - self._goal_random_curr[self.curriculum_levels["goal_randomization_range"]],
+            self.cfg.goal_randomization_range_x[1]
+            + self._goal_random_curr[self.curriculum_levels["goal_randomization_range"]],
             (len(env_ids)),
-            self.device
+            self.device,
         )
         self._goal_pos_b[env_ids, 1] += sample_uniform(
-            self.cfg.goal_randomization_range_y[0] - self._goal_random_curr[self.curriculum_levels["goal_randomization_range"]],
-            self.cfg.goal_randomization_range_y[1] + self._goal_random_curr[self.curriculum_levels["goal_randomization_range"]],
+            self.cfg.goal_randomization_range_y[0]
+            - self._goal_random_curr[self.curriculum_levels["goal_randomization_range"]],
+            self.cfg.goal_randomization_range_y[1]
+            + self._goal_random_curr[self.curriculum_levels["goal_randomization_range"]],
             (len(env_ids)),
-            self.device
+            self.device,
         )
 
         self.prev_actions[env_ids] = 0.0
@@ -771,23 +784,16 @@ class BallRollingTactileRGBEnv(DirectRLEnv):
         # reset bufferes used for curriculum learning
         self._total_episode_rew[env_ids] = 0.0
 
-    #MARK: rewards
+    # MARK: rewards
     def _get_rewards(self) -> torch.Tensor:
-        #- Reward the agent for reaching the object using tanh-kernel.
+        # - Reward the agent for reaching the object using tanh-kernel.
         obj_pos_b = self.object.data.root_link_pos_w - self.scene.env_origins
         ee_frame_pos_b, ee_frame_orient_b = self._compute_frame_pose()
 
-        (
-            self.object_ee_distance,
-            self.ee_goal_distance,
-            self.ee_orient_error,
-            self.obj_goal_distance
-        ) = _compute_intermediate_values(
-            obj_pos_b,
-            ee_frame_pos_b,
-            ee_frame_orient_b,
-            self._goal_pos_b,
-            self._goal_orient
+        (self.object_ee_distance, self.ee_goal_distance, self.ee_orient_error, self.obj_goal_distance) = (
+            _compute_intermediate_values(
+                obj_pos_b, ee_frame_pos_b, ee_frame_orient_b, self._goal_pos_b, self._goal_orient
+            )
         )
 
         (
@@ -802,7 +808,7 @@ class BallRollingTactileRGBEnv(DirectRLEnv):
             success_reward,
             action_rate_penalty,
             joint_vel_penalty,
-            full_reward
+            full_reward,
         ) = _compute_rewards(
             self.cfg.reward_cfg["at_obj_reward"],
             self.cfg.reward_cfg["centering_error"],
@@ -825,7 +831,7 @@ class BallRollingTactileRGBEnv(DirectRLEnv):
             self.gsmini.indentation_depth,
             self.ee_goal_distance,
             self.ee_orient_error,
-            self.obj_goal_distance
+            self.obj_goal_distance,
         )
 
         self._total_episode_rew[:] += full_reward
@@ -856,23 +862,41 @@ class BallRollingTactileRGBEnv(DirectRLEnv):
         }
 
         # training curriculum
-        if (self._total_episode_rew.mean() > self.cfg.curriculum_cfg["goal_randomization_range"]["threshold"]) and (self.curriculum_levels["goal_randomization_range"] < self.cfg.curriculum_cfg["goal_randomization_range"]["num_levels"]-1):
+        if (self._total_episode_rew.mean() > self.cfg.curriculum_cfg["goal_randomization_range"]["threshold"]) and (
+            self.curriculum_levels["goal_randomization_range"]
+            < self.cfg.curriculum_cfg["goal_randomization_range"]["num_levels"] - 1
+        ):
             self.curriculum_levels["goal_randomization_range"] += 1
-        elif (self._total_episode_rew.mean() < self.cfg.curriculum_cfg["goal_randomization_range"]["threshold"]*0.90) and (self.curriculum_levels["goal_randomization_range"] > 0):
+        elif (
+            self._total_episode_rew.mean() < self.cfg.curriculum_cfg["goal_randomization_range"]["threshold"] * 0.90
+        ) and (self.curriculum_levels["goal_randomization_range"] > 0):
             self.curriculum_levels["goal_randomization_range"] -= 1
 
-        if (self._total_episode_rew.mean() > self.cfg.curriculum_cfg["action_rate_penalty"]["threshold"]) and (self.curriculum_levels["action_rate_penalty"] < self.cfg.curriculum_cfg["action_rate_penalty"]["num_levels"]-1):
+        if (self._total_episode_rew.mean() > self.cfg.curriculum_cfg["action_rate_penalty"]["threshold"]) and (
+            self.curriculum_levels["action_rate_penalty"]
+            < self.cfg.curriculum_cfg["action_rate_penalty"]["num_levels"] - 1
+        ):
             self.curriculum_levels["action_rate_penalty"] += 1
-        elif (self._total_episode_rew.mean() < self.cfg.curriculum_cfg["action_rate_penalty"]["threshold"]*0.90) and (self.curriculum_levels["action_rate_penalty"] > 0):
+        elif (self._total_episode_rew.mean() < self.cfg.curriculum_cfg["action_rate_penalty"]["threshold"] * 0.90) and (
+            self.curriculum_levels["action_rate_penalty"] > 0
+        ):
             self.curriculum_levels["action_rate_penalty"] -= 1
 
-        if (self._total_episode_rew.mean() > self.cfg.curriculum_cfg["joint_vel_penalty"]["threshold"]) and (self.curriculum_levels["joint_vel_penalty"] < self.cfg.curriculum_cfg["joint_vel_penalty"]["num_levels"]-1):
+        if (self._total_episode_rew.mean() > self.cfg.curriculum_cfg["joint_vel_penalty"]["threshold"]) and (
+            self.curriculum_levels["joint_vel_penalty"] < self.cfg.curriculum_cfg["joint_vel_penalty"]["num_levels"] - 1
+        ):
             self.curriculum_levels["joint_vel_penalty"] += 1
-        elif (self._total_episode_rew.mean() < self.cfg.curriculum_cfg["joint_vel_penalty"]["threshold"]*0.90) and (self.curriculum_levels["joint_vel_penalty"] > 0):
+        elif (self._total_episode_rew.mean() < self.cfg.curriculum_cfg["joint_vel_penalty"]["threshold"] * 0.90) and (
+            self.curriculum_levels["joint_vel_penalty"] > 0
+        ):
             self.curriculum_levels["joint_vel_penalty"] -= 1
 
-        self.cfg.reward_cfg["action_rate_penalty"]["weight"] -= self._action_rate_penalty_curr[self.curriculum_levels["action_rate_penalty"]]
-        self.cfg.reward_cfg["joint_vel_penalty"]["weight"] -= self._joint_vel_penalty_curr[self.curriculum_levels["joint_vel_penalty"]]
+        self.cfg.reward_cfg["action_rate_penalty"]["weight"] -= self._action_rate_penalty_curr[
+            self.curriculum_levels["action_rate_penalty"]
+        ]
+        self.cfg.reward_cfg["joint_vel_penalty"]["weight"] -= self._joint_vel_penalty_curr[
+            self.curriculum_levels["joint_vel_penalty"]
+        ]
 
         if self.cfg.debug_vis:
             self.visualizers["Rewards"].terms["rewards"][:, 0] = at_obj_reward
@@ -886,7 +910,7 @@ class BallRollingTactileRGBEnv(DirectRLEnv):
             self.visualizers["Rewards"].terms["rewards"][:, 8] = success_reward
             self.visualizers["Rewards"].terms["rewards"][:, 10] = full_reward
 
-            self.visualizers["Metrics"].terms["ee_height"][:]  = ee_frame_pos_b[:, 2]
+            self.visualizers["Metrics"].terms["ee_height"][:] = ee_frame_pos_b[:, 2]
             self.visualizers["Metrics"].terms["ee_goal_distance"][:] = self.ee_goal_distance
             self.visualizers["Metrics"].terms["ee_orient_error"][:] = self.ee_orient_error
             self.visualizers["Metrics"].terms["obj_ee_distance"][:] = self.object_ee_distance
@@ -894,13 +918,13 @@ class BallRollingTactileRGBEnv(DirectRLEnv):
             self.visualizers["Metrics"].terms["indentation_depth"][:] = self.gsmini.indentation_depth
         return full_reward
 
-    #MARK: observations
+    # MARK: observations
     def _get_observations(self) -> dict:
         """The position of the object in the robot's root frame."""
 
         ee_pos_curr_b, ee_quat_curr_b = self._compute_frame_pose()
         ee_frame_orient = euler_xyz_from_quat(ee_quat_curr_b)
-        x = wrap_to_pi(ee_frame_orient[0]).unsqueeze(1) # add dimension for concatenating with other observations
+        x = wrap_to_pi(ee_frame_orient[0]).unsqueeze(1)  # add dimension for concatenating with other observations
         y = wrap_to_pi(ee_frame_orient[1]).unsqueeze(1)
         z = wrap_to_pi(ee_frame_orient[2]).unsqueeze(1)
 
@@ -910,14 +934,7 @@ class BallRollingTactileRGBEnv(DirectRLEnv):
         # )
 
         proprio_obs = torch.cat(
-            (
-                ee_pos_curr_b,
-                x,
-                y,
-                z,
-                self._goal_pos_b[:, :2],
-                self.actions
-            ),
+            (ee_pos_curr_b, x, y, z, self._goal_pos_b[:, :2], self.actions),
             dim=-1,
         )
         # add noise to proprio_obs:
@@ -925,10 +942,7 @@ class BallRollingTactileRGBEnv(DirectRLEnv):
 
         vision_obs = self.gsmini.data.output["tactile_rgb"]
         # print("indent depth ", self.gsmini._indentation_depth[0])
-        obs = {
-            "proprio_obs": proprio_obs,
-            "vision_obs": vision_obs
-        }
+        obs = {"proprio_obs": proprio_obs, "vision_obs": vision_obs}
 
         # # obs = proprio_obs
         # # change goal_pos for env with long enough episodes
@@ -986,7 +1000,7 @@ class BallRollingTactileRGBEnv(DirectRLEnv):
         # compute the pose of the body in the root frame
         ee_pose_b, ee_quat_b = math_utils.subtract_frame_transforms(root_pos_w, root_quat_w, ee_pos_w, ee_quat_w)
         # account for the offset
-        #if self.cfg.body_offset is not None:
+        # if self.cfg.body_offset is not None:
         ee_pose_b, ee_quat_b = math_utils.combine_frame_transforms(
             ee_pose_b, ee_quat_b, self._offset_pos, self._offset_rot
         )
@@ -1003,7 +1017,7 @@ class BallRollingTactileRGBEnv(DirectRLEnv):
         jacobian = self.jacobian_b
 
         # account for the offset
-        #if self.cfg.body_offset is not None:
+        # if self.cfg.body_offset is not None:
         # Modify the jacobian to account for the offset
         # -- translational part
         # v_link = v_ee + w_ee x r_link_ee = v_J_ee * q + w_J_ee * q x r_link_ee
@@ -1015,6 +1029,7 @@ class BallRollingTactileRGBEnv(DirectRLEnv):
         jacobian[:, 3:, :] = torch.bmm(math_utils.matrix_from_quat(self._offset_rot), jacobian[:, 3:, :])
 
         return jacobian
+
     ###################################
 
     def _set_debug_vis_impl(self, debug_vis: bool):
@@ -1025,7 +1040,7 @@ class BallRollingTactileRGBEnv(DirectRLEnv):
                     markers={
                         "sphere": sim_utils.SphereCfg(
                             radius=self.cfg.reward_cfg["success_reward"]["threshold"],
-                            visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(1.0, 0.0, 0.0), opacity= 0.5),
+                            visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(1.0, 0.0, 0.0), opacity=0.5),
                         ),
                     }
                 )
@@ -1061,6 +1076,7 @@ class BallRollingTactileRGBEnv(DirectRLEnv):
         #     orientations=ee_quat_curr
         #     )
 
+
 # compute these values seperately for logging
 @torch.jit.script
 def _compute_intermediate_values(
@@ -1068,7 +1084,7 @@ def _compute_intermediate_values(
     ee_frame_pos_b: torch.Tensor,
     ee_frame_orient_b: torch.Tensor,
     goal_pos_b: torch.Tensor,
-    goal_orient_b: torch.Tensor
+    goal_orient_b: torch.Tensor,
 ):
     # for compensating that obj_pos_b is at the center of the ball, but we want the be at the top of the ball
     obj_pos_b[:, 2] += 0.005  # ball has diameter of 1cm -> r=0.005m, plate height (above ground)=0.0025
@@ -1077,14 +1093,9 @@ def _compute_intermediate_values(
     ee_goal_distance = torch.norm(ee_frame_pos_b[:, :2] - goal_pos_b[:, :2], dim=1)
     ee_orient_error = quat_error_magnitude(ee_frame_orient_b, goal_orient_b)
 
-
     obj_goal_distance = torch.norm(obj_pos_b[:, :2] - goal_pos_b[:, :2], dim=1)
-    return (
-       object_ee_distance,
-       ee_goal_distance,
-       ee_orient_error,
-       obj_goal_distance
-    )
+    return (object_ee_distance, ee_goal_distance, ee_orient_error, obj_goal_distance)
+
 
 @torch.jit.script
 def _compute_rewards(
@@ -1110,27 +1121,24 @@ def _compute_rewards(
     indentation_depth: torch.Tensor,
     ee_goal_distance: torch.Tensor,
     ee_orient_error: torch.Tensor,
-    obj_goal_distance: torch.Tensor
+    obj_goal_distance: torch.Tensor,
 ):
     # for giving agent incentive to touch the obj
     at_obj_reward = torch.where(
-        (indentation_depth > at_obj_reward_cfg["min_depth"])
-        & (indentation_depth < at_obj_reward_cfg["max_depth"]),
+        (indentation_depth > at_obj_reward_cfg["min_depth"]) & (indentation_depth < at_obj_reward_cfg["max_depth"]),
         at_obj_reward_cfg["weight"],
-        0.0
+        0.0,
     )
     # trying to keep ball in center of gelpad
-    center_error = torch.square(torch.norm(obj_pos_b[:, :2]*100 - ee_frame_pos_b[:, :2]*100, dim=1))
+    center_error = torch.square(torch.norm(obj_pos_b[:, :2] * 100 - ee_frame_pos_b[:, :2] * 100, dim=1))
     center_error *= centering_error_cfg["weight"]
 
     # penalty for preventing the ball from jumping
     off_the_ground_penalty = torch.where(
-        obj_pos_b[:, 2] > off_the_ground_penalty_cfg["max_height"],
-        off_the_ground_penalty_cfg["weight"],
-        0.0
+        obj_pos_b[:, 2] > off_the_ground_penalty_cfg["max_height"], off_the_ground_penalty_cfg["weight"], 0.0
     )
 
-    height_diff = height_reward_cfg["target_height_cm"] - ee_frame_pos_b[:, 2]*100.0
+    height_diff = height_reward_cfg["target_height_cm"] - ee_frame_pos_b[:, 2] * 100.0
     # height_reward = -(
     #     height_reward_cfg["w"]*height_diff**2
     #     + height_reward_cfg["v"]*torch.log(height_diff**2 + height_reward_cfg["alpha"])
@@ -1155,10 +1163,7 @@ def _compute_rewards(
     x = wrap_to_pi(ee_frame_orient[0])
     y = wrap_to_pi(ee_frame_orient[1])
     orient_reward = torch.where(
-        (torch.abs(x) < math.pi/10) #8
-        & (torch.abs(y) < math.pi/10), #8
-        0.0,
-        1.0*orient_reward_cfg["weight"]
+        (torch.abs(x) < math.pi / 10) & (torch.abs(y) < math.pi / 10), 0.0, 1.0 * orient_reward_cfg["weight"]  # 8  # 8
     )
     # orient_reward = (
     #     (torch.abs(x))**2
@@ -1170,33 +1175,34 @@ def _compute_rewards(
     #     orient_reward,
     #     orient_reward*1.5
     # )
-    #orient_reward *= orient_reward_cfg["weight"]
+    # orient_reward *= orient_reward_cfg["weight"]
 
     ee_goal_tracking_reward = (
-        1 - torch.tanh((ee_goal_distance) / ee_goal_tracking_cfg["std"])
-        #- torch.tanh(ee_goal_distance / ee_goal_tracking_cfg["std_fine"])
+        1
+        - torch.tanh((ee_goal_distance) / ee_goal_tracking_cfg["std"])
+        # - torch.tanh(ee_goal_distance / ee_goal_tracking_cfg["std_fine"])
     )
     ee_goal_tracking_reward *= ee_goal_tracking_cfg["weight"]
-    #ee_goal_tracking_reward -= ee_goal_tracking_cfg["weight"]
+    # ee_goal_tracking_reward -= ee_goal_tracking_cfg["weight"]
 
     # obj_goal_tracking_reward = (obj_goal_distance)**2
-    obj_goal_tracking_reward = (
-        1 - torch.tanh((obj_goal_distance) / obj_goal_tracking_cfg["std"])
-    )
+    obj_goal_tracking_reward = 1 - torch.tanh((obj_goal_distance) / obj_goal_tracking_cfg["std"])
     obj_goal_tracking_reward *= obj_goal_tracking_cfg["weight"]
 
     obj_goal_fine_tracking_reward = 1 - torch.tanh((obj_goal_distance) / obj_goal_fine_tracking_cfg["std"])
     obj_goal_fine_tracking_reward *= obj_goal_fine_tracking_cfg["weight"]
 
-    obj_goal_super_fine_tracking_reward = 1 - torch.tanh((obj_goal_distance) / obj_goal_super_fine_tracking_cfg["std"])**2
+    obj_goal_super_fine_tracking_reward = (
+        1 - torch.tanh((obj_goal_distance) / obj_goal_super_fine_tracking_cfg["std"]) ** 2
+    )
     obj_goal_super_fine_tracking_reward *= obj_goal_super_fine_tracking_cfg["weight"]
 
     success_reward = torch.where(
         (obj_goal_distance < success_reward_cfg["threshold"])
         & (indentation_depth > at_obj_reward_cfg["min_depth"])
         & (indentation_depth < at_obj_reward_cfg["max_depth"]),
-        1.0*success_reward_cfg["weight"],
-        0.0
+        1.0 * success_reward_cfg["weight"],
+        0.0,
     )
 
     # Penalize the rate of change of the actions using L2 squared kernel.
@@ -1231,5 +1237,5 @@ def _compute_rewards(
         success_reward,
         action_rate_penalty,
         joint_vel_penalty,
-        full_reward
+        full_reward,
     )

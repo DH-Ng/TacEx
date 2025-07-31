@@ -17,9 +17,9 @@ import re
 import subprocess
 import sys
 import sysconfig
+import toml
 from pathlib import Path
 
-import toml
 from setuptools import Extension, find_packages, setup
 from setuptools.command.build_ext import build_ext
 
@@ -36,18 +36,22 @@ INSTALL_REQUIRES = [
     "wildmeshing>=0.4.1"
 ]
 
+
 class CMakeExtension(Extension):
-    def __init__(self, name, sourcedir=''):
+    def __init__(self, name, sourcedir=""):
         Extension.__init__(self, name, sources=[])
         self.sourcedir = os.path.abspath(sourcedir)
+
 
 class CMakeBuild(build_ext):
 
     # hypens are automatically converted to underscores for attribute values
     # -> underscore directly isnt allowed for user options string
-    user_options = build_ext.user_options + \
-        [("DCMAKE-CUDA-ARCHITECTURES=", None, "Specify CUDA architecture,e.g. 89.")] + \
-        [("DUIPC-BUILD-PYBIND=", "1", "Whether to build libuipc python bindings or not.")]
+    user_options = (
+        build_ext.user_options
+        + [("DCMAKE-CUDA-ARCHITECTURES=", None, "Specify CUDA architecture,e.g. 89.")]
+        + [("DUIPC-BUILD-PYBIND=", "1", "Whether to build libuipc python bindings or not.")]
+    )
 
     def initialize_options(self):
         super().initialize_options()
@@ -63,49 +67,43 @@ class CMakeBuild(build_ext):
             self.build_extension(ext)
 
     def build_extension(self, ext):
-        extdir = os.path.abspath(
-            os.path.dirname(self.get_ext_fullpath(ext.name)))
+        extdir = os.path.abspath(os.path.dirname(self.get_ext_fullpath(ext.name)))
 
         # use ENV variable as workaround
-        self.DCMAKE_CUDA_ARCHITECTURES = os.environ.get('CMAKE_CUDA_ARCHITECTURES', None)
+        self.DCMAKE_CUDA_ARCHITECTURES = os.environ.get("CMAKE_CUDA_ARCHITECTURES", None)
         print("cuda_architectures", self.DCMAKE_CUDA_ARCHITECTURES)
 
         cmake_args = [
             "-DCMAKE_LIBRARY_OUTPUT_DIRECTORY=" + extdir,
             "-DCMAKE_EXPORT_COMPILE_COMMANDS=1",
             "-DCMAKE_COLOR_DIAGNOSTICS=1",
-            "-DUIPC_BUILD_PYBIND=" + self.DUIPC_BUILD_PYBIND, # per default = 1, i.e. true
+            "-DUIPC_BUILD_PYBIND=" + self.DUIPC_BUILD_PYBIND,  # per default = 1, i.e. true
             "-DUIPC_DEV_MODE=1",
             "-DUIPC_BUILD_GUI=0",
         ]
-        if self.DCMAKE_CUDA_ARCHITECTURES is not None: # None means "use native cuda architecture"
-            cmake_args += ["-DCMAKE_CUDA_ARCHITECTURES="+self.DCMAKE_CUDA_ARCHITECTURES]
+        if self.DCMAKE_CUDA_ARCHITECTURES is not None:  # None means "use native cuda architecture"
+            cmake_args += ["-DCMAKE_CUDA_ARCHITECTURES=" + self.DCMAKE_CUDA_ARCHITECTURES]
 
-        cfg = 'Debug' if self.debug else 'Release'
-        build_args = []#['--config', cfg]
+        cfg = "Debug" if self.debug else "Release"
+        build_args = []  # ['--config', cfg]
 
         if platform.system() == "Windows":
-            cmake_args += ['-DCMAKE_LIBRARY_OUTPUT_DIRECTORY_{}={}'.format(
-                cfg.upper(),
-                extdir)]
+            cmake_args += [f"-DCMAKE_LIBRARY_OUTPUT_DIRECTORY_{cfg.upper()}={extdir}"]
             if sys.maxsize > 2**32:
-                cmake_args += ['-A', 'x64']
-            build_args += ['--', '/m']
+                cmake_args += ["-A", "x64"]
+            build_args += ["--", "/m"]
         else:
-            cmake_args += ['-DCMAKE_BUILD_TYPE=' + cfg]
-            build_args += ['-j4'] # use -j8 for faster building
+            cmake_args += ["-DCMAKE_BUILD_TYPE=" + cfg]
+            build_args += ["-j4"]  # use -j8 for faster building
 
         env = os.environ.copy()
-        env['CXXFLAGS'] = '{} -DVERSION_INFO=\\"{}\\"'.format(
-            env.get('CXXFLAGS', ''),
-            self.distribution.get_version())
-        self.build_dir = "build/" # where the compiled files are placed
+        env["CXXFLAGS"] = '{} -DVERSION_INFO=\\"{}\\"'.format(env.get("CXXFLAGS", ""), self.distribution.get_version())
+        self.build_dir = "build/"  # where the compiled files are placed
         if not os.path.exists(self.build_dir):
             os.makedirs(self.build_dir)
-        subprocess.check_call(['cmake', ext.sourcedir] + cmake_args,
-                              cwd=self.build_dir, env=env)
-        subprocess.check_call(['cmake', '--build', '.'] + build_args,
-                              cwd=self.build_dir)
+        subprocess.check_call(["cmake", ext.sourcedir] + cmake_args, cwd=self.build_dir, env=env)
+        subprocess.check_call(["cmake", "--build", "."] + build_args, cwd=self.build_dir)
+
 
 # with (Path(__file__).resolve().parent / "README.md").open("r", encoding="utf-8") as f:
 #     long_description = f.read()
@@ -130,8 +128,6 @@ setup(
         "Isaac Sim :: 4.5.0",
     ],
     ext_modules=[CMakeExtension("uipc", "libuipc")],
-    cmdclass=dict(
-        build_ext=CMakeBuild
-    ),
+    cmdclass=dict(build_ext=CMakeBuild),
     zip_safe=False,
 )

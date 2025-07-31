@@ -15,17 +15,18 @@ The following configurations are available:
 Reference: https://github.com/frankaemika/franka_ros
 """
 
+from tacex_assets import TACEX_ASSETS_DATA_DIR
+
 import isaaclab.sim as sim_utils
 from isaaclab.actuators import ImplicitActuatorCfg
 from isaaclab.assets import ArticulationCfg
-from tacex_assets import TACEX_ASSETS_DATA_DIR
 
 ##
 # Configuration
 ##
 
-#todo find a good way to save the prim path of the sensor for the user?
-#-> currently, we need to look into the asset to figure out the prim name (in this case its /gelsight_mini_case)
+# todo find a good way to save the prim path of the sensor for the user?
+# -> currently, we need to look into the asset to figure out the prim name (in this case its /gelsight_mini_case)
 FRANKA_PANDA_ARM_GSMINI_GRIPPER_CFG = ArticulationCfg(
     spawn=sim_utils.UsdFileCfg(
         usd_path=f"{TACEX_ASSETS_DATA_DIR}/Robots/Franka/GelSight_Mini/Gripper/physx_rigid_gelpads.usd",
@@ -88,7 +89,6 @@ Gelpad prim names:
 - `gelpad_left`
 - `gelpad_right`
 """
-
 
 
 FRANKA_PANDA_ARM_GSMINI_GRIPPER_HIGH_PD_CFG = FRANKA_PANDA_ARM_GSMINI_GRIPPER_CFG.copy()

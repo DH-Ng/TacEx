@@ -6,7 +6,6 @@
     isaaclab -p ./examples/falling_cubes.py
 """
 
-
 """Launch Isaac Sim Simulator first."""
 import argparse
 
@@ -23,9 +22,9 @@ app_launcher = AppLauncher(args_cli)
 simulation_app = app_launcher.app
 
 # simulation_app.set_setting("/app/useFabricSceneDelegate", True)
-#simulation_app.set_setting("/app/usdrt/scene_delegate/enableProxyCubes", False)
-#simulation_app.set_setting("/app/usdrt/scene_delegate/geometryStreaming/enabled", False)
-#simulation_app.set_setting("/omnihydra/parallelHydraSprimSync", False)
+# simulation_app.set_setting("/app/usdrt/scene_delegate/enableProxyCubes", False)
+# simulation_app.set_setting("/app/usdrt/scene_delegate/geometryStreaming/enabled", False)
+# simulation_app.set_setting("/omnihydra/parallelHydraSprimSync", False)
 
 """Rest everything follows."""
 import pathlib
@@ -37,20 +36,21 @@ from isaacsim.util.debug_draw import _debug_draw
 
 draw = _debug_draw.acquire_debug_draw_interface()
 
+import numpy as np
 import random
 
-import isaaclab.sim as sim_utils
-import numpy as np
 import warp as wp
-from isaaclab.assets import AssetBaseCfg
-from isaaclab.utils.assets import ISAAC_NUCLEUS_DIR
-from isaaclab.utils.timer import Timer
 from pxr import Gf, PhysxSchema, Sdf, Usd, UsdGeom, UsdPhysics, UsdShade, Vt
 from tacex_uipc import UipcObject, UipcObjectCfg, UipcSim, UipcSimCfg
 from tacex_uipc.utils import TetMeshCfg
 
 # import vtk
 from uipc.core import Engine, Scene, SceneIO, World
+
+import isaaclab.sim as sim_utils
+from isaaclab.assets import AssetBaseCfg
+from isaaclab.utils.assets import ISAAC_NUCLEUS_DIR
+from isaaclab.utils.timer import Timer
 
 
 def design_scene():
@@ -74,14 +74,17 @@ def change_mat_color(stage, shader_prim_path, color):
     # source: https://forums.developer.nvidia.com/t/randomize-materials-and-textures-based-on-a-probability-extract-path-to-material-and-texture-from-usd/270188/4
     shader_prim = stage.GetPrimAtPath(shader_prim_path)
     if not shader_prim.GetAttribute("inputs:diffuse_color_constant").IsValid():
-        shader_prim.CreateAttribute("inputs:diffuse_color_constant", Sdf.ValueTypeNames.Color3f, custom=True).Set((0.0, 0.0, 0.0))
+        shader_prim.CreateAttribute("inputs:diffuse_color_constant", Sdf.ValueTypeNames.Color3f, custom=True).Set(
+            (0.0, 0.0, 0.0)
+        )
 
     if not shader_prim.GetAttribute("inputs:diffuse_tint").IsValid():
         shader_prim.CreateAttribute("inputs:diffuse_tint", Sdf.ValueTypeNames.Color3f, custom=True).Set((0.0, 0.0, 0.0))
 
     # Set the diffuse color to the input color
-    shader_prim.GetAttribute('inputs:diffuse_color_constant').Set(color)
-    shader_prim.GetAttribute('inputs:diffuse_tint').Set(color)
+    shader_prim.GetAttribute("inputs:diffuse_color_constant").Set(color)
+    shader_prim.GetAttribute("inputs:diffuse_tint").Set(color)
+
 
 def main():
     """Main function."""
@@ -115,17 +118,17 @@ def main():
     print("Mesh cfg ", mesh_cfg)
 
     # spawn uipc cube
-    #tet_cube_asset_path = "/workspace/tacex/source/tacex_assets/tacex_assets/data/Sensors/GelSight_Mini/Gelpad_low_res.usd"
+    # tet_cube_asset_path = "/workspace/tacex/source/tacex_assets/tacex_assets/data/Sensors/GelSight_Mini/Gelpad_low_res.usd"
     tet_cube_asset_path = pathlib.Path(__file__).parent.resolve() / "assets" / "cube.usd"
     cube_cfg = UipcObjectCfg(
         prim_path="/World/Objects/Cube0",
-        init_state=AssetBaseCfg.InitialStateCfg(pos=[0, 0, 2.25]), #rot=(0.72,-0.3,0.42,-0.45)
+        init_state=AssetBaseCfg.InitialStateCfg(pos=[0, 0, 2.25]),  # rot=(0.72,-0.3,0.42,-0.45)
         spawn=sim_utils.UsdFileCfg(
             usd_path=str(tet_cube_asset_path),
             # scale=(0.1, 0.1, 0.1)
         ),
         # mesh_cfg=mesh_cfg,
-        constitution_cfg=UipcObjectCfg.StableNeoHookeanCfg() #UipcObjectCfg.AffineBodyConstitutionCfg() #
+        constitution_cfg=UipcObjectCfg.StableNeoHookeanCfg(),  # UipcObjectCfg.AffineBodyConstitutionCfg() #
     )
     cube = UipcObject(cube_cfg, uipc_sim)
 
@@ -144,7 +147,7 @@ def main():
 
     tet_cube_asset_path = pathlib.Path(__file__).parent.resolve() / "assets" / "cube.usd"
 
-    num_cubes = 5 #30
+    num_cubes = 5  # 30
     cubes = []
     for i in range(num_cubes):
         if i % 2 == 1:
@@ -153,16 +156,18 @@ def main():
             constitution_type = UipcObjectCfg.StableNeoHookeanCfg()
         # might lead to intersections due to random pos
         # pos = (random.uniform(-1.0, 1.0), random.uniform(-1.0, 1.0), random.uniform(2.5, 6.0))
-        pos = (0, 0, 3.0 + 0.3*i)
-        rot = (random.uniform(-1.0, 1.0), random.uniform(-1.0, 1.0), random.uniform(-1.0, 1.0), random.uniform(-1.0, 1.0))
+        pos = (0, 0, 3.0 + 0.3 * i)
+        rot = (
+            random.uniform(-1.0, 1.0),
+            random.uniform(-1.0, 1.0),
+            random.uniform(-1.0, 1.0),
+            random.uniform(-1.0, 1.0),
+        )
         cube_cfg = UipcObjectCfg(
             prim_path=f"/World/Objects/Cube{i+1}",
-            init_state=AssetBaseCfg.InitialStateCfg(pos=pos, rot=rot), #rot=(0.72,-0.3,0.42,-0.45)
-            spawn=sim_utils.UsdFileCfg(
-                usd_path=str(tet_cube_asset_path),
-                scale=(0.15, 0.15, 0.15)
-            ),
-            constitution_cfg=constitution_type
+            init_state=AssetBaseCfg.InitialStateCfg(pos=pos, rot=rot),  # rot=(0.72,-0.3,0.42,-0.45)
+            spawn=sim_utils.UsdFileCfg(usd_path=str(tet_cube_asset_path), scale=(0.15, 0.15, 0.15)),
+            constitution_cfg=constitution_type,
         )
         cubeX = UipcObject(cube_cfg, uipc_sim)
         cubes.append(cubeX)
@@ -170,13 +175,10 @@ def main():
     rot = (random.uniform(-1.0, 1.0), random.uniform(-1.0, 1.0), random.uniform(-1.0, 1.0), random.uniform(-1.0, 1.0))
     cube_cfg = UipcObjectCfg(
         prim_path="/World/Objects/CubeTop",
-        init_state=AssetBaseCfg.InitialStateCfg(pos=[0, 0, 3.65 + 0.3*num_cubes],rot=rot),
-        spawn=sim_utils.UsdFileCfg(
-            usd_path=str(tet_cube_asset_path),
-            scale=(1.0, 1.0, 1.0)
-        ),
+        init_state=AssetBaseCfg.InitialStateCfg(pos=[0, 0, 3.65 + 0.3 * num_cubes], rot=rot),
+        spawn=sim_utils.UsdFileCfg(usd_path=str(tet_cube_asset_path), scale=(1.0, 1.0, 1.0)),
         # mesh_cfg=mesh_cfg,
-        constitution_cfg=UipcObjectCfg.AffineBodyConstitutionCfg()#UipcObjectCfg.StableNeoHookeanCfg()
+        constitution_cfg=UipcObjectCfg.AffineBodyConstitutionCfg(),  # UipcObjectCfg.StableNeoHookeanCfg()
     )
     cube_top = UipcObject(cube_cfg, uipc_sim)
 
@@ -213,7 +215,7 @@ def main():
             with Timer("[INFO]: Time taken for updating the render meshes", name="render_update"):
                 # render the new scene
                 uipc_sim.update_render_meshes()
-                #sim.forward()
+                # sim.forward()
                 # sim._update_fabric(0.0, 0.0)
 
             # get time reports
@@ -228,7 +230,7 @@ def main():
             start_uipc_test = True
             print("Start uipc simulation by pressing Play")
 
-        if step % 250 == 0: #500
+        if step % 250 == 0:  # 500
             print("")
             print("====================================================================================")
             print("====================================================================================")
@@ -238,16 +240,18 @@ def main():
                 cube.write_vertex_positions_to_sim(vertex_positions=cube.init_vertex_pos)
                 cube_top.write_vertex_positions_to_sim(vertex_positions=cube_top.init_vertex_pos)
 
-                small_cube_id = random.randint(0, num_cubes-1)
-                cubes[small_cube_id].write_vertex_positions_to_sim(vertex_positions=cubes[small_cube_id].init_vertex_pos)
+                small_cube_id = random.randint(0, num_cubes - 1)
+                cubes[small_cube_id].write_vertex_positions_to_sim(
+                    vertex_positions=cubes[small_cube_id].init_vertex_pos
+                )
 
                 uipc_sim.reset()
                 sim.render()
 
-            avg_uipc_step_time = total_uipc_sim_time/step
+            avg_uipc_step_time = total_uipc_sim_time / step
             print(f"Sim step for uipc took in avg {avg_uipc_step_time} per frame.")
 
-            avg_uipc_render_time = total_uipc_render_time/step
+            avg_uipc_render_time = total_uipc_render_time / step
             print(f"Render update for uipc took in avg {avg_uipc_render_time} per frame.")
             print("====================================================================================")
 
@@ -257,6 +261,7 @@ def main():
         if num_resets == 5:
             print("Stopping [Falling Cubes] example.")
             break
+
 
 if __name__ == "__main__":
     # run the main function

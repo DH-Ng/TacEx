@@ -6,20 +6,25 @@
 from __future__ import annotations
 
 import builtins
+import gymnasium as gym
 import inspect
 import math
+import numpy as np
+import torch
 import weakref
 from abc import abstractmethod
 from collections.abc import Sequence
 from dataclasses import MISSING
 from typing import Any, ClassVar
 
-import gymnasium as gym
 import isaacsim.core.utils.torch as torch_utils
-import numpy as np
 import omni.kit.app
 import omni.log
-import torch
+from isaacsim.core.simulation_manager import SimulationManager
+from isaacsim.core.version import get_version
+from tacex_uipc.objects import UipcObject, UipcObjectCfg
+from tacex_uipc.sim import UipcSim, UipcSimCfg
+
 from isaaclab.envs import DirectRLEnv, DirectRLEnvCfg
 from isaaclab.envs.common import VecEnvObs, VecEnvStepReturn
 from isaaclab.envs.ui import ViewportCameraController
@@ -30,16 +35,11 @@ from isaaclab.managers import EventManager
 from isaaclab.sim import SimulationContext
 from isaaclab.utils.noise import NoiseModel
 from isaaclab.utils.timer import Timer
-from isaacsim.core.simulation_manager import SimulationManager
-from isaacsim.core.version import get_version
-from tacex_uipc.objects import UipcObject, UipcObjectCfg
-from tacex_uipc.sim import UipcSim, UipcSimCfg
 
 from .uipc_interactive_scene import UipcInteractiveScene
 
 
 class UipcRLEnv(DirectRLEnv):
-
     def __init__(self, cfg: DirectRLEnvCfg, render_mode: str | None = None, **kwargs):
         """Initialize the environment.
 

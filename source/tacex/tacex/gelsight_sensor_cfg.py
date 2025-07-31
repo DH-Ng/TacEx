@@ -9,6 +9,8 @@ from .simulation_approaches.gelsight_simulator import GelSightSimulator
 from .simulation_approaches.gelsight_simulator_cfg import GelSightSimulatorCfg
 
 """Configuration for a Gelsight tactile sensor."""
+
+
 @configclass
 class GelSightSensorCfg(SensorBaseCfg):
     class_type: type = GelSightSensor
@@ -16,20 +18,24 @@ class GelSightSensorCfg(SensorBaseCfg):
     @configclass
     class Dimensions:
         """Dimensions here are in mm (we assume that the world units are meters)"""
+
         width: float = 0.0
         length: float = 0.0
         height: float = 0.0
+
     case_dimensions: Dimensions = Dimensions()
     gelpad_dimensions: Dimensions = Dimensions()
 
     @configclass
     class SensorCameraCfg:
         """Configs for the Camera of the GelSight sensor."""
-        prim_path_appendix: str = "/Camera",
-        update_period: float = 0,
-        resolution: Tuple[int] = (32, 32),
-        data_types: list[str] = ["depth"],
-        clipping_range: Tuple[float] = (0,1),
+
+        prim_path_appendix: str = ("/Camera",)
+        update_period: float = (0,)
+        resolution: Tuple[int] = ((32, 24),)
+        data_types: list[str] = (["depth"],)
+        clipping_range: Tuple[float] = ((0, 1),)
+
     sensor_camera_cfg: SensorCameraCfg = SensorCameraCfg()
 
     data_types: list[str] = ["tactile_rgb", "marker_motion", "height_map", "camera_depth", "camera_rgb"]
@@ -45,7 +51,7 @@ class GelSightSensorCfg(SensorBaseCfg):
     - camera_rgb: rgb image from the sensor camera
     """
 
-    optical_sim_cfg: GelSightSimulatorCfg = None # freely choose what class, but can also be left None
+    optical_sim_cfg: GelSightSimulatorCfg = None  # freely choose what class, but can also be left None
     """Cfg class of the optical simulator you want to use."""
 
     marker_motion_sim_cfg: GelSightSimulatorCfg = None

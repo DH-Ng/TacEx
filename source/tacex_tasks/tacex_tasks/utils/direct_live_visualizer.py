@@ -1,14 +1,15 @@
 from __future__ import annotations
 
+import torch
 import weakref
 from dataclasses import MISSING
 from typing import TYPE_CHECKING
 
 import carb
 import omni.kit.app
-import torch
-from isaaclab.ui.widgets import ManagerLiveVisualizer, UiVisualizerBase
 from isaacsim.core.api.simulation_context import SimulationContext
+
+from isaaclab.ui.widgets import ManagerLiveVisualizer, UiVisualizerBase
 
 from .image_plot import ImagePlot
 from .line_plot import LiveLinePlot
@@ -16,8 +17,8 @@ from .line_plot import LiveLinePlot
 if TYPE_CHECKING:
     import omni.ui
 
-class DirectLiveVisualizer(ManagerLiveVisualizer):
 
+class DirectLiveVisualizer(ManagerLiveVisualizer):
     def __init__(self, debug_vis: bool, num_envs: int, parent_window: omni.ui.Window, visualizer_name: str):
         """Initialize ManagerLiveVisualizer.
 
@@ -70,6 +71,7 @@ class DirectLiveVisualizer(ManagerLiveVisualizer):
         with self._vis_window.ui_window_elements["debug_frame"]:
             with self._vis_window.ui_window_elements["debug_vstack"]:
                 self._vis_window._create_debug_vis_ui_element(self.visualizer_name, self)
+
     #
     # Implementations
     #
@@ -128,7 +130,7 @@ class DirectLiveVisualizer(ManagerLiveVisualizer):
         with self._vis_frame:
             with omni.ui.VStack():
                 # Add a plot in a collapsible frame for each term available
-                #self._env_idx
+                # self._env_idx
                 for name, values in self.terms.items():
                     frame = omni.ui.CollapsableFrame(
                         name,
@@ -160,8 +162,7 @@ class DirectLiveVisualizer(ManagerLiveVisualizer):
                             self._term_visualizers[name] = image
                         else:
                             carb.log_warn(
-                                f"DirectLiveVisualizer: Term ({name}) is not a supported data type for"
-                                " visualization."
+                                f"DirectLiveVisualizer: Term ({name}) is not a supported data type for visualization."
                             )
                     frame.collapsed = True
         self._debug_vis = debug_vis

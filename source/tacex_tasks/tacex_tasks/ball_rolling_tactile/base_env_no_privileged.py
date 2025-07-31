@@ -6,22 +6,28 @@
 from __future__ import annotations
 
 import math
+import numpy as np
+import torch
 from typing import TYPE_CHECKING
+
+from isaacsim.core.api.simulation_context import SimulationContext
+from isaacsim.core.utils.stage import get_current_stage
+from isaacsim.core.utils.torch.transformations import tf_combine, tf_inverse, tf_vector
+from pxr import UsdGeom
+
+# from tactile_sim import GsMiniSensorCfg, GsMiniSensor
+from tacex_assets import TACEX_ASSETS_DATA_DIR
+from tacex_assets.robots.franka.franka_gsmini_single_adapter_rigid import (
+    FRANKA_PANDA_ARM_GSMINI_SINGLE_ADAPTER_HIGH_PD_CFG,
+)
+from tacex_assets.sensors.gelsight_mini.gelsight_mini_cfg import GelSightMiniCfg
+from tacex_tasks.utils import DirectLiveVisualizer
 
 import isaaclab.sim as sim_utils
 import isaaclab.utils.math as lab_math
 import isaaclab.utils.math as math_utils
-import numpy as np
-import torch
 from isaaclab.actuators.actuator_cfg import ImplicitActuatorCfg
-from isaaclab.assets import (
-    Articulation,
-    ArticulationCfg,
-    AssetBase,
-    AssetBaseCfg,
-    RigidObject,
-    RigidObjectCfg,
-)
+from isaaclab.assets import Articulation, ArticulationCfg, AssetBase, AssetBaseCfg, RigidObject, RigidObjectCfg
 from isaaclab.controllers.differential_ik import DifferentialIKController
 from isaaclab.controllers.differential_ik_cfg import DifferentialIKControllerCfg
 from isaaclab.envs import DirectRLEnv, DirectRLEnvCfg, ViewerCfg
@@ -43,18 +49,6 @@ from isaaclab.utils.math import (
     wrap_to_pi,
 )
 from isaaclab.utils.noise import GaussianNoiseCfg, NoiseModelCfg, UniformNoiseCfg
-from isaacsim.core.api.simulation_context import SimulationContext
-from isaacsim.core.utils.stage import get_current_stage
-from isaacsim.core.utils.torch.transformations import tf_combine, tf_inverse, tf_vector
-from pxr import UsdGeom
-
-# from tactile_sim import GsMiniSensorCfg, GsMiniSensor
-from tacex_assets import TACEX_ASSETS_DATA_DIR
-from tacex_assets.robots.franka.franka_gsmini_single_adapter_rigid import (
-    FRANKA_PANDA_ARM_GSMINI_SINGLE_ADAPTER_HIGH_PD_CFG,
-)
-from tacex_assets.sensors.gelsight_mini.gelsight_mini_cfg import GelSightMiniCfg
-from tacex_tasks.utils import DirectLiveVisualizer
 
 from tacex import GelSightSensor
 from tacex.simulation_approaches.fots import FOTSMarkerSimulator, FOTSMarkerSimulatorCfg
@@ -65,18 +59,8 @@ from .base_env import BallRollingEnv, BallRollingEnvCfg
 # from isaaclab.envs.mdp.actions.actions_cfg import DifferentialInverseKinematicsActionCfg
 
 
-
-
 from isaaclab.markers import POSITION_GOAL_MARKER_CFG  # isort: skip
 from isaaclab.markers import CUBOID_MARKER_CFG  # isort: skip
-
-
-
-
-
-
-
-
 
 
 class CustomEnvWindow(BaseEnvWindow):
@@ -118,11 +102,11 @@ class BallRollingEnvNoPrivilegedCfg(BallRollingEnvCfg):
     decimation = 1
     # simulation
     sim: SimulationCfg = SimulationCfg(
-        dt=1 / 120, #0.001
+        dt=1 / 120,  # 0.001
         render_interval=decimation,
-        #device="cpu",
+        # device="cpu",
         physx=PhysxCfg(
-            enable_ccd=True, # needed for more stable ball_rolling
+            enable_ccd=True,  # needed for more stable ball_rolling
             # bounce_threshold_velocity=10000,
         ),
         physics_material=sim_utils.RigidBodyMaterialCfg(
@@ -150,7 +134,6 @@ class BallRollingEnvNoPrivilegedCfg(BallRollingEnvCfg):
                 "panda_joint6": 2.82,
                 "panda_joint7": 0.741,
             },
-
             # joint_pos={
             #     "panda_joint1": 1.7708,
             #     "panda_joint2": -1.4164,
@@ -162,32 +145,32 @@ class BallRollingEnvNoPrivilegedCfg(BallRollingEnvCfg):
             # },
         ),
     )
-# tensor([[ 1.7708, -1.4164, -1.8159, -2.2501, -1.6057,  1.8573,  1.6513]],
+    # tensor([[ 1.7708, -1.4164, -1.8159, -2.2501, -1.6057,  1.8573,  1.6513]],
 
     ik_controller_cfg = DifferentialIKControllerCfg(command_type="pose", use_relative_mode=True, ik_method="dls")
 
     # use an proper ik solver for computing desired ee pose after resets
     ik_solver_cfg = {
         "urdf_path": f"{TACEX_ASSETS_DATA_DIR}/Robots/Franka/GelSight_Mini/Single_Adapter/physx_rigid_gelpad.urdf",
-        "ee_link_name": "panda_hand", #gelsight_mini_gelpad
+        "ee_link_name": "panda_hand",  # gelsight_mini_gelpad
         "max_iterations": 75,
         "num_retries": 1,
-        "learning_rate": 0.2
+        "learning_rate": 0.2,
     }
 
     # rigid body ball
     ball: RigidObjectCfg = RigidObjectCfg(
-        prim_path= "/World/envs/env_.*/rigid_ball",
+        prim_path="/World/envs/env_.*/rigid_ball",
         spawn=sim_utils.UsdFileCfg(
             usd_path=f"{TACEX_ASSETS_DATA_DIR}/Props/ball_wood.usd",
-            #scale=(2, 1, 0.6),
+            # scale=(2, 1, 0.6),
             rigid_props=RigidBodyPropertiesCfg(
-                    solver_position_iteration_count=120,
-                    solver_velocity_iteration_count=1,
-                    max_angular_velocity=1000.0,
-                    max_linear_velocity=1000.0,
-                    max_depenetration_velocity=5.0,
-                    disable_gravity=False,
+                solver_position_iteration_count=120,
+                solver_velocity_iteration_count=1,
+                max_angular_velocity=1000.0,
+                max_linear_velocity=1000.0,
+                max_depenetration_velocity=5.0,
+                disable_gravity=False,
             ),
         ),
         init_state=RigidObjectCfg.InitialStateCfg(pos=(0.5, 0, 0.01)),
@@ -196,18 +179,17 @@ class BallRollingEnvNoPrivilegedCfg(BallRollingEnvCfg):
     # sensors
     gsmini = GelSightMiniCfg(
         prim_path="/World/envs/env_.*/Robot/gelsight_mini_case",
-        sensor_camera_cfg = GelSightMiniCfg.SensorCameraCfg(
-            prim_path_appendix = "/Camera",
-            update_period= 0,
-            resolution = (64,64), #(120, 160),
-            data_types = ["depth"],
-            clipping_range = (0.024, 0.034),
+        sensor_camera_cfg=GelSightMiniCfg.SensorCameraCfg(
+            prim_path_appendix="/Camera",
+            update_period=0,
+            resolution=(32, 32),
+            data_types=["depth"],
+            clipping_range=(0.024, 0.034),
         ),
-        device = "cuda",
-        debug_vis=True, # for being able to see sensor output in the gui
+        device="cuda",
+        debug_vis=True,  # for being able to see sensor output in the gui
         # update Taxim cfg
         optical_sim_cfg=None,
-
         # update FOTS cfg
         marker_motion_sim_cfg=None,
         # marker_motion_sim_cfg=FOTSMarkerSimulatorCfg(
@@ -233,50 +215,60 @@ class BallRollingEnvNoPrivilegedCfg(BallRollingEnvCfg):
         #         debug_vis=False,
         #     )
         # ),
-        data_types=["height_map"], #marker_motion
+        data_types=["height_map"],  # marker_motion
     )
 
     # noise models
-    action_noise_model = NoiseModelCfg(
-        noise_cfg = UniformNoiseCfg(n_min=-0.001, n_max=0.001, operation="add")
-    )
+    action_noise_model = NoiseModelCfg(noise_cfg=UniformNoiseCfg(n_min=-0.001, n_max=0.001, operation="add"))
     # observation_noise_model =
 
-    #MARK: reward configuration
+    # MARK: reward configuration
     reaching_penalty = {"weight": -0.2}
     reaching_reward_tanh = {"std": 0.2, "weight": 0.4}
     at_obj_reward = {"weight": 2.5, "minimal_distance": 0.004}
-    tracking_reward = {"weight":1.0, "w": 1, "v": 1, "alpha":1e-5, "minimal_distance": 0.004}
+    tracking_reward = {"weight": 1.0, "w": 1, "v": 1, "alpha": 1e-5, "minimal_distance": 0.004}
     off_the_ground_penalty = {"weight": -15, "max_height": 0.025}
-    success_reward = {"weight": 10.0, "threshold": 0.005} # 0.0025 we count it as a sucess when dist obj <-> goal is less than the threshold
-    height_penalty = {"min_weight": -0.5, "max_weight": -0.5, "min_height": 0.006, "max_height": 0.012}  # ball has diameter of 1cm, plate 0.5 cm -> 0.005m + 0.0025m = 0.0075m is above the ball
+    success_reward = {
+        "weight": 10.0,
+        "threshold": 0.005,
+    }  # 0.0025 we count it as a sucess when dist obj <-> goal is less than the threshold
+    height_penalty = {
+        "min_weight": -0.5,
+        "max_weight": -0.5,
+        "min_height": 0.006,
+        "max_height": 0.012,
+    }  # ball has diameter of 1cm, plate 0.5 cm -> 0.005m + 0.0025m = 0.0075m is above the ball
     orient_penalty = {"weight": -0.5}
 
     # curriculum settings
-    curriculum_steps = [8.5e6] # after this amount of common_steps (= total steps), we make the task more difficult
+    curriculum_steps = [8.5e6]  # after this amount of common_steps (= total steps), we make the task more difficult
 
     # extra reward scales
-    action_rate_penalty_scale = [-1e-4, -1e-2] # give list for curriculum learning (-1e2 after common_step_count > currciculum_steps)
+    action_rate_penalty_scale = [
+        -1e-4,
+        -1e-2,
+    ]  # give list for curriculum learning (-1e2 after common_step_count > currciculum_steps)
     joint_vel_penalty_scale = [-1e-4, -1e-2]
 
     obj_pos_randomization_range = [[-0.125, 0.125], [-0.2, 0.2]]
 
     # env
-    episode_length_s = 8.3333/2 # 1000/2 timesteps (dt = 1/120 -> 8.3333/(1/120) = 1000)
-    action_space = 6 # we use relative task_space actions: (dx, dy, dz, droll, dpitch) -> dyaw is ommitted
+    episode_length_s = 8.3333 / 2  # 1000/2 timesteps (dt = 1/120 -> 8.3333/(1/120) = 1000)
+    action_space = 6  # we use relative task_space actions: (dx, dy, dz, droll, dpitch) -> dyaw is ommitted
     observation_space = {
-        "proprio_obs": 14, #16, # 3 for ee pos, 2 for orient (roll, pitch), 2 for init goal-pos (x,y), 5 for actions
-        "vision_obs": [64,64,1], # from tactile sensor
+        "proprio_obs": 14,  # 16, # 3 for ee pos, 2 for orient (roll, pitch), 2 for init goal-pos (x,y), 5 for actions
+        "vision_obs": [32, 32, 1],  # from tactile sensor
     }
     # observation_space = 14
     state_space = 0
 
-    ball_radius = 0.005 # don't change, because rewards are tuned for this size
+    ball_radius = 0.005  # don't change, because rewards are tuned for this size
 
     x_bounds = (0.2, 0.75)
     y_bounds = (-0.375, 0.375)
-    too_far_away_threshold = 0.02 #0.125 #0.2 #0.15
+    too_far_away_threshold = 0.02  # 0.125 #0.2 #0.15
     min_height_threshold = 0.002
+
 
 class BallRollingEnvNoPrivileged(BallRollingEnv):
     """RL env in which the robot has to push/roll a ball to a goal position.
@@ -284,6 +276,7 @@ class BallRollingEnvNoPrivileged(BallRollingEnv):
     This base env uses (absolute) joint positions.
     Absolute joint pos and vel are used for the observations.
     """
+
     # pre-physics step calls
     #   |-- _pre_physics_step(action)
     #   |-- _apply_action()
@@ -320,14 +313,18 @@ class BallRollingEnvNoPrivileged(BallRollingEnv):
         self.live_vis.terms["actions"] = self.actions
         self.live_vis.create_visualizer()
 
-        self.live_vis_obs = DirectLiveVisualizer(self.cfg.debug_vis, self.num_envs, self._window, visualizer_name="Observations")
+        self.live_vis_obs = DirectLiveVisualizer(
+            self.cfg.debug_vis, self.num_envs, self._window, visualizer_name="Observations"
+        )
         self.live_vis_obs.terms["proprio"] = self._get_observations()["policy"]["proprio_obs"]
         self.live_vis_obs.terms["vision"] = self._get_observations()["policy"]["vision_obs"]
         self.live_vis_obs.create_visualizer()
 
-        self.metric_vis = DirectLiveVisualizer(self.cfg.debug_vis, self.num_envs, self._window, visualizer_name="Metrics")
-        self.metric_vis.terms["ee_height"] = torch.zeros((self.num_envs,1))
-        self.metric_vis.terms["ee_distance"] = torch.zeros((self.num_envs,1))
+        self.metric_vis = DirectLiveVisualizer(
+            self.cfg.debug_vis, self.num_envs, self._window, visualizer_name="Metrics"
+        )
+        self.metric_vis.terms["ee_height"] = torch.zeros((self.num_envs, 1))
+        self.metric_vis.terms["ee_distance"] = torch.zeros((self.num_envs, 1))
         self.metric_vis.create_visualizer()
 
         # add handle for debug visualization (this is set to a valid handle inside set_debug_vis)
@@ -355,7 +352,7 @@ class BallRollingEnvNoPrivileged(BallRollingEnv):
                     prim_path="/World/envs/env_.*/Robot/panda_hand",
                     name="end_effector",
                     offset=OffsetCfg(
-                        pos=(0.0, 0.0, 0.131), #0.1034
+                        pos=(0.0, 0.0, 0.131),  # 0.1034
                     ),
                 ),
             ],
@@ -374,19 +371,16 @@ class BallRollingEnvNoPrivileged(BallRollingEnv):
             init_state=AssetBaseCfg.InitialStateCfg(pos=(0, 0, 0)),
             spawn=sim_utils.GroundPlaneCfg(
                 physics_material=sim_utils.RigidBodyMaterialCfg(
-                friction_combine_mode="multiply",
-                restitution_combine_mode="multiply",
-                static_friction=1.0,
-                dynamic_friction=1.0,
-                restitution=0.0,
+                    friction_combine_mode="multiply",
+                    restitution_combine_mode="multiply",
+                    static_friction=1.0,
+                    dynamic_friction=1.0,
+                    restitution=0.0,
                 ),
             ),
         )
         ground.spawn.func(
-            ground.prim_path,
-            ground.spawn,
-            translation=ground.init_state.pos,
-            orientation=ground.init_state.rot
+            ground.prim_path, ground.spawn, translation=ground.init_state.pos, orientation=ground.init_state.rot
         )
 
         # plate
@@ -401,56 +395,65 @@ class BallRollingEnvNoPrivileged(BallRollingEnv):
                     max_angular_velocity=1000.0,
                     max_linear_velocity=1000.0,
                     max_depenetration_velocity=5.0,
-                    kinematic_enabled=True
-                )
-            )
+                    kinematic_enabled=True,
+                ),
+            ),
         )
         plate.spawn.func(
-            plate.prim_path,
-            plate.spawn,
-            translation=plate.init_state.pos,
-            orientation=ground.init_state.rot
+            plate.prim_path, plate.spawn, translation=plate.init_state.pos, orientation=ground.init_state.rot
         )
 
         # add lights
         light_cfg = sim_utils.DomeLightCfg(intensity=2000.0, color=(0.75, 0.75, 0.75))
         light_cfg.func("/World/Light", light_cfg)
 
-    #MARK: rewards
+    # MARK: rewards
     def _get_rewards(self) -> torch.Tensor:
-        #- Reward the agent for reaching the object using tanh-kernel.
+        # - Reward the agent for reaching the object using tanh-kernel.
         obj_pos = self.object.data.root_link_pos_w
         # for compensating that obj_pos is based on the center of the ball
         obj_pos[:, 2] += 0.005  # ball has diameter of 1cm -> r=0.005m, plate height (above ground)=0.0025
-        ee_frame_pos = self._ee_frame.data.target_pos_w[..., 0, :] # end-effector positions in world frame: (num_envs, 3)
+        ee_frame_pos = self._ee_frame.data.target_pos_w[
+            ..., 0, :
+        ]  # end-effector positions in world frame: (num_envs, 3)
 
         # Distance of the end-effector to the object: (num_envs,)
         object_ee_distance = torch.norm(obj_pos - ee_frame_pos, dim=1)
         # for giving agent incentive to touch the obj
-        at_obj_reward = torch.where(object_ee_distance < self.cfg.at_obj_reward["minimal_distance"], self.cfg.at_obj_reward["weight"], 0)
+        at_obj_reward = torch.where(
+            object_ee_distance < self.cfg.at_obj_reward["minimal_distance"], self.cfg.at_obj_reward["weight"], 0
+        )
 
-        #- reaching part, but now its ee to goal (but only if ee touches ball) because current_ball pos is not part of the observations
+        # - reaching part, but now its ee to goal (but only if ee touches ball) because current_ball pos is not part of the observations
         goal_ee_distance = torch.norm(self._goal_pos_w[:, :2] - ee_frame_pos[:, :2], dim=1)
         goal_reaching_penalty = torch.square(goal_ee_distance)
-        goal_reaching_penalty = torch.where(object_ee_distance < self.cfg.tracking_reward["minimal_distance"], goal_reaching_penalty, 1.25*goal_reaching_penalty)
+        goal_reaching_penalty = torch.where(
+            object_ee_distance < self.cfg.tracking_reward["minimal_distance"],
+            goal_reaching_penalty,
+            1.25 * goal_reaching_penalty,
+        )
         goal_reaching_penalty *= self.cfg.reaching_penalty["weight"]
 
         # use tanh-kernel for additional reward
         goal_ee_distance_tanh = torch.where(
             object_ee_distance < self.cfg.at_obj_reward["minimal_distance"],
             1 - torch.tanh(goal_ee_distance / self.cfg.reaching_reward_tanh["std"]),
-            0.0
+            0.0,
         )
         goal_ee_distance_tanh *= self.cfg.reaching_reward_tanh["weight"]
 
         # add penalty if ball goes flying
-        off_the_ground = torch.where(obj_pos[:, 2] > self.cfg.off_the_ground_penalty["max_height"], self.cfg.off_the_ground_penalty["weight"], 0.0)
+        off_the_ground = torch.where(
+            obj_pos[:, 2] > self.cfg.off_the_ground_penalty["max_height"],
+            self.cfg.off_the_ground_penalty["weight"],
+            0.0,
+        )
 
         # distance between obj and goal: (num_envs,)
         obj_goal_distance = torch.norm(self._goal_pos_w[:, :2] - obj_pos[:, :2], dim=1)
         tracking_goal = -(
-            self.cfg.tracking_reward["w"]*obj_goal_distance
-            + self.cfg.tracking_reward["v"]*torch.log(obj_goal_distance + self.cfg.tracking_reward["alpha"])
+            self.cfg.tracking_reward["w"] * obj_goal_distance
+            + self.cfg.tracking_reward["v"] * torch.log(obj_goal_distance + self.cfg.tracking_reward["alpha"])
         )
         # only apply when ee is at object (with this our tracking goal always needs to be positive, otherwise reaching part wont work anymore)
         tracking_goal = (object_ee_distance < self.cfg.tracking_reward["minimal_distance"]) * tracking_goal
@@ -459,29 +462,28 @@ class BallRollingEnvNoPrivileged(BallRollingEnv):
         # penalize ee being too close to the ground
         height_penalty = torch.where(
             (ee_frame_pos[:, 2] < self.cfg.height_penalty["min_height"]),
-            self.cfg.height_penalty["min_weight"]*(self.cfg.height_penalty["min_height"]-ee_frame_pos[:, 2])*10,
-            0.0
+            self.cfg.height_penalty["min_weight"] * (self.cfg.height_penalty["min_height"] - ee_frame_pos[:, 2]) * 10,
+            0.0,
         )
         # penalize ee being too high
         height_penalty = torch.where(
             (ee_frame_pos[:, 2] > self.cfg.height_penalty["max_height"]),
-            self.cfg.height_penalty["max_weight"]*(ee_frame_pos[:, 2]-self.cfg.height_penalty["max_height"])*10,
-            height_penalty
+            self.cfg.height_penalty["max_weight"] * (ee_frame_pos[:, 2] - self.cfg.height_penalty["max_height"]) * 10,
+            height_penalty,
         )
 
         # penalize when ee orient is too big
         ee_frame_orient = euler_xyz_from_quat(self._ee_frame.data.target_quat_source[..., 0, :])
-        x = wrap_to_pi(ee_frame_orient[0]-math.pi) # our panda hand asset has rotation from (180,0,-45) -> we substract 180 for defining the rotation limits
+        x = wrap_to_pi(
+            ee_frame_orient[0] - math.pi
+        )  # our panda hand asset has rotation from (180,0,-45) -> we substract 180 for defining the rotation limits
         y = wrap_to_pi(ee_frame_orient[1])
-        orient_penalty = (
-            (torch.abs(x) > math.pi/8)
-            | (torch.abs(y) > math.pi/8)
-        ) * self.cfg.orient_penalty["weight"]
+        orient_penalty = ((torch.abs(x) > math.pi / 8) | (torch.abs(y) > math.pi / 8)) * self.cfg.orient_penalty[
+            "weight"
+        ]
 
         success_reward = torch.where(
-            obj_goal_distance < self.cfg.success_reward["threshold"],
-            self.cfg.success_reward["weight"],
-            0.0
+            obj_goal_distance < self.cfg.success_reward["threshold"], self.cfg.success_reward["weight"], 0.0
         )
         # only apply success_reward when ee is at the ball
         success_reward = (object_ee_distance < self.cfg.tracking_reward["minimal_distance"]) * success_reward
@@ -492,14 +494,14 @@ class BallRollingEnvNoPrivileged(BallRollingEnv):
         joint_vel_penalty = torch.sum(torch.square(self._robot.data.joint_vel[:, :]), dim=1)
 
         # curriculum: for more stable movement
-        #if self.common_step_counter > self.cfg.curriculum_steps[self.curriculum_phase_id-1]:
-        if self.common_step_counter > self.cfg.curriculum_steps[self.curriculum_phase_id-1]:
+        # if self.common_step_counter > self.cfg.curriculum_steps[self.curriculum_phase_id-1]:
+        if self.common_step_counter > self.cfg.curriculum_steps[self.curriculum_phase_id - 1]:
             self.curriculum_phase_id = 1
 
         rewards = (
             # + goal_reaching_penalty
             # + goal_ee_distance_tanh
-            + at_obj_reward
+            +at_obj_reward
             + off_the_ground
             # + tracking_goal
             # + success_reward
@@ -519,18 +521,22 @@ class BallRollingEnvNoPrivileged(BallRollingEnv):
             # penalties for nice looking behavior
             "orientation_penalty": orient_penalty.float().mean(),
             "height_penalty": height_penalty.mean(),
-            "action_rate_penalty": (self.cfg.action_rate_penalty_scale[self.curriculum_phase_id] * action_rate_penalty).mean(),
-            "joint_vel_penalty": (self.cfg.joint_vel_penalty_scale[self.curriculum_phase_id] * joint_vel_penalty).mean(),
+            "action_rate_penalty": (
+                self.cfg.action_rate_penalty_scale[self.curriculum_phase_id] * action_rate_penalty
+            ).mean(),
+            "joint_vel_penalty": (
+                self.cfg.joint_vel_penalty_scale[self.curriculum_phase_id] * joint_vel_penalty
+            ).mean(),
             # task metrics
             "Metric/ee_obj_error": object_ee_distance.mean(),
-            "Metric/obj_goal_error": obj_goal_distance.mean()
+            "Metric/obj_goal_error": obj_goal_distance.mean(),
         }
         ee_height = ee_frame_pos[:, 2]
-        self.metric_vis.terms["ee_height"] = ee_height.reshape(-1,1)
-        self.metric_vis.terms["ee_distance"] = object_ee_distance.reshape(-1,1)
+        self.metric_vis.terms["ee_height"] = ee_height.reshape(-1, 1)
+        self.metric_vis.terms["ee_distance"] = object_ee_distance.reshape(-1, 1)
         return rewards
 
-    #MARK: reset
+    # MARK: reset
     def _reset_idx(self, env_ids: torch.Tensor | None):
         super()._reset_idx(env_ids)
 
@@ -561,11 +567,15 @@ class BallRollingEnvNoPrivileged(BallRollingEnv):
         self._robot.write_joint_state_to_sim(joint_pos, joint_vel, env_ids=env_ids)
 
         # set commands: random target position
-        self._goal_pos_w[env_ids, :2] = self.object.data.default_root_state[env_ids, :2] + self.scene.env_origins[env_ids, :2] + sample_uniform(
-            self.cfg.obj_pos_randomization_range[self.curriculum_phase_id][0],
-            self.cfg.obj_pos_randomization_range[self.curriculum_phase_id][1],
-            (len(env_ids), 2),
-            self.device
+        self._goal_pos_w[env_ids, :2] = (
+            self.object.data.default_root_state[env_ids, :2]
+            + self.scene.env_origins[env_ids, :2]
+            + sample_uniform(
+                self.cfg.obj_pos_randomization_range[self.curriculum_phase_id][0],
+                self.cfg.obj_pos_randomization_range[self.curriculum_phase_id][1],
+                (len(env_ids), 2),
+                self.device,
+            )
         )
 
         # reset actions
@@ -576,13 +586,13 @@ class BallRollingEnvNoPrivileged(BallRollingEnv):
         # reset sensors
         self.gsmini.reset(env_ids=env_ids)
 
-    #MARK: observations
+    # MARK: observations
     def _get_observations(self) -> dict:
         """The position of the object in the robot's root frame."""
 
         ee_pos_curr_b, ee_quat_curr_b = self._compute_frame_pose()
         ee_frame_orient = euler_xyz_from_quat(ee_quat_curr_b)
-        x = wrap_to_pi(ee_frame_orient[0]).unsqueeze(1) # add dimension for concatenating with other observations
+        x = wrap_to_pi(ee_frame_orient[0]).unsqueeze(1)  # add dimension for concatenating with other observations
         y = wrap_to_pi(ee_frame_orient[1]).unsqueeze(1)
         z = wrap_to_pi(ee_frame_orient[2]).unsqueeze(1)
         # # obj position in the robots root frame
@@ -600,7 +610,7 @@ class BallRollingEnvNoPrivileged(BallRollingEnv):
                 z,
                 # object_pos_b[:, :2],
                 goal_pos_b[:, :2],
-                self.actions
+                self.actions,
             ),
             dim=-1,
         )
@@ -610,13 +620,10 @@ class BallRollingEnvNoPrivileged(BallRollingEnv):
         normalized = vision_obs.view(vision_obs.size(0), -1)
         normalized -= normalized.min(1, keepdim=True)[0]
         normalized /= normalized.max(1, keepdim=True)[0]
-        normalized = (normalized*255).type(dtype=torch.int)
-        vision_obs = normalized.reshape((self.num_envs,64,64,1)) # add a channel to the depth image for debug_vis
+        normalized = (normalized * 255).type(dtype=torch.int)
+        vision_obs = normalized.reshape((self.num_envs, 64, 64, 1))  # add a channel to the depth image for debug_vis
 
-        obs = {
-            "proprio_obs": proprio_obs,
-            "vision_obs": vision_obs
-        }
+        obs = {"proprio_obs": proprio_obs, "vision_obs": vision_obs}
 
         # obs = proprio_obs
         # change goal_pos for env with long enough episodes

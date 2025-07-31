@@ -5,10 +5,17 @@ import argparse
 from isaaclab.app import AppLauncher
 
 # add argparse arguments
-parser = argparse.ArgumentParser(description="Control Franka, which is equipped with one GelSight Mini Sensor, by moving the Frame in the GUI")
+parser = argparse.ArgumentParser(
+    description="Control Franka, which is equipped with one GelSight Mini Sensor, by moving the Frame in the GUI"
+)
 parser.add_argument("--num_envs", type=int, default=1, help="Number of environments to spawn.")
 parser.add_argument("--sys", type=bool, default=True, help="Whether to track system utilization.")
-parser.add_argument("--debug_vis", default=True, action="store_true", help="Whether to render tactile images in the# append AppLauncher cli args")
+parser.add_argument(
+    "--debug_vis",
+    default=True,
+    action="store_true",
+    help="Whether to render tactile images in the# append AppLauncher cli args",
+)
 AppLauncher.add_app_launcher_args(parser)
 # parse the arguments
 
@@ -21,28 +28,29 @@ simulation_app = app_launcher.app
 
 import datetime
 import json
+import numpy as np
 import platform
+import psutil
 import time
+import torch
 import traceback
 from pathlib import Path
 
 import carb
+import pynvml
+from isaacsim.core.api.objects import VisualCuboid
+from isaacsim.core.prims import XFormPrim
+from tacex_assets import TACEX_ASSETS_DATA_DIR
+from tacex_assets.robots.franka.franka_gsmini_single_adapter_rigid import (
+    FRANKA_PANDA_ARM_GSMINI_SINGLE_ADAPTER_HIGH_PD_CFG,
+)
+from tacex_assets.sensors.gelsight_mini.gelsight_mini_cfg import GelSightMiniCfg
+
 import isaaclab.sim as sim_utils
 import isaaclab.utils.math as lab_math
 import isaaclab.utils.math as math_utils
-import numpy as np
-import psutil
-import pynvml
-import torch
 from isaaclab.actuators.actuator_cfg import ImplicitActuatorCfg
-from isaaclab.assets import (
-    Articulation,
-    ArticulationCfg,
-    AssetBase,
-    AssetBaseCfg,
-    RigidObject,
-    RigidObjectCfg,
-)
+from isaaclab.assets import Articulation, ArticulationCfg, AssetBase, AssetBaseCfg, RigidObject, RigidObjectCfg
 from isaaclab.controllers.differential_ik import DifferentialIKController
 from isaaclab.controllers.differential_ik_cfg import DifferentialIKControllerCfg
 from isaaclab.envs import DirectRLEnv, DirectRLEnvCfg, ViewerCfg
@@ -63,26 +71,13 @@ from isaaclab.utils.math import (
     subtract_frame_transforms,
     wrap_to_pi,
 )
-from isaacsim.core.api.objects import VisualCuboid
-from isaacsim.core.prims import XFormPrim
-from tacex_assets import TACEX_ASSETS_DATA_DIR
-from tacex_assets.robots.franka.franka_gsmini_single_adapter_rigid import (
-    FRANKA_PANDA_ARM_GSMINI_SINGLE_ADAPTER_HIGH_PD_CFG,
-)
-from tacex_assets.sensors.gelsight_mini.gelsight_mini_cfg import GelSightMiniCfg
 
 from tacex import GelSightSensor, GelSightSensorCfg
-from tacex.simulation_approaches.gpu_taxim import TaximSimulatorCfg
 from tacex.simulation_approaches.fots import FOTSMarkerSimulatorCfg
+from tacex.simulation_approaches.gpu_taxim import TaximSimulatorCfg
 
 #  from isaaclab.controllers.differential_ik_cfg import DifferentialIKControllerCfg
 # from isaaclab.envs.mdp.actions.actions_cfg import DifferentialInverseKinematicsActionCfg
-
-
-
-
-
-
 
 
 class CustomEnvWindow(BaseEnvWindow):
@@ -123,10 +118,10 @@ class BallRollingEnvCfg(DirectRLEnvCfg):
     decimation = 1
     # simulation
     sim: SimulationCfg = SimulationCfg(
-        dt=1/60,
+        dt=1 / 60,
         render_interval=decimation,
         physx=PhysxCfg(
-            enable_ccd=True, # needed for more stable ball_rolling
+            enable_ccd=True,  # needed for more stable ball_rolling
             # bounce_threshold_velocity=10000,
         ),
         physics_material=sim_utils.RigidBodyMaterialCfg(
@@ -143,7 +138,7 @@ class BallRollingEnvCfg(DirectRLEnvCfg):
         num_envs=1,
         env_spacing=1.5,
         replicate_physics=True,
-        lazy_sensor_update=True, # only update sensors when they are accessed
+        lazy_sensor_update=True,  # only update sensors when they are accessed
     )
 
     # Ground-plane
@@ -152,11 +147,11 @@ class BallRollingEnvCfg(DirectRLEnvCfg):
         init_state=AssetBaseCfg.InitialStateCfg(pos=(0, 0, 0)),
         spawn=sim_utils.GroundPlaneCfg(
             physics_material=sim_utils.RigidBodyMaterialCfg(
-            friction_combine_mode="multiply",
-            restitution_combine_mode="multiply",
-            static_friction=1.0,
-            dynamic_friction=1.0,
-            restitution=0.0,
+                friction_combine_mode="multiply",
+                restitution_combine_mode="multiply",
+                static_friction=1.0,
+                dynamic_friction=1.0,
+                restitution=0.0,
             ),
         ),
     )
@@ -179,9 +174,9 @@ class BallRollingEnvCfg(DirectRLEnvCfg):
                 max_angular_velocity=1000.0,
                 max_linear_velocity=1000.0,
                 max_depenetration_velocity=5.0,
-                kinematic_enabled=True
-            )
-        )
+                kinematic_enabled=True,
+            ),
+        ),
     )
 
     ball = RigidObjectCfg(
@@ -189,7 +184,7 @@ class BallRollingEnvCfg(DirectRLEnvCfg):
         init_state=RigidObjectCfg.InitialStateCfg(pos=[0.5, 0.0, 0.015]),
         spawn=sim_utils.UsdFileCfg(
             usd_path=f"{TACEX_ASSETS_DATA_DIR}/Props/ball_wood.usd",
-            #scale=(0.8, 0.8, 0.8),
+            # scale=(0.8, 0.8, 0.8),
             rigid_props=sim_utils.RigidBodyPropertiesCfg(
                 solver_position_iteration_count=16,
                 solver_velocity_iteration_count=1,
@@ -198,59 +193,51 @@ class BallRollingEnvCfg(DirectRLEnvCfg):
                 max_depenetration_velocity=5.0,
                 # kinematic_enabled=True,
                 disable_gravity=False,
-            )
-        )
+            ),
+        ),
     )
 
     robot: ArticulationCfg = FRANKA_PANDA_ARM_GSMINI_SINGLE_ADAPTER_HIGH_PD_CFG.replace(
         prim_path="/World/envs/env_.*/Robot",
     )
 
-    #setup marker for FOTS frame_transformer
+    # setup marker for FOTS frame_transformer
     marker_cfg = FRAME_MARKER_CFG.copy()
     marker_cfg.markers["frame"].scale = (0.01, 0.01, 0.01)
     marker_cfg.prim_path = "/Visuals/FrameTransformer"
 
     gsmini = GelSightMiniCfg(
-            prim_path="/World/envs/env_.*/Robot/gelsight_mini_case",
-            sensor_camera_cfg = GelSightMiniCfg.SensorCameraCfg(
-                prim_path_appendix = "/Camera",
-                update_period= 0,
-                resolution = (240,320), #(120, 160),
-                data_types = ["depth"],
-                clipping_range = (0.024, 0.034),
+        prim_path="/World/envs/env_.*/Robot/gelsight_mini_case",
+        sensor_camera_cfg=GelSightMiniCfg.SensorCameraCfg(
+            prim_path_appendix="/Camera",
+            update_period=0,
+            resolution=(320, 240),
+            data_types=["depth"],
+            clipping_range=(0.024, 0.034),
+        ),
+        device="cuda",
+        debug_vis=True,  # for being able to see sensor output in the gui
+        # update FOTS cfg
+        marker_motion_sim_cfg=FOTSMarkerSimulatorCfg(
+            lamb=[0.00125, 0.00021, 0.00038],
+            pyramid_kernel_size=[51, 21, 11, 5],  # [11, 11, 11, 11, 11, 5],
+            kernel_size=5,
+            marker_params=FOTSMarkerSimulatorCfg.MarkerParams(
+                num_markers_col=9, num_markers_row=11, num_markers=99, x0=15, y0=26, dx=26, dy=29  # 11,  # 9,
             ),
-            device = "cuda",
-            debug_vis=True, # for being able to see sensor output in the gui
-            # update FOTS cfg
-            marker_motion_sim_cfg=FOTSMarkerSimulatorCfg(
-                lamb = [0.00125,0.00021,0.00038],
-                pyramid_kernel_size = [51, 21, 11, 5], #[11, 11, 11, 11, 11, 5],
-                kernel_size = 5,
-                marker_params = FOTSMarkerSimulatorCfg.MarkerParams(
-                    num_markers_col=9, #11,
-                    num_markers_row=11, #9,
-                    num_markers=99,
-                    x0=15,
-                    y0=26,
-                    dx=26,
-                    dy=29
+            tactile_img_res=(240, 320),
+            device="cuda",
+            frame_transformer_cfg=FrameTransformerCfg(
+                prim_path="/World/envs/env_.*/Robot/gelsight_mini_gelpad",  # "/World/envs/env_.*/Robot/gelsight_mini_case",
+                # you have to make sure that the asset frame center is correct, otherwise wrong shear/twist motions
+                source_frame_offset=OffsetCfg(
+                    # rot=(0.0, 0.92388, -0.38268, 0.0) # values for the robot used here
                 ),
-                tactile_img_res = (240, 320),
-                device = "cuda",
-                frame_transformer_cfg = FrameTransformerCfg(
-                    prim_path="/World/envs/env_.*/Robot/gelsight_mini_gelpad", #"/World/envs/env_.*/Robot/gelsight_mini_case",
-                    # you have to make sure that the asset frame center is correct, otherwise wrong shear/twist motions
-                    source_frame_offset=OffsetCfg(
-                        # rot=(0.0, 0.92388, -0.38268, 0.0) # values for the robot used here
-                    ),
-                    target_frames=[
-                        FrameTransformerCfg.FrameCfg(prim_path="/World/envs/env_.*/ball")
-                    ],
-                    debug_vis=True,
-                    visualizer_cfg=marker_cfg,
-                )
+                target_frames=[FrameTransformerCfg.FrameCfg(prim_path="/World/envs/env_.*/ball")],
+                debug_vis=True,
+                visualizer_cfg=marker_cfg,
             ),
+        ),
         data_types=["marker_motion", "tactile_rgb"],
     )
     # change settings for optical sim
@@ -271,6 +258,7 @@ class BallRollingEnvCfg(DirectRLEnvCfg):
     action_space = 0
     observation_space = 0
     state_space = 0
+
 
 class BallRollingEnv(DirectRLEnv):
     cfg: BallRollingEnvCfg
@@ -332,7 +320,7 @@ class BallRollingEnv(DirectRLEnv):
                     prim_path="/World/envs/env_.*/Robot/panda_hand",
                     name="end_effector",
                     offset=OffsetCfg(
-                        pos=(0.0, 0.0, 0.131), #0.1034
+                        pos=(0.0, 0.0, 0.131),  # 0.1034
                     ),
                 ),
             ],
@@ -350,10 +338,7 @@ class BallRollingEnv(DirectRLEnv):
         # Spawn AssetBase objects manually
         ground = self.cfg.ground
         ground.spawn.func(
-            ground.prim_path,
-            ground.spawn,
-            translation=ground.init_state.pos,
-            orientation=ground.init_state.rot
+            ground.prim_path, ground.spawn, translation=ground.init_state.pos, orientation=ground.init_state.rot
         )
 
         VisualCuboid(
@@ -362,15 +347,14 @@ class BallRollingEnv(DirectRLEnv):
             position=np.array([0.5, 0.0, 0.0155]),
             orientation=np.array([0, 1, 0, 0]),
             color=np.array([255.0, 0.0, 0.0]),
-            visible=False
+            visible=False,
         )
-
 
         # add lights
         light_cfg = sim_utils.DomeLightCfg(intensity=2000.0, color=(0.75, 0.75, 0.75))
         light_cfg.func("/World/Light", light_cfg)
 
-    #MARK: pre-physics step calls
+    # MARK: pre-physics step calls
 
     def _pre_physics_step(self, actions: torch.Tensor):
         self._ik_controller.set_command(self.ik_commands)
@@ -392,17 +376,16 @@ class BallRollingEnv(DirectRLEnv):
 
     # post-physics step calls
 
-    #MARK: dones
-    def _get_dones(self) -> tuple[torch.Tensor, torch.Tensor]: # which environment is done
+    # MARK: dones
+    def _get_dones(self) -> tuple[torch.Tensor, torch.Tensor]:  # which environment is done
         pass
 
-    #MARK: rewards
+    # MARK: rewards
     def _get_rewards(self) -> torch.Tensor:
         pass
 
     def _reset_idx(self, env_ids: torch.Tensor | None):
         super()._reset_idx(env_ids)
-
 
         obj_pos = self.object.data.default_root_state[env_ids]
         obj_pos[:, :3] += self.scene.env_origins[env_ids]
@@ -428,7 +411,7 @@ class BallRollingEnv(DirectRLEnv):
         self._robot.set_joint_position_target(joint_pos, env_ids=env_ids)
         self._robot.write_joint_state_to_sim(joint_pos, joint_vel, env_ids=env_ids)
 
-    #MARK: observations
+    # MARK: observations
     def _get_observations(self) -> dict:
         pass
 
@@ -465,7 +448,7 @@ class BallRollingEnv(DirectRLEnv):
         # compute the pose of the body in the root frame
         ee_pose_b, ee_quat_b = math_utils.subtract_frame_transforms(root_pos_w, root_quat_w, ee_pos_w, ee_quat_w)
         # account for the offset
-        #if self.cfg.body_offset is not None:
+        # if self.cfg.body_offset is not None:
         ee_pose_b, ee_quat_b = math_utils.combine_frame_transforms(
             ee_pose_b, ee_quat_b, self._offset_pos, self._offset_rot
         )
@@ -482,7 +465,7 @@ class BallRollingEnv(DirectRLEnv):
         jacobian = self.jacobian_b
 
         # account for the offset
-        #if self.cfg.body_offset is not None:
+        # if self.cfg.body_offset is not None:
         # Modify the jacobian to account for the offset
         # -- translational part
         # v_link = v_ee + w_ee x r_link_ee = v_J_ee * q + w_J_ee * q x r_link_ee
@@ -495,10 +478,13 @@ class BallRollingEnv(DirectRLEnv):
 
         return jacobian
 
+
 """
 System diagnosis
 -> adapted from benchmark_cameras.py script of IsaacLab
 """
+
+
 def _get_utilization_percentages(reset: bool = False, max_values: list[float] = [0.0, 0.0, 0.0, 0.0]) -> list[float]:
     """Get the maximum CPU, RAM, GPU utilization (processing), and
     GPU memory usage percentages since the last time reset was true."""
@@ -506,7 +492,7 @@ def _get_utilization_percentages(reset: bool = False, max_values: list[float] = 
         max_values[:] = [0, 0, 0, 0]  # Reset the max values
 
     # # CPU utilization
-    #cpu_usage = psutil.cpu_percent(interval=0.1) # blocking slows down Isaac Sim a lot
+    # cpu_usage = psutil.cpu_percent(interval=0.1) # blocking slows down Isaac Sim a lot
     cpu_usage = psutil.cpu_percent(interval=None)
     max_values[0] = max(max_values[0], cpu_usage)
 
@@ -515,7 +501,7 @@ def _get_utilization_percentages(reset: bool = False, max_values: list[float] = 
     ram_usage = memory_info.percent
     max_values[1] = max(max_values[1], ram_usage)
 
-    #GPU utilization using pynvml
+    # GPU utilization using pynvml
     if torch.cuda.is_available():
         for i in range(torch.cuda.device_count()):
             handle = pynvml.nvmlDeviceGetHandleByIndex(i)
@@ -596,7 +582,7 @@ def run_simulator(env: BallRollingEnv):
         tactile_sim_end = time.time()
         ###
 
-        #- add frame times, if sensor was in contact
+        # - add frame times, if sensor was in contact
         # #todo currently assumed that every env was in contact. Need to filter out the envs where no contact
         # contact_idx, = torch.where(env.gsmini._indentation_depth > 0)
         # if contact_idx.shape[0] != 0:
@@ -620,6 +606,7 @@ def run_simulator(env: BallRollingEnv):
 
     pynvml.nvmlShutdown()
 
+
 def main():
     """Main function."""
     # Define simulation env
@@ -634,7 +621,8 @@ def main():
     # Now we are ready!
     print("[INFO]: Setup complete...")
     # Run the simulator
-    run_simulator(env = experiment)
+    run_simulator(env=experiment)
+
 
 if __name__ == "__main__":
     try:

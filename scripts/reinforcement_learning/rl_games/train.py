@@ -55,15 +55,18 @@ simulation_app = app_launcher.app
 
 """Rest everything follows."""
 
+import gymnasium as gym
 import math
 import os
 import random
 from datetime import datetime
 
-import gymnasium as gym
-
 # import isaaclab_tasks  # noqa: F401
 import tacex_tasks  # noqa: F401
+from rl_games.common import env_configurations, vecenv
+from rl_games.common.algo_observer import IsaacAlgoObserver
+from rl_games.torch_runner import Runner
+
 from isaaclab.envs import (
     DirectMARLEnv,
     DirectMARLEnvCfg,
@@ -76,9 +79,6 @@ from isaaclab.utils.dict import print_dict
 from isaaclab.utils.io import dump_pickle, dump_yaml
 from isaaclab_rl.rl_games import RlGamesGpuEnv, RlGamesVecEnvWrapper
 from isaaclab_tasks.utils.hydra import hydra_task_config
-from rl_games.common import env_configurations, vecenv
-from rl_games.common.algo_observer import IsaacAlgoObserver
-from rl_games.torch_runner import Runner
 
 # PLACEHOLDER: Extension template (do not remove this comment)
 

@@ -1,7 +1,7 @@
 import asyncio
+import numpy as np
 import os
 
-import numpy as np
 import omni.replicator.core as rep
 import omni.usd
 from isaacsim.core.utils.semantics import add_update_semantics, get_semantics

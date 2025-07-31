@@ -7,7 +7,7 @@ import gymnasium as gym
 
 from . import agents
 
-#isaaclab -p ./scripts/reinforcement_learning/skrl/train.py --task TacEx-Ball-Rolling-Tactile-v0 --num_envs 1000 --enable_cameras
+# isaaclab -p ./scripts/reinforcement_learning/skrl/train.py --task TacEx-Ball-Rolling-Tactile-v0 --num_envs 1000 --enable_cameras
 from .base_env import (  # need to import BallRollingEnv here, otherwise class will not be detected for entry point
     BallRollingEnv,
     BallRollingEnvCfg,
@@ -32,7 +32,7 @@ gym.register(
     },
 )
 
-#isaaclab -p ./scripts/reinforcement_learning/skrl/train.py --task TacEx-Ball-Rolling-Height_Map-v0 --num_envs 1000 --enable_cameras
+# isaaclab -p ./scripts/reinforcement_learning/skrl/train.py --task TacEx-Ball-Rolling-Height_Map-v0 --num_envs 1000 --enable_cameras
 from .height_map_env import BallRollingHeightMapEnv, BallRollingHeightMapEnvCfg
 
 gym.register(
@@ -46,7 +46,7 @@ gym.register(
     },
 )
 
-#isaaclab -p ./scripts/reinforcement_learning/skrl/train.py --task TacEx-Ball-Rolling-Height_Map-with-IK_v0 --num_envs 1000 --enable_cameras
+# isaaclab -p ./scripts/reinforcement_learning/skrl/train.py --task TacEx-Ball-Rolling-Height_Map-with-IK_v0 --num_envs 1000 --enable_cameras
 from .reset_with_IK_solver import BallRollingIKResetEnv, BallRollingIKResetEnvCfg
 
 gym.register(

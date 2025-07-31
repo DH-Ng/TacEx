@@ -54,11 +54,11 @@ simulation_app = app_launcher.app
 
 """Rest everything follows."""
 
-import os
-
 import gymnasium as gym
-import skrl
+import os
 import torch
+
+import skrl
 from packaging import version
 
 # check for minimum supported skrl version
@@ -77,19 +77,15 @@ elif args_cli.ml_framework.startswith("jax"):
 
 import copy
 
-import omni.isaac.lab_tasks  # noqa: F401
-import tacex_rl.tasks
-
 # required for manual SAC instantiation
 import torch
 import torch.nn as nn
+
+import omni.isaac.lab_tasks  # noqa: F401
+import tacex_rl.tasks
 from omni.isaac.lab.envs import DirectMARLEnv, multi_agent_to_single_agent
 from omni.isaac.lab.utils.dict import print_dict
-from omni.isaac.lab_tasks.utils import (
-    get_checkpoint_path,
-    load_cfg_from_registry,
-    parse_env_cfg,
-)
+from omni.isaac.lab_tasks.utils import get_checkpoint_path, load_cfg_from_registry, parse_env_cfg
 from omni.isaac.lab_tasks.utils.wrappers.skrl import SkrlVecEnvWrapper
 
 # import the skrl components to build the RL system
@@ -105,37 +101,52 @@ from skrl.utils import set_seed
 # config shortcuts
 algorithm = args_cli.algorithm.lower()
 
+
 # define models (stochastic and deterministic models) using mixins
 class StochasticActor(GaussianMixin, Model):
-    def __init__(self, observation_space, action_space, device, clip_actions=False,
-                 clip_log_std=True, min_log_std=-5, max_log_std=2):
+    def __init__(
+        self,
+        observation_space,
+        action_space,
+        device,
+        clip_actions=False,
+        clip_log_std=True,
+        min_log_std=-5,
+        max_log_std=2,
+    ):
         Model.__init__(self, observation_space, action_space, device)
         GaussianMixin.__init__(self, clip_actions, clip_log_std, min_log_std, max_log_std)
 
-        self.net = nn.Sequential(nn.Linear(self.num_observations, 512),
-                                 nn.ReLU(),
-                                 nn.Linear(512, 256),
-                                 nn.ReLU(),
-                                 nn.Linear(256, self.num_actions),
-                                 nn.Tanh())
+        self.net = nn.Sequential(
+            nn.Linear(self.num_observations, 512),
+            nn.ReLU(),
+            nn.Linear(512, 256),
+            nn.ReLU(),
+            nn.Linear(256, self.num_actions),
+            nn.Tanh(),
+        )
         self.log_std_parameter = nn.Parameter(torch.zeros(self.num_actions))
 
     def compute(self, inputs, role):
         return self.net(inputs["states"]), self.log_std_parameter, {}
+
 
 class Critic(DeterministicMixin, Model):
     def __init__(self, observation_space, action_space, device, clip_actions=False):
         Model.__init__(self, observation_space, action_space, device)
         DeterministicMixin.__init__(self, clip_actions)
 
-        self.net = nn.Sequential(nn.Linear(self.num_observations + self.num_actions, 512),
-                                 nn.ReLU(),
-                                 nn.Linear(512, 256),
-                                 nn.ReLU(),
-                                 nn.Linear(256, 1))
+        self.net = nn.Sequential(
+            nn.Linear(self.num_observations + self.num_actions, 512),
+            nn.ReLU(),
+            nn.Linear(512, 256),
+            nn.ReLU(),
+            nn.Linear(256, 1),
+        )
 
     def compute(self, inputs, role):
         return self.net(torch.cat([inputs["states"], inputs["taken_actions"]], dim=1)), {}
+
 
 def _process_cfg(cfg: dict) -> dict:
     """Convert simple types to skrl classes/components
@@ -148,10 +159,13 @@ def _process_cfg(cfg: dict) -> dict:
         "state_preprocessor",
         "value_preprocessor",
     ]
+
     def reward_shaper_function(scale):
         def reward_shaper(rewards, *args, **kwargs):
             return rewards * scale
+
         return reward_shaper
+
     def update_dict(d):
         for key, value in d.items():
             if isinstance(value, dict):
@@ -165,6 +179,7 @@ def _process_cfg(cfg: dict) -> dict:
                 elif key in ["rewards_shaper_scale"]:
                     d["rewards_shaper"] = reward_shaper_function(value)
         return d
+
     return update_dict(copy.deepcopy(cfg))
 
 
@@ -223,11 +238,9 @@ def main():
     experiment_cfg["agent"]["experiment"]["write_interval"] = 0  # don't log to TensorBoard
     experiment_cfg["agent"]["experiment"]["checkpoint_interval"] = 0  # don't generate checkpoints
 
-
     device = env.device
     # instantiate a memory as rollout buffer (any memory can be used for this)
     memory = RandomMemory(memory_size=15625, num_envs=env.num_envs, device=device)
-
 
     # instantiate the agent's models (function approximators).
     # SAC requires 5 models, visit its documentation for more details
@@ -242,12 +255,14 @@ def main():
     cfg = SAC_DEFAULT_CONFIG.copy()
     cfg.update(_process_cfg(experiment_cfg["agent"]))
 
-    agent = SAC(models=models,
-            memory=memory,
-            cfg=cfg,#agent_cfg,
-            observation_space=env.observation_space,
-            action_space=env.action_space,
-            device=device)
+    agent = SAC(
+        models=models,
+        memory=memory,
+        cfg=cfg,  # agent_cfg,
+        observation_space=env.observation_space,
+        action_space=env.action_space,
+        device=device,
+    )
 
     print(f"[INFO] Loading model checkpoint from: {resume_path}")
     agent.load(resume_path)

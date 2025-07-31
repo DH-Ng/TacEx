@@ -21,25 +21,14 @@ args_cli = parser.parse_args()
 app_launcher = AppLauncher(args_cli)
 simulation_app = app_launcher.app
 
+import numpy as np
 import pathlib
 
-import isaaclab.sim as sim_utils
-import numpy as np
 import omni.usd
 import usdrt
-from isaaclab.utils.timer import Timer
 from pxr import Gf, Sdf, Usd, UsdGeom
 from tacex_uipc import UipcSim, UipcSimCfg
-from uipc import (
-    AngleAxis,
-    Logger,
-    Quaternion,
-    Transform,
-    Vector2,
-    Vector3,
-    builtin,
-    view,
-)
+from uipc import AngleAxis, Logger, Quaternion, Transform, Vector2, Vector3, builtin, view
 from uipc.constitution import AffineBodyConstitution
 from uipc.core import ContactElement, Engine, Scene, World
 from uipc.geometry import (
@@ -52,11 +41,12 @@ from uipc.geometry import (
     label_triangle_orient,
 )
 
+import isaaclab.sim as sim_utils
+from isaaclab.utils.timer import Timer
+
 
 def setup_base_scene(sim: sim_utils.SimulationContext):
-    """To make the scene pretty.
-
-    """
+    """To make the scene pretty."""
     # set upAxis to Y to match libuipc-samples
     stage = omni.usd.get_context().get_stage()
     UsdGeom.SetStageUpAxis(stage, UsdGeom.Tokens.y)
@@ -67,7 +57,7 @@ def setup_base_scene(sim: sim_utils.SimulationContext):
         prim_path="/World/defaultGroundPlane",
         cfg=cfg_ground,
         translation=[0, -2, 0],
-        orientation=[0.7071068, -0.7071068, 0, 0]
+        orientation=[0.7071068, -0.7071068, 0, 0],
     )
 
     # spawn distant light
@@ -76,6 +66,7 @@ def setup_base_scene(sim: sim_utils.SimulationContext):
         color=(0.75, 0.75, 0.75),
     )
     cfg_light_dome.func("/World/lightDome", cfg_light_dome, translation=(1, 10, 0))
+
 
 def setup_libuipc_scene(scene):
     trimesh_path = str(pathlib.Path(__file__).parent.resolve() / "trimesh")
@@ -89,25 +80,23 @@ def setup_libuipc_scene(scene):
     io = SimplicialComplexIO()
     N = 8
     friction_rate_step = 1.0 / (N - 1)
-    contact_elements:list[ContactElement] = []
+    contact_elements: list[ContactElement] = []
 
     for i in range(N):
         friction_rate = i * friction_rate_step
-        e = contact_tabular.create(f'element_{i}')
-        contact_tabular.insert(e, default_element,
-                               friction_rate=friction_rate,
-                               resistance=1e9)
+        e = contact_tabular.create(f"element_{i}")
+        contact_tabular.insert(e, default_element, friction_rate=friction_rate, resistance=1e9)
         contact_elements.append(e)
 
     pre_transform = Transform.Identity()
     pre_transform.scale(0.3)
     io = SimplicialComplexIO(pre_transform)
-    cube_mesh = io.read(f'{trimesh_path}/cube.obj')
+    cube_mesh = io.read(f"{trimesh_path}/cube.obj")
     label_surface(cube_mesh)
 
     abd.apply_to(cube_mesh, 1e8)
     step = 0.5
-    start_x = - step * (N - 1) / 2
+    start_x = -step * (N - 1) / 2
 
     # create cubes
     cube_object = scene.objects().create("cubes")
@@ -125,7 +114,7 @@ def setup_libuipc_scene(scene):
     pre_transform = Transform.Identity()
     pre_transform.scale(Vector3.Values([0.5 * N, 0.1, 5]))
     io = SimplicialComplexIO(pre_transform)
-    ramp_mesh = io.read(f'{trimesh_path}/cube.obj')
+    ramp_mesh = io.read(f"{trimesh_path}/cube.obj")
     label_surface(ramp_mesh)
     default_element.apply_to(ramp_mesh)
     abd.apply_to(ramp_mesh, 1e8)
@@ -139,11 +128,12 @@ def setup_libuipc_scene(scene):
     view(is_fixed).fill(1)
     ramp_object.geometries().create(ramp_mesh)
 
+
 def main():
     """Main function."""
     # Initialize the simulation context
     sim_cfg = sim_utils.SimulationCfg(
-        dt=1/60,
+        dt=1 / 60,
         gravity=[0.0, -9.8, 0.0],
     )
     sim = sim_utils.SimulationContext(sim_cfg)
@@ -157,11 +147,7 @@ def main():
         ground_normal=[0, 1, 0],
         ground_height=-2.0,
         # logger_level="Info",
-        contact=UipcSimCfg.Contact(
-            default_friction_ratio=0.5,
-            default_contact_resistance=1e9,
-            d_hat=0.01
-        )
+        contact=UipcSimCfg.Contact(default_friction_ratio=0.5, default_contact_resistance=1e9, d_hat=0.01),
     )
     uipc_sim = UipcSim(uipc_cfg)
 
@@ -203,6 +189,7 @@ def main():
             total_uipc_render_time += Timer.get_timer_info("render_update")
 
             step += 1
+
 
 if __name__ == "__main__":
     # run the main function

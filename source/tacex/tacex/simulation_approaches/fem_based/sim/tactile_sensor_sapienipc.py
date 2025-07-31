@@ -16,9 +16,10 @@ sys.path.append(track_path)
 sys.path.append(repo_path)
 
 import copy
+import numpy as np
+from scipy.ndimage import gaussian_filter
 
 import cv2
-import numpy as np
 import sapien
 import transforms3d as t3d
 from envs.phong_shading import PhongShadingRenderer
@@ -27,15 +28,9 @@ from sapienipc.ipc_component import IPCFEMComponent
 from sapienipc.ipc_system import IPCSystem
 from sapienipc.ipc_utils.ipc_mesh import IPCTetMesh
 from sapienipc.ipc_utils.user_utils import ipc_update_render_all
-from scipy.ndimage import gaussian_filter
 from sklearn.neighbors import NearestNeighbors
 from utils.common import generate_patch_array
-from utils.geometry import (
-    estimate_rigid_transform,
-    in_hull,
-    quat_product,
-    transform_pts,
-)
+from utils.geometry import estimate_rigid_transform, in_hull, quat_product, transform_pts
 from utils.sapienipc_utils import cv2ex2pose
 
 patch_array_dict_global = generate_patch_array()
@@ -77,9 +72,7 @@ class TactileSensorSapienIPC:
         # create IPC component
         self.fem_component = IPCFEMComponent()
         self.fem_component.set_tet_mesh(tet_mesh)
-        self.fem_component.set_material(
-            density=density, young=elastic_modulus, poisson=poisson_ratio
-        )
+        self.fem_component.set_material(density=density, young=elastic_modulus, poisson=poisson_ratio)
         self.fem_component.set_friction(friction)
 
         if not no_render:
@@ -126,9 +119,7 @@ class TactileSensorSapienIPC:
             self.boundary_idx[4 * boundary_num // 6],
             self.boundary_idx[5 * boundary_num // 6],
         ]
-        self.init_boundary_pts = self.get_vertices_world()[
-            self.transform_calculation_ids, :
-        ]
+        self.init_boundary_pts = self.get_vertices_world()[self.transform_calculation_ids, :]
         self.vel_set = False
         self.init_surface_vertices = self.get_surface_vertices_world()
 
@@ -215,9 +206,7 @@ class VisionTactileSensorSapienIPC(TactileSensorSapienIPC):
             ],
             dtype=np.float32,
         )
-        self.camera_distort_coeffs = np.array(
-            [camera_params[4], 0, 0, 0, 0], dtype=np.float32
-        )
+        self.camera_distort_coeffs = np.array([camera_params[4], 0, 0, 0, 0], dtype=np.float32)
         self.init_vertices_camera = self.get_vertices_camera()
         self.init_surface_vertices_camera = self.get_surface_vertices_camera()
         self.reference_surface_vertices_camera = self.get_surface_vertices_camera()
@@ -243,9 +232,7 @@ class VisionTactileSensorSapienIPC(TactileSensorSapienIPC):
         current_pose_transform = np.eye(4)
         current_pose_transform[:3, :3] = t3d.quaternions.quat2mat(self.current_rot)
         current_pose_transform[:3, 3] = self.current_pos
-        v_cv = transform_pts(
-            input_vertices, self.gel2camera @ np.linalg.inv(current_pose_transform)
-        )
+        v_cv = transform_pts(input_vertices, self.gel2camera @ np.linalg.inv(current_pose_transform))
         return v_cv
 
     def get_vertices_camera(self):
@@ -268,44 +255,28 @@ class VisionTactileSensorSapienIPC(TactileSensorSapienIPC):
         return self.init_surface_vertices_camera.copy()
 
     def set_reference_surface_vertices_camera(self):
-        self.reference_surface_vertices_camera = (
-            self.get_surface_vertices_camera().copy()
-        )
+        self.reference_surface_vertices_camera = self.get_surface_vertices_camera().copy()
 
     def _gen_marker_grid(self):
-        marker_interval = (
-            self.marker_interval_range[1] - self.marker_interval_range[0]
-        ) * np.random.rand(1)[0] + self.marker_interval_range[0]
-        marker_rotation_angle = (
-            2 * self.marker_rotation_range * np.random.rand(1)
-            - self.marker_rotation_range
-        )
+        marker_interval = (self.marker_interval_range[1] - self.marker_interval_range[0]) * np.random.rand(1)[
+            0
+        ] + self.marker_interval_range[0]
+        marker_rotation_angle = 2 * self.marker_rotation_range * np.random.rand(1) - self.marker_rotation_range
         marker_translation_x = (
-            2 * self.marker_translation_range[0] * np.random.rand(1)[0]
-            - self.marker_translation_range[0]
+            2 * self.marker_translation_range[0] * np.random.rand(1)[0] - self.marker_translation_range[0]
         )
         marker_translation_y = (
-            2 * self.marker_translation_range[1] * np.random.rand(1)[0]
-            - self.marker_translation_range[1]
+            2 * self.marker_translation_range[1] * np.random.rand(1)[0] - self.marker_translation_range[1]
         )
 
         marker_x_start = (
-            -math.ceil((8 + marker_translation_x) / marker_interval)  # 16.5
-            * marker_interval
-            + marker_translation_x
+            -math.ceil((8 + marker_translation_x) / marker_interval) * marker_interval + marker_translation_x  # 16.5
         )
-        marker_x_end = (
-            math.ceil((8 - marker_translation_x) / marker_interval) * marker_interval
-            + marker_translation_x
-        )
+        marker_x_end = math.ceil((8 - marker_translation_x) / marker_interval) * marker_interval + marker_translation_x
         marker_y_start = (
-            -math.ceil((6 + marker_translation_y) / marker_interval) * marker_interval
-            + marker_translation_y
+            -math.ceil((6 + marker_translation_y) / marker_interval) * marker_interval + marker_translation_y
         )
-        marker_y_end = (
-            math.ceil((6 - marker_translation_y) / marker_interval) * marker_interval
-            + marker_translation_y
-        )
+        marker_y_end = math.ceil((6 - marker_translation_y) / marker_interval) * marker_interval + marker_translation_y
 
         marker_x = np.linspace(
             marker_x_start,
@@ -325,13 +296,11 @@ class VisionTactileSensorSapienIPC(TactileSensorSapienIPC):
         # print(marker_num)
 
         marker_pos_shift_x = (
-            np.random.rand(marker_num) * self.marker_pos_shift_range[0] * 2
-            - self.marker_pos_shift_range[0]
+            np.random.rand(marker_num) * self.marker_pos_shift_range[0] * 2 - self.marker_pos_shift_range[0]
         )
 
         marker_pos_shift_y = (
-            np.random.rand(marker_num) * self.marker_pos_shift_range[1] * 2
-            - self.marker_pos_shift_range[1]
+            np.random.rand(marker_num) * self.marker_pos_shift_range[1] * 2 - self.marker_pos_shift_range[1]
         )
 
         marker_xy[:, 0] += marker_pos_shift_x
@@ -357,13 +326,9 @@ class VisionTactileSensorSapienIPC(TactileSensorSapienIPC):
         f_on_surface = self.faces[np.sum(f_v_on_surface, axis=1) == 3]
         global_id_to_surface_id = np.cumsum(self.on_surface) - 1
         f_on_surface_on_surface_id = global_id_to_surface_id[f_on_surface]
-        f_center_on_surface = np.mean(
-            self.init_vertices_camera[f_on_surface][:, :, :2], axis=1
-        )
+        f_center_on_surface = np.mean(self.init_vertices_camera[f_on_surface][:, :, :2], axis=1)
 
-        nbrs = NearestNeighbors(n_neighbors=4, algorithm="ball_tree").fit(
-            f_center_on_surface
-        )
+        nbrs = NearestNeighbors(n_neighbors=4, algorithm="ball_tree").fit(f_center_on_surface)
         distances, idx = nbrs.kneighbors(marker_pts)
 
         marker_pts_surface_idx = []
@@ -382,17 +347,13 @@ class VisionTactileSensorSapienIPC(TactileSensorSapienIPC):
                 w12 = np.linalg.inv(A) @ (p - p0)
                 if possible_face_id == possible_face_ids[0]:
                     marker_pts_surface_idx.append(face_vertices_idx)
-                    marker_pts_surface_weight.append(
-                        np.array([1 - w12.sum(), w12[0], w12[1]])
-                    )
+                    marker_pts_surface_weight.append(np.array([1 - w12.sum(), w12[0], w12[1]]))
                     valid_marker_idx.append(i)
                     if w12[0] >= 0 and w12[1] >= 0 and w12[0] + w12[1] <= 1:
                         break
                 elif w12[0] >= 0 and w12[1] >= 0 and w12[0] + w12[1] <= 1:
                     marker_pts_surface_idx[-1] = face_vertices_idx
-                    marker_pts_surface_weight[-1] = np.array(
-                        [1 - w12.sum(), w12[0], w12[1]]
-                    )
+                    marker_pts_surface_weight[-1] = np.array([1 - w12.sum(), w12[0], w12[1]])
                     valid_marker_idx[-1] = i
                     break
 
@@ -401,12 +362,12 @@ class VisionTactileSensorSapienIPC(TactileSensorSapienIPC):
         marker_pts_surface_idx = np.stack(marker_pts_surface_idx)
         marker_pts_surface_weight = np.stack(marker_pts_surface_weight)
         assert np.allclose(
-            (
-                surface_pts[marker_pts_surface_idx]
-                * marker_pts_surface_weight[..., None]
-            ).sum(1),
+            (surface_pts[marker_pts_surface_idx] * marker_pts_surface_weight[..., None]).sum(1),
             marker_pts,
-        ), f"max err: {np.abs((surface_pts[marker_pts_surface_idx] * marker_pts_surface_weight[..., None]).sum(1) - marker_pts).max()}"
+        ), (
+            "max err:"
+            f" {np.abs((surface_pts[marker_pts_surface_idx] * marker_pts_surface_weight[..., None]).sum(1) - marker_pts).max()}"
+        )
 
         return marker_pts_surface_idx, marker_pts_surface_weight
 
@@ -423,16 +384,12 @@ class VisionTactileSensorSapienIPC(TactileSensorSapienIPC):
 
     def gen_marker_flow(self):
         marker_grid = self._gen_marker_grid()
-        marker_pts_surface_idx, marker_pts_surface_weight = self._gen_marker_weight(
-            marker_grid
-        )
+        marker_pts_surface_idx, marker_pts_surface_weight = self._gen_marker_weight(marker_grid)
         init_marker_pts = (
-            self.reference_surface_vertices_camera[marker_pts_surface_idx]
-            * marker_pts_surface_weight[..., None]
+            self.reference_surface_vertices_camera[marker_pts_surface_idx] * marker_pts_surface_weight[..., None]
         ).sum(1)
         curr_marker_pts = (
-            self.get_surface_vertices_camera()[marker_pts_surface_idx]
-            * marker_pts_surface_weight[..., None]
+            self.get_surface_vertices_camera()[marker_pts_surface_idx] * marker_pts_surface_weight[..., None]
         ).sum(1)
 
         init_marker_uv = self.gen_marker_uv(init_marker_pts)
@@ -449,9 +406,7 @@ class VisionTactileSensorSapienIPC(TactileSensorSapienIPC):
         marker_flow = marker_flow[:, marker_mask]
 
         # post processing
-        no_lose_tracking_mask = (
-            np.random.rand(marker_flow.shape[1]) > self.marker_lose_tracking_probability
-        )
+        no_lose_tracking_mask = np.random.rand(marker_flow.shape[1]) > self.marker_lose_tracking_probability
         marker_flow = marker_flow[:, no_lose_tracking_mask, :]
         noise = np.random.randn(*marker_flow.shape) * self.marker_random_noise
         marker_flow += noise
@@ -459,18 +414,12 @@ class VisionTactileSensorSapienIPC(TactileSensorSapienIPC):
         original_point_num = marker_flow.shape[1]
 
         if original_point_num >= self.marker_flow_size:
-            chosen = np.random.choice(
-                original_point_num, self.marker_flow_size, replace=False
-            )
+            chosen = np.random.choice(original_point_num, self.marker_flow_size, replace=False)
             ret = marker_flow[:, chosen, ...]
         else:
-            ret = np.zeros(
-                (marker_flow.shape[0], self.marker_flow_size, marker_flow.shape[-1])
-            )
+            ret = np.zeros((marker_flow.shape[0], self.marker_flow_size, marker_flow.shape[-1]))
             ret[:, :original_point_num, :] = marker_flow.copy()
-            ret[:, original_point_num:, :] = ret[
-                :, original_point_num - 1 : original_point_num, :
-            ]
+            ret[:, original_point_num:, :] = ret[:, original_point_num - 1 : original_point_num, :]
 
         if self.normalize:
             ret /= 160.0
@@ -485,12 +434,9 @@ class VisionTactileSensorSapienIPC(TactileSensorSapienIPC):
 
         # generate markers
         marker_grid = self._gen_marker_grid()
-        marker_pts_surface_idx, marker_pts_surface_weight = self._gen_marker_weight(
-            marker_grid
-        )
+        marker_pts_surface_idx, marker_pts_surface_weight = self._gen_marker_weight(marker_grid)
         curr_marker_pts = (
-            self.get_surface_vertices_camera()[marker_pts_surface_idx]
-            * marker_pts_surface_weight[..., None]
+            self.get_surface_vertices_camera()[marker_pts_surface_idx] * marker_pts_surface_weight[..., None]
         ).sum(1)
         curr_marker_uv = self.gen_marker_uv(curr_marker_pts)
 
@@ -523,25 +469,16 @@ class VisionTactileSensorSapienIPC(TactileSensorSapienIPC):
             uv = marker_uv_compensated[i]
             u = uv[0] + 12
             v = uv[1] + 12
-            patch_id_u = math.floor(
-                (u - math.floor(u)) * self.patch_array_dict["super_resolution_ratio"]
-            )
-            patch_id_v = math.floor(
-                (v - math.floor(v)) * self.patch_array_dict["super_resolution_ratio"]
-            )
+            patch_id_u = math.floor((u - math.floor(u)) * self.patch_array_dict["super_resolution_ratio"])
+            patch_id_v = math.floor((v - math.floor(v)) * self.patch_array_dict["super_resolution_ratio"])
             patch_id_w = math.floor(
                 (marker_size - self.patch_array_dict["base_circle_radius"])
                 * self.patch_array_dict["super_resolution_ratio"]
             )
-            current_patch = self.patch_array_dict["patch_array"][
-                patch_id_u, patch_id_v, patch_id_w
-            ]
+            current_patch = self.patch_array_dict["patch_array"][patch_id_u, patch_id_v, patch_id_w]
             patch_coord_u = math.floor(u) - 6
             patch_coord_v = math.floor(v) - 6
-            if (
-                marker_image.shape[1] - 12 > patch_coord_u >= 0
-                and marker_image.shape[0] - 12 > patch_coord_v >= 0
-            ):
+            if marker_image.shape[1] - 12 > patch_coord_u >= 0 and marker_image.shape[0] - 12 > patch_coord_v >= 0:
                 marker_image[
                     patch_coord_v : patch_coord_v + 12,
                     patch_coord_u : patch_coord_u + 12,

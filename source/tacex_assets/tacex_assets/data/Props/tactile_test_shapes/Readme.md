@@ -16,7 +16,7 @@ Assets are from https://danfergo.github.io/gelsight-simulation/
 
 
 The object base plates have a width and length of 16mm. The maximum height is 20mm.
-We want to end up at the top of the shape, when we move to the object position.  
+We want to end up at the top of the shape, when we move to the object position.
 This is why we set the xForm to be at the top.
 
 Here is the cone asset as an example:

@@ -3,6 +3,9 @@
 #
 # SPDX-License-Identifier: BSD-3-Clause
 
+from tacex_assets import TACEX_ASSETS_DATA_DIR
+from tacex_assets.sensors.gelsight_mini.gelsight_mini_cfg import GelSightMiniCfg
+
 import isaaclab.sim as sim_utils
 from isaaclab.actuators.actuator_cfg import ImplicitActuatorCfg
 from isaaclab.assets import ArticulationCfg
@@ -11,8 +14,6 @@ from isaaclab.scene import InteractiveSceneCfg
 from isaaclab.sim import PhysxCfg, SimulationCfg
 from isaaclab.sim.spawners.materials.physics_materials_cfg import RigidBodyMaterialCfg
 from isaaclab.utils import configclass
-from tacex_assets import TACEX_ASSETS_DATA_DIR
-from tacex_assets.sensors.gelsight_mini.gelsight_mini_cfg import GelSightMiniCfg
 
 from tacex import GelSightSensor, GelSightSensorCfg
 from tacex.simulation_approaches.gpu_taxim import TaximSimulatorCfg
@@ -193,16 +194,16 @@ class FactoryEnvCfg(DirectRLEnvCfg):
 
     gsmini_left = GelSightMiniCfg(
         prim_path="/World/envs/env_.*/Robot/gelsight_mini_case_left",
-        sensor_camera_cfg = GelSightMiniCfg.SensorCameraCfg(
-            prim_path_appendix = "/Camera",
-            update_period= 0,
-            resolution = (32,32),
+        sensor_camera_cfg=GelSightMiniCfg.SensorCameraCfg(
+            prim_path_appendix="/Camera",
+            update_period=0,
+            resolution=(32, 32),
         ),
-        device = "cuda",
-        debug_vis=True, # for rendering sensor output in the gui
+        device="cuda",
+        debug_vis=True,  # for rendering sensor output in the gui
         # update Taxim cfg
         marker_motion_sim_cfg=None,
-        data_types=["tactile_rgb"], #marker_motion
+        data_types=["tactile_rgb"],  # marker_motion
     )
     # settings for optical sim
     gsmini_left.optical_sim_cfg = gsmini_left.optical_sim_cfg.replace(
@@ -213,6 +214,7 @@ class FactoryEnvCfg(DirectRLEnvCfg):
     gsmini_right = gsmini_left.replace(
         prim_path="/World/envs/env_.*/Robot/gelsight_mini_case_right",
     )
+
 
 @configclass
 class FactoryTaskPegInsertCfg(FactoryEnvCfg):

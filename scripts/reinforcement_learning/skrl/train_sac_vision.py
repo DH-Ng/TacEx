@@ -65,16 +65,18 @@ simulation_app = app_launcher.app
 
 from omni.isaac.core.utils.extensions import enable_extension
 
-enable_extension("omni.isaac.debug_draw") # otherwise running headless on the cluster is not possible (some GIPC classes import debug_draw)
-
-import os
-import random
-from datetime import datetime
+enable_extension(
+    "omni.isaac.debug_draw"
+)  # otherwise running headless on the cluster is not possible (some GIPC classes import debug_draw)
 
 import gymnasium as gym
-import skrl
+import os
+import random
 import torch
 import torch.nn as nn
+from datetime import datetime
+
+import skrl
 from packaging import version
 
 # import the skrl components to build the RL system
@@ -120,8 +122,16 @@ from omni.isaac.lab_tasks.utils.wrappers.skrl import SkrlVecEnvWrapper
 
 # define models (stochastic and deterministic models) using mixins
 class StochasticActor(GaussianMixin, Model):
-    def __init__(self, observation_space, action_space, device, clip_actions=False,
-                 clip_log_std=True, min_log_std=-5, max_log_std=2):
+    def __init__(
+        self,
+        observation_space,
+        action_space,
+        device,
+        clip_actions=False,
+        clip_log_std=True,
+        min_log_std=-5,
+        max_log_std=2,
+    ):
         Model.__init__(self, observation_space, action_space, device)
         GaussianMixin.__init__(self, clip_actions, clip_log_std, min_log_std, max_log_std)
         # self.features_extractor = nn.Sequential(nn.Conv2d(3, 32, kernel_size=8, stride=3),
@@ -160,11 +170,13 @@ class StochasticActor(GaussianMixin, Model):
         #                          nn.ReLU(),
         #                          nn.Linear(32, self.num_actions))
 
-        self.net = nn.Sequential(nn.Linear(270, 32), # why is the input 2334?, 2304 from feature extractor, 30 from propio -> why 2304?
-                                 nn.ReLU(),
-                                 nn.Linear(32, 32),
-                                 nn.ReLU(),
-                                 nn.Linear(32, self.num_actions))
+        self.net = nn.Sequential(
+            nn.Linear(270, 32),  # why is the input 2334?, 2304 from feature extractor, 30 from propio -> why 2304?
+            nn.ReLU(),
+            nn.Linear(32, 32),
+            nn.ReLU(),
+            nn.Linear(32, self.num_actions),
+        )
 
         self.log_std_parameter = nn.Parameter(torch.zeros(self.num_actions))
 
@@ -207,22 +219,21 @@ class StochasticActor(GaussianMixin, Model):
         #  'jaco_arm/joints_vel': torch.Tensor(shape=[batch_size, 1, 6], dtype=torch.float32)}
 
         # permute and normalize the images (samples, width, height, channels) -> (samples, channels, width, height)
-        #? our space['vision_obs'] (images) here are just (widht, height, channels)? -> why no samples?
+        # ? our space['vision_obs'] (images) here are just (widht, height, channels)? -> why no samples?
         # print("vision_obs shape ", space['vision_obs'].shape)
         # print("vision_obs shape after ", space['vision_obs'].permute(0, 3, 1, 2).shape)
-        features = self.features_extractor(space['vision_obs'].permute(0, 3, 1, 2) / 255.0)
+        features = self.features_extractor(space["vision_obs"].permute(0, 3, 1, 2) / 255.0)
 
         # print("features shape ", features.shape) # 2304, with propio = 30 -> num_observ = 2334
-        mean_actions = torch.tanh(self.net(torch.cat([features,
-                                                      space["proprioceptive_obs"]], dim=-1)))
+        mean_actions = torch.tanh(self.net(torch.cat([features, space["proprioceptive_obs"]], dim=-1)))
 
         return mean_actions, self.log_std_parameter, {}
+
 
 class Critic(DeterministicMixin, Model):
     def __init__(self, observation_space, action_space, device, clip_actions=False):
         Model.__init__(self, observation_space, action_space, device)
         DeterministicMixin.__init__(self, clip_actions)
-
 
         # self.features_extractor = nn.Sequential(nn.Conv2d(3, 32, kernel_size=8, stride=3),
         #                                         nn.ReLU(),
@@ -250,11 +261,15 @@ class Critic(DeterministicMixin, Model):
         #                          nn.Linear(32, 32),
         #                          nn.ReLU(),
         #                          nn.Linear(32, self.num_actions))
-        self.net = nn.Sequential(nn.Linear(270+self.num_actions, 32), #2334 is hardcoded to the feature extractor and the observations -> how to make it based on env information?
-                                 nn.ReLU(),
-                                 nn.Linear(32, 32),
-                                 nn.ReLU(),
-                                 nn.Linear(32, self.num_actions))
+        self.net = nn.Sequential(
+            nn.Linear(
+                270 + self.num_actions, 32
+            ),  # 2334 is hardcoded to the feature extractor and the observations -> how to make it based on env information?
+            nn.ReLU(),
+            nn.Linear(32, 32),
+            nn.ReLU(),
+            nn.Linear(32, self.num_actions),
+        )
 
     # def compute(self, inputs, role):
     #     return self.net(torch.cat([inputs["states"], inputs["taken_actions"]], dim=1)), {}
@@ -266,16 +281,16 @@ class Critic(DeterministicMixin, Model):
         space = self.tensor_to_space(states, self.observation_space)
 
         # permute and normalize the images (samples, width, height, channels) -> (samples, channels, width, height)
-        #? we dont have samples dim, instead just (width, height, channels)
-        features = self.features_extractor(space['vision_obs'].permute(0, 3, 1, 2) / 255.0)
+        # ? we dont have samples dim, instead just (width, height, channels)
+        features = self.features_extractor(space["vision_obs"].permute(0, 3, 1, 2) / 255.0)
 
-        return self.net(torch.cat([features,
-                                   space["proprioceptive_obs"],
-                                   inputs["taken_actions"]], dim=-1)), {}
+        return self.net(torch.cat([features, space["proprioceptive_obs"], inputs["taken_actions"]], dim=-1)), {}
+
 
 # config shortcuts
 algorithm = args_cli.algorithm.lower()
 agent_cfg_entry_point = "skrl_cfg_entry_point" if algorithm in ["ppo"] else f"skrl_{algorithm}_cfg_entry_point"
+
 
 def _process_cfg(cfg: dict) -> dict:
     """Convert simple types to skrl classes/components
@@ -288,10 +303,13 @@ def _process_cfg(cfg: dict) -> dict:
         "state_preprocessor",
         "value_preprocessor",
     ]
+
     def reward_shaper_function(scale):
         def reward_shaper(rewards, *args, **kwargs):
             return rewards * scale
+
         return reward_shaper
+
     def update_dict(d):
         for key, value in d.items():
             if isinstance(value, dict):
@@ -305,6 +323,7 @@ def _process_cfg(cfg: dict) -> dict:
                 elif key in ["rewards_shaper_scale"]:
                     d["rewards_shaper"] = reward_shaper_function(value)
         return d
+
     return update_dict(copy.deepcopy(cfg))
 
 
@@ -382,11 +401,8 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
 
     device = env.device
 
-
     # instantiate a memory as rollout buffer (any memory can be used for this)
     memory = RandomMemory(memory_size=agent_cfg["memory_size"], num_envs=env.num_envs, device=device)
-
-
 
     # instantiate the agent's models (function approximators).
     # SAC requires 5 models, visit its documentation for more details
@@ -401,18 +417,23 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
     cfg = SAC_DEFAULT_CONFIG.copy()
     cfg.update(_process_cfg(agent_cfg["agent"]))
 
-    agent = SAC(models=models,
-            memory=memory,
-            cfg=cfg,#agent_cfg,
-            observation_space=env.observation_space,
-            action_space=env.action_space,
-            device=device)
+    agent = SAC(
+        models=models,
+        memory=memory,
+        cfg=cfg,  # agent_cfg,
+        observation_space=env.observation_space,
+        action_space=env.action_space,
+        device=device,
+    )
 
     if args_cli.checkpoint:
         print(f"[INFO] Loading model checkpoint from: {resume_path}")
         agent.load(resume_path)
     # configure and instantiate the RL trainer
-    cfg_trainer = {"timesteps": agent_cfg["trainer"]["timesteps"], "headless": True} # headless command gets overriden by IsaacLab argument
+    cfg_trainer = {
+        "timesteps": agent_cfg["trainer"]["timesteps"],
+        "headless": True,
+    }  # headless command gets overriden by IsaacLab argument
     trainer = SequentialTrainer(cfg=cfg_trainer, env=env, agents=agent)
     # # start training
     # trainer.train()

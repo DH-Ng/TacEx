@@ -6,20 +6,25 @@
 from __future__ import annotations
 
 import math
+import torch
+
+from isaacsim.core.utils.stage import get_current_stage
+from isaacsim.core.utils.torch.transformations import tf_combine, tf_inverse, tf_vector
+from pxr import UsdGeom
+
+# from tactile_sim import GsMiniSensorCfg, GsMiniSensor
+from tacex_assets import TACEX_ASSETS_DATA_DIR
+from tacex_assets.robots.franka.franka_gsmini_single_adapter_rigid import (
+    FRANKA_PANDA_ARM_GSMINI_SINGLE_ADAPTER_HIGH_PD_CFG,
+)
+from tacex_assets.sensors.gelsight_mini.gelsight_mini_cfg import GelSightMiniCfg
+from tacex_tasks.utils import DirectLiveVisualizer
 
 import isaaclab.sim as sim_utils
 import isaaclab.utils.math as lab_math
 import isaaclab.utils.math as math_utils
-import torch
 from isaaclab.actuators.actuator_cfg import ImplicitActuatorCfg
-from isaaclab.assets import (
-    Articulation,
-    ArticulationCfg,
-    AssetBase,
-    AssetBaseCfg,
-    RigidObject,
-    RigidObjectCfg,
-)
+from isaaclab.assets import Articulation, ArticulationCfg, AssetBase, AssetBaseCfg, RigidObject, RigidObjectCfg
 from isaaclab.controllers.differential_ik import DifferentialIKController
 from isaaclab.controllers.differential_ik_cfg import DifferentialIKControllerCfg
 from isaaclab.envs import DirectRLEnv, DirectRLEnvCfg, ViewerCfg
@@ -42,17 +47,6 @@ from isaaclab.utils.math import (
     wrap_to_pi,
 )
 from isaaclab.utils.noise import GaussianNoiseCfg, NoiseModelCfg, UniformNoiseCfg
-from isaacsim.core.utils.stage import get_current_stage
-from isaacsim.core.utils.torch.transformations import tf_combine, tf_inverse, tf_vector
-from pxr import UsdGeom
-
-# from tactile_sim import GsMiniSensorCfg, GsMiniSensor
-from tacex_assets import TACEX_ASSETS_DATA_DIR
-from tacex_assets.robots.franka.franka_gsmini_single_adapter_rigid import (
-    FRANKA_PANDA_ARM_GSMINI_SINGLE_ADAPTER_HIGH_PD_CFG,
-)
-from tacex_assets.sensors.gelsight_mini.gelsight_mini_cfg import GelSightMiniCfg
-from tacex_tasks.utils import DirectLiveVisualizer
 
 from tacex import GelSightSensor
 from tacex.simulation_approaches.fots import FOTSMarkerSimulator, FOTSMarkerSimulatorCfg
@@ -61,14 +55,8 @@ from tacex.simulation_approaches.fots import FOTSMarkerSimulator, FOTSMarkerSimu
 # from isaaclab.envs.mdp.actions.actions_cfg import DifferentialInverseKinematicsActionCfg
 
 
-
-
 from isaaclab.markers import POSITION_GOAL_MARKER_CFG  # isort: skip
 from isaaclab.markers import CUBOID_MARKER_CFG  # isort: skip
-
-
-
-
 
 
 class CustomEnvWindow(BaseEnvWindow):
@@ -110,11 +98,11 @@ class PoleBalancingEnvCfg(DirectRLEnvCfg):
     decimation = 1
     # simulation
     sim: SimulationCfg = SimulationCfg(
-        dt=1 / 120, #0.001
+        dt=1 / 120,  # 0.001
         render_interval=decimation,
-        #device="cpu",
+        # device="cpu",
         physx=PhysxCfg(
-            enable_ccd=True, # needed for more stable ball_rolling
+            enable_ccd=True,  # needed for more stable ball_rolling
             # bounce_threshold_velocity=10000,
         ),
         physics_material=sim_utils.RigidBodyMaterialCfg(
@@ -168,9 +156,9 @@ class PoleBalancingEnvCfg(DirectRLEnvCfg):
                 prim_path="/World/envs/env_.*/Robot/panda_hand",
                 name="end_effector",
                 offset=OffsetCfg(
-                    pos=(0.0, 0.0, 0.131), # 0ffset from panda hand frame origin to gelpad top
-                    rot=(1.0, 0.0, 0.0, 0.0)
-                    #rot=(0, 0.92388, -0.38268, 0) # our panda hand asset has rotation from (180,0,-45) -> we substract 180 for defining the rotation limits
+                    pos=(0.0, 0.0, 0.131),  # 0ffset from panda hand frame origin to gelpad top
+                    rot=(1.0, 0.0, 0.0, 0.0),
+                    # rot=(0, 0.92388, -0.38268, 0) # our panda hand asset has rotation from (180,0,-45) -> we substract 180 for defining the rotation limits
                 ),
             ),
         ],
@@ -178,37 +166,36 @@ class PoleBalancingEnvCfg(DirectRLEnvCfg):
 
     # rigid body pole
     pole: RigidObjectCfg = RigidObjectCfg(
-        prim_path= "/World/envs/env_.*/pole",
+        prim_path="/World/envs/env_.*/pole",
         spawn=sim_utils.UsdFileCfg(
             usd_path=f"{TACEX_ASSETS_DATA_DIR}/Props/pole.usd",
-            #scale=(2, 1, 0.6),
+            # scale=(2, 1, 0.6),
             rigid_props=RigidBodyPropertiesCfg(
-                    solver_position_iteration_count=120,
-                    solver_velocity_iteration_count=1,
-                    max_angular_velocity=1000.0,
-                    max_linear_velocity=1000.0,
-                    max_depenetration_velocity=5.0,
-                    disable_gravity=False,
+                solver_position_iteration_count=120,
+                solver_velocity_iteration_count=1,
+                max_angular_velocity=1000.0,
+                max_linear_velocity=1000.0,
+                max_depenetration_velocity=5.0,
+                disable_gravity=False,
             ),
         ),
-        init_state=RigidObjectCfg.InitialStateCfg(pos=(0.41336, 0.01123, 0.4637)), #(0.3821, 0.04255, 0.37877)
+        init_state=RigidObjectCfg.InitialStateCfg(pos=(0.41336, 0.01123, 0.4637)),  # (0.3821, 0.04255, 0.37877)
     )
 
     # sensors
     gsmini = GelSightMiniCfg(
         prim_path="/World/envs/env_.*/Robot/gelsight_mini_case",
-        sensor_camera_cfg = GelSightMiniCfg.SensorCameraCfg(
-            prim_path_appendix = "/Camera",
-            update_period= 0,
-            resolution = (32,32), #(120, 160),
-            data_types = ["depth"],
-            clipping_range = (0.024, 0.034),
+        sensor_camera_cfg=GelSightMiniCfg.SensorCameraCfg(
+            prim_path_appendix="/Camera",
+            update_period=0,
+            resolution=(32, 32),
+            data_types=["depth"],
+            clipping_range=(0.024, 0.034),
         ),
-        device = "cuda",
-        debug_vis=True, # for being able to see sensor output in the gui
+        device="cuda",
+        debug_vis=True,  # for being able to see sensor output in the gui
         # update Taxim cfg
         optical_sim_cfg=None,
-
         # update FOTS cfg
         marker_motion_sim_cfg=None,
         # marker_motion_sim_cfg=FOTSMarkerSimulatorCfg(
@@ -234,16 +221,14 @@ class PoleBalancingEnvCfg(DirectRLEnvCfg):
         #         debug_vis=False,
         #     )
         # ),
-        data_types=["height_map"], #marker_motion
+        data_types=["height_map"],  # marker_motion
     )
 
     # noise models
-    action_noise_model = NoiseModelCfg(
-        noise_cfg = UniformNoiseCfg(n_min=-0.001, n_max=0.001, operation="add")
-    )
+    action_noise_model = NoiseModelCfg(noise_cfg=UniformNoiseCfg(n_min=-0.001, n_max=0.001, operation="add"))
     # observation_noise_model =
 
-    #MARK: reward configuration
+    # MARK: reward configuration
     reward_terms = {
         "at_obj_reward": {"weight": 0.75, "minimal_distance": 0.005},
         "height_reward": {"weight": 0.25, "w": 10.0, "v": 0.3, "alpha": 0.00067, "target_height_cm": 50},
@@ -262,19 +247,20 @@ class PoleBalancingEnvCfg(DirectRLEnvCfg):
     obj_pos_randomization_range = [-0.05, 0.05]
 
     # env
-    episode_length_s = 8.3333/2 # 1000/2 timesteps (dt = 1/120 -> 8.3333/(1/120) = 1000)
-    action_space = 6 # we use relative task_space actions: (dx, dy, dz, droll, dpitch) -> dyaw is ommitted
+    episode_length_s = 8.3333 / 2  # 1000/2 timesteps (dt = 1/120 -> 8.3333/(1/120) = 1000)
+    action_space = 6  # we use relative task_space actions: (dx, dy, dz, droll, dpitch) -> dyaw is ommitted
     observation_space = {
-        "proprio_obs": 14, #16, # 3 for ee pos, 2 for orient (roll, pitch), 2 for init goal-pos (x,y), 5 for actions
-        "vision_obs": [32,32,1], # from tactile sensor
+        "proprio_obs": 14,  # 16, # 3 for ee pos, 2 for orient (roll, pitch), 2 for init goal-pos (x,y), 5 for actions
+        "vision_obs": [32, 32, 1],  # from tactile sensor
     }
     state_space = 0
-    action_scale = 0.05 # [cm]
+    action_scale = 0.05  # [cm]
 
     x_bounds = (0.15, 0.75)
     y_bounds = (-0.75, 0.75)
-    too_far_away_threshold = 0.05 #0.01 #0.2 #0.125 #0.2 #0.15
-    min_height_threshold = 0.3 #0.37877
+    too_far_away_threshold = 0.05  # 0.01 #0.2 #0.125 #0.2 #0.15
+    min_height_threshold = 0.3  # 0.37877
+
 
 class PoleBalancingEnv(DirectRLEnv):
     """RL env in which the robot has to push/roll a ball to a goal position.
@@ -282,6 +268,7 @@ class PoleBalancingEnv(DirectRLEnv):
     This base env uses (absolute) joint positions.
     Absolute joint pos and vel are used for the observations.
     """
+
     # pre-physics step calls
     #   |-- _pre_physics_step(action)
     #   |-- _apply_action()
@@ -334,7 +321,7 @@ class PoleBalancingEnv(DirectRLEnv):
         self.prev_actions = torch.zeros_like(self.actions)
 
         self._goal_pos_w = torch.zeros((self.num_envs, 3), device=self.device)
-        self._goal_pos_w[:, 2] = self.cfg.reward_terms["height_reward"]["target_height_cm"]*0.01
+        self._goal_pos_w[:, 2] = self.cfg.reward_terms["height_reward"]["target_height_cm"] * 0.01
 
         self.reward_terms = {}
         for rew_terms in self.cfg.reward_terms:
@@ -343,16 +330,24 @@ class PoleBalancingEnv(DirectRLEnv):
         if self.cfg.debug_vis:
             # add plots
             self.visualizers = {
-                "Actions": DirectLiveVisualizer(self.cfg.debug_vis, self.num_envs, self._window, visualizer_name="Actions"),
-                "Observations": DirectLiveVisualizer(self.cfg.debug_vis, self.num_envs, self._window, visualizer_name="Observations"),
-                "Rewards": DirectLiveVisualizer(self.cfg.debug_vis, self.num_envs, self._window, visualizer_name="Rewards"),
-                "Metrics": DirectLiveVisualizer(self.cfg.debug_vis, self.num_envs, self._window, visualizer_name="Metrics"),
+                "Actions": DirectLiveVisualizer(
+                    self.cfg.debug_vis, self.num_envs, self._window, visualizer_name="Actions"
+                ),
+                "Observations": DirectLiveVisualizer(
+                    self.cfg.debug_vis, self.num_envs, self._window, visualizer_name="Observations"
+                ),
+                "Rewards": DirectLiveVisualizer(
+                    self.cfg.debug_vis, self.num_envs, self._window, visualizer_name="Rewards"
+                ),
+                "Metrics": DirectLiveVisualizer(
+                    self.cfg.debug_vis, self.num_envs, self._window, visualizer_name="Metrics"
+                ),
             }
             self.visualizers["Actions"].terms["actions"] = self.actions
 
-            self.visualizers["Observations"].terms["ee_pos"] = torch.zeros((self.num_envs,3))
-            self.visualizers["Observations"].terms["ee_rot"] = torch.zeros((self.num_envs,3))
-            self.visualizers["Observations"].terms["goal"] = torch.zeros((self.num_envs,2))
+            self.visualizers["Observations"].terms["ee_pos"] = torch.zeros((self.num_envs, 3))
+            self.visualizers["Observations"].terms["ee_rot"] = torch.zeros((self.num_envs, 3))
+            self.visualizers["Observations"].terms["goal"] = torch.zeros((self.num_envs, 2))
             self.visualizers["Observations"].terms["sensor_output"] = self._get_observations()["policy"]["vision_obs"]
 
             self.visualizers["Rewards"].terms["rewards"] = torch.zeros((self.num_envs, 10))
@@ -369,10 +364,10 @@ class PoleBalancingEnv(DirectRLEnv):
                 "full",
             ]
 
-            self.visualizers["Metrics"].terms["ee_height"] = torch.zeros((self.num_envs,1))
-            self.visualizers["Metrics"].terms["pole_orient_x"] = torch.zeros((self.num_envs,1))
-            self.visualizers["Metrics"].terms["pole_orient_y"] = torch.zeros((self.num_envs,1))
-            self.visualizers["Metrics"].terms["obj_ee_distance"] = torch.zeros((self.num_envs,1))
+            self.visualizers["Metrics"].terms["ee_height"] = torch.zeros((self.num_envs, 1))
+            self.visualizers["Metrics"].terms["pole_orient_x"] = torch.zeros((self.num_envs, 1))
+            self.visualizers["Metrics"].terms["pole_orient_y"] = torch.zeros((self.num_envs, 1))
+            self.visualizers["Metrics"].terms["obj_ee_distance"] = torch.zeros((self.num_envs, 1))
 
             for vis in self.visualizers.values():
                 vis.create_visualizer()
@@ -403,32 +398,29 @@ class PoleBalancingEnv(DirectRLEnv):
             init_state=AssetBaseCfg.InitialStateCfg(pos=(0, 0, 0)),
             spawn=sim_utils.GroundPlaneCfg(
                 physics_material=sim_utils.RigidBodyMaterialCfg(
-                friction_combine_mode="multiply",
-                restitution_combine_mode="multiply",
-                static_friction=1.0,
-                dynamic_friction=1.0,
-                restitution=0.0,
+                    friction_combine_mode="multiply",
+                    restitution_combine_mode="multiply",
+                    static_friction=1.0,
+                    dynamic_friction=1.0,
+                    restitution=0.0,
                 ),
             ),
         )
         ground.spawn.func(
-            ground.prim_path,
-            ground.spawn,
-            translation=ground.init_state.pos,
-            orientation=ground.init_state.rot
+            ground.prim_path, ground.spawn, translation=ground.init_state.pos, orientation=ground.init_state.rot
         )
 
         # add lights
         light_cfg = sim_utils.DomeLightCfg(intensity=2000.0, color=(0.75, 0.75, 0.75))
         light_cfg.func("/World/Light", light_cfg)
 
-    #MARK: pre-physics step calls
+    # MARK: pre-physics step calls
 
     def _pre_physics_step(self, actions: torch.Tensor):
         self.prev_actions[:] = self.actions.clone()
-        self.actions[:] = actions#.clamp(-1.0, 1.0)
+        self.actions[:] = actions  # .clamp(-1.0, 1.0)
 
-        self.processed_actions[:, :] = self.actions*self.cfg.action_scale
+        self.processed_actions[:, :] = self.actions * self.cfg.action_scale
 
         # obtain ee positions and orientation w.r.t root (=base) frame
         ee_pos_curr_b, ee_quat_curr_b = self._compute_frame_pose()
@@ -451,26 +443,25 @@ class PoleBalancingEnv(DirectRLEnv):
 
     # post-physics step calls
 
-    #MARK: dones
-    def _get_dones(self) -> tuple[torch.Tensor, torch.Tensor]: # which environment is done
+    # MARK: dones
+    def _get_dones(self) -> tuple[torch.Tensor, torch.Tensor]:  # which environment is done
         obj_pos = self.object.data.root_link_pos_w - self.scene.env_origins
         out_of_bounds_x = (obj_pos[:, 0] < self.cfg.x_bounds[0]) | (obj_pos[:, 0] > self.cfg.x_bounds[1])
         out_of_bounds_y = (obj_pos[:, 1] < self.cfg.y_bounds[0]) | (obj_pos[:, 1] > self.cfg.y_bounds[1])
 
-        obj_goal_distance = torch.norm(self._goal_pos_w[:, :2] - self.scene.env_origins[:, :2] - obj_pos[:,:2], dim=1)
+        obj_goal_distance = torch.norm(self._goal_pos_w[:, :2] - self.scene.env_origins[:, :2] - obj_pos[:, :2], dim=1)
         obj_too_far_away = obj_goal_distance > 1.0
 
-        ee_frame_pos = self._ee_frame.data.target_pos_w[..., 0, :] - self.scene.env_origins # end-effector positions in world frame: (num_envs, 3)
+        ee_frame_pos = (
+            self._ee_frame.data.target_pos_w[..., 0, :] - self.scene.env_origins
+        )  # end-effector positions in world frame: (num_envs, 3)
         ee_too_far_away = torch.norm(obj_pos - ee_frame_pos, dim=1) > self.cfg.too_far_away_threshold
 
         # reset when pole orient is too large
         pole_orient = euler_xyz_from_quat(self.object.data.root_link_quat_w)
         x = wrap_to_pi(pole_orient[0])
         y = wrap_to_pi(pole_orient[1])
-        orient_cond = (
-            (torch.abs(x) > math.pi/4)
-            | (torch.abs(y) > math.pi/4)
-        )
+        orient_cond = (torch.abs(x) > math.pi / 4) | (torch.abs(y) > math.pi / 4)
 
         ee_min_height = ee_frame_pos[:, 2] < self.cfg.min_height_threshold
         obj_min_height = obj_pos[:, 2] < self.cfg.min_height_threshold
@@ -485,15 +476,17 @@ class PoleBalancingEnv(DirectRLEnv):
             | obj_min_height
         )
 
-        time_out = self.episode_length_buf >= self.max_episode_length - 1 # episode length limit
+        time_out = self.episode_length_buf >= self.max_episode_length - 1  # episode length limit
 
         return reset_cond, time_out
 
-    #MARK: rewards
+    # MARK: rewards
     def _get_rewards(self) -> torch.Tensor:
-        #- Reward the agent for reaching the object using tanh-kernel.
+        # - Reward the agent for reaching the object using tanh-kernel.
         obj_pos = self.object.data.root_link_pos_w
-        ee_frame_pos = self._ee_frame.data.target_pos_w[..., 0, :] # end-effector positions in world frame: (num_envs, 3)
+        ee_frame_pos = self._ee_frame.data.target_pos_w[
+            ..., 0, :
+        ]  # end-effector positions in world frame: (num_envs, 3)
 
         # Distance of the end-effector to the object: (num_envs,)
         object_ee_distance = torch.norm(obj_pos - ee_frame_pos, dim=1)
@@ -501,41 +494,44 @@ class PoleBalancingEnv(DirectRLEnv):
         self.reward_terms["at_obj_reward"][:] = torch.where(
             object_ee_distance <= self.cfg.reward_terms["at_obj_reward"]["minimal_distance"],
             self.cfg.reward_terms["at_obj_reward"]["weight"],
-            0.0
+            0.0,
         )
 
-        height_diff = (self.cfg.reward_terms["height_reward"]["target_height_cm"] - ee_frame_pos[:, 2]*100)*0.1 #[dm]
+        height_diff = (
+            self.cfg.reward_terms["height_reward"]["target_height_cm"] - ee_frame_pos[:, 2] * 100
+        ) * 0.1  # [dm]
         height_reward = -(
-            self.cfg.reward_terms["height_reward"]["w"]*height_diff**2
-            + self.cfg.reward_terms["height_reward"]["v"]*torch.log(height_diff**2 + self.cfg.reward_terms["height_reward"]["alpha"])
-        ).clamp(-1,1)
+            self.cfg.reward_terms["height_reward"]["w"] * height_diff**2
+            + self.cfg.reward_terms["height_reward"]["v"]
+            * torch.log(height_diff**2 + self.cfg.reward_terms["height_reward"]["alpha"])
+        ).clamp(-1, 1)
         # penalize ee being too close to ground
         height_reward = torch.where(
-            (ee_frame_pos[:, 2] <= self.cfg.min_height_threshold),
-            height_reward-10,
-            height_reward
+            (ee_frame_pos[:, 2] <= self.cfg.min_height_threshold), height_reward - 10, height_reward
         )
-        self.reward_terms["height_reward"][:] = height_reward*self.cfg.reward_terms["height_reward"]["weight"]
+        self.reward_terms["height_reward"][:] = height_reward * self.cfg.reward_terms["height_reward"]["weight"]
 
         # reward for upright pole
         pole_orient = euler_xyz_from_quat(self.object.data.root_link_quat_w)
         x = wrap_to_pi(pole_orient[0])
         y = wrap_to_pi(pole_orient[1])
         orient_reward = torch.where(
-            (torch.abs(x) < math.pi/8)
-            | (torch.abs(y) < math.pi/8),
-            1.0*self.cfg.reward_terms["orient_reward"]["weight"],
-            0.0
+            (torch.abs(x) < math.pi / 8) | (torch.abs(y) < math.pi / 8),
+            1.0 * self.cfg.reward_terms["orient_reward"]["weight"],
+            0.0,
         )
         self.reward_terms["orient_reward"][:] = orient_reward
 
         ee_goal_distance = torch.norm(ee_frame_pos - self._goal_pos_w, dim=1)
-        self.reward_terms["ee_goal_tracking_penalty"][:] = torch.square(ee_goal_distance*100)*self.cfg.reward_terms["ee_goal_tracking_penalty"]["weight"]
-        self.reward_terms["ee_goal_fine_tracking_reward"][:] = 1 - torch.tanh(ee_goal_distance / self.cfg.reward_terms["ee_goal_fine_tracking_reward"]["std"])**2
+        self.reward_terms["ee_goal_tracking_penalty"][:] = (
+            torch.square(ee_goal_distance * 100) * self.cfg.reward_terms["ee_goal_tracking_penalty"]["weight"]
+        )
+        self.reward_terms["ee_goal_fine_tracking_reward"][:] = (
+            1 - torch.tanh(ee_goal_distance / self.cfg.reward_terms["ee_goal_fine_tracking_reward"]["std"]) ** 2
+        )
 
         self.reward_terms["staying_alive_rew"][:] = (
-            self.cfg.reward_terms["staying_alive_rew"]["weight"]
-            * (1.0 - self.reset_terminated.float())
+            self.cfg.reward_terms["staying_alive_rew"]["weight"] * (1.0 - self.reset_terminated.float())
         )[:]
 
         self.reward_terms["termination_penalty"][:] = (
@@ -544,18 +540,16 @@ class PoleBalancingEnv(DirectRLEnv):
 
         # Penalize the rate of change of the actions using L2 squared kernel.
         # action_rate_penalty = torch.sum(torch.square(self.actions), dim=1)
-        self.reward_terms["action_rate_penalty"][:] = (
-            self.cfg.reward_terms["action_rate_penalty"]["weight"]
-            *torch.sum(torch.square(self.actions - self.prev_actions), dim=1)
-        )
+        self.reward_terms["action_rate_penalty"][:] = self.cfg.reward_terms["action_rate_penalty"][
+            "weight"
+        ] * torch.sum(torch.square(self.actions - self.prev_actions), dim=1)
         # Penalize joint velocities on the articulation using L2 squared kernel.
-        self.reward_terms["joint_vel_penalty"][:] = (
-            self.cfg.reward_terms["joint_vel_penalty"]["weight"]
-            *torch.sum(torch.square(self._robot.data.joint_vel[:, :]), dim=1)
+        self.reward_terms["joint_vel_penalty"][:] = self.cfg.reward_terms["joint_vel_penalty"]["weight"] * torch.sum(
+            torch.square(self._robot.data.joint_vel[:, :]), dim=1
         )
 
         rewards = (
-            + self.reward_terms["at_obj_reward"]
+            +self.reward_terms["at_obj_reward"]
             + self.reward_terms["height_reward"]
             + self.reward_terms["orient_reward"]
             # + self.reward_terms["ee_goal_tracking_penalty"]
@@ -575,14 +569,14 @@ class PoleBalancingEnv(DirectRLEnv):
                 self.visualizers["Rewards"].terms["rewards"][:, i] = self.reward_terms[name]
             self.visualizers["Rewards"].terms["rewards"][:, -1] = rewards
 
-            self.visualizers["Metrics"].terms["ee_height"]  = ee_frame_pos[:, 2].reshape(-1,1)
-            self.visualizers["Metrics"].terms["pole_orient_x"]  = torch.rad2deg(x).reshape(-1,1)
-            self.visualizers["Metrics"].terms["pole_orient_y"]  = torch.rad2deg(y).reshape(-1,1)
-            self.visualizers["Metrics"].terms["obj_ee_distance"] = object_ee_distance.reshape(-1,1)
+            self.visualizers["Metrics"].terms["ee_height"] = ee_frame_pos[:, 2].reshape(-1, 1)
+            self.visualizers["Metrics"].terms["pole_orient_x"] = torch.rad2deg(x).reshape(-1, 1)
+            self.visualizers["Metrics"].terms["pole_orient_y"] = torch.rad2deg(y).reshape(-1, 1)
+            self.visualizers["Metrics"].terms["obj_ee_distance"] = object_ee_distance.reshape(-1, 1)
 
         return rewards
 
-    #MARK: reset
+    # MARK: reset
     def _reset_idx(self, env_ids: torch.Tensor | None):
         super()._reset_idx(env_ids)
 
@@ -601,11 +595,15 @@ class PoleBalancingEnv(DirectRLEnv):
         self._robot.write_joint_state_to_sim(joint_pos, joint_vel, env_ids=env_ids)
 
         # set commands: random target position
-        self._goal_pos_w[env_ids, :2] = self.object.data.default_root_state[env_ids, :2] + self.scene.env_origins[env_ids, :2] + sample_uniform(
-            self.cfg.obj_pos_randomization_range[0],
-            self.cfg.obj_pos_randomization_range[1],
-            (len(env_ids), 2),
-            self.device
+        self._goal_pos_w[env_ids, :2] = (
+            self.object.data.default_root_state[env_ids, :2]
+            + self.scene.env_origins[env_ids, :2]
+            + sample_uniform(
+                self.cfg.obj_pos_randomization_range[0],
+                self.cfg.obj_pos_randomization_range[1],
+                (len(env_ids), 2),
+                self.device,
+            )
         )
 
         self.prev_actions[env_ids] = 0.0
@@ -613,13 +611,13 @@ class PoleBalancingEnv(DirectRLEnv):
         # reset sensors
         self.gsmini.reset(env_ids=env_ids)
 
-    #MARK: observations
+    # MARK: observations
     def _get_observations(self) -> dict:
         """The position of the object in the robot's root frame."""
 
         ee_pos_curr_b, ee_quat_curr_b = self._compute_frame_pose()
         ee_frame_orient = euler_xyz_from_quat(ee_quat_curr_b)
-        x = wrap_to_pi(ee_frame_orient[0]).unsqueeze(1) # add dimension for concatenating with other observations
+        x = wrap_to_pi(ee_frame_orient[0]).unsqueeze(1)  # add dimension for concatenating with other observations
         y = wrap_to_pi(ee_frame_orient[1]).unsqueeze(1)
         z = wrap_to_pi(ee_frame_orient[2]).unsqueeze(1)
 
@@ -627,14 +625,7 @@ class PoleBalancingEnv(DirectRLEnv):
             self._robot.data.root_link_state_w[:, :3], self._robot.data.root_link_state_w[:, 3:7], self._goal_pos_w
         )
         proprio_obs = torch.cat(
-            (
-                ee_pos_curr_b,
-                x,
-                y,
-                z,
-                goal_pos_b[:, :2],
-                self.actions
-            ),
+            (ee_pos_curr_b, x, y, z, goal_pos_b[:, :2], self.actions),
             dim=-1,
         )
         vision_obs = self.gsmini._data.output["height_map"]
@@ -643,13 +634,10 @@ class PoleBalancingEnv(DirectRLEnv):
         normalized = vision_obs.view(vision_obs.size(0), -1)
         normalized -= 24.0
         normalized /= 29.0
-        normalized = (normalized*255).type(dtype=torch.uint8)
-        vision_obs = normalized.reshape((self.num_envs, 32, 32, 1)) # add a channel to the depth image for debug_vis
+        normalized = (normalized * 255).type(dtype=torch.uint8)
+        vision_obs = normalized.reshape((self.num_envs, 32, 32, 1))  # add a channel to the depth image for debug_vis
 
-        obs = {
-            "proprio_obs": proprio_obs,
-            "vision_obs": vision_obs
-        }
+        obs = {"proprio_obs": proprio_obs, "vision_obs": vision_obs}
 
         # self.visualizers["Actions"].terms["actions"][:] = self.actions[:]
         if self.cfg.debug_vis:
@@ -693,7 +681,7 @@ class PoleBalancingEnv(DirectRLEnv):
         # compute the pose of the body in the root frame
         ee_pose_b, ee_quat_b = math_utils.subtract_frame_transforms(root_pos_w, root_quat_w, ee_pos_w, ee_quat_w)
         # account for the offset
-        #if self.cfg.body_offset is not None:
+        # if self.cfg.body_offset is not None:
         ee_pose_b, ee_quat_b = math_utils.combine_frame_transforms(
             ee_pose_b, ee_quat_b, self._offset_pos, self._offset_rot
         )
@@ -710,7 +698,7 @@ class PoleBalancingEnv(DirectRLEnv):
         jacobian = self.jacobian_b
 
         # account for the offset
-        #if self.cfg.body_offset is not None:
+        # if self.cfg.body_offset is not None:
         # Modify the jacobian to account for the offset
         # -- translational part
         # v_link = v_ee + w_ee x r_link_ee = v_J_ee * q + w_J_ee * q x r_link_ee
@@ -722,6 +710,7 @@ class PoleBalancingEnv(DirectRLEnv):
         jacobian[:, 3:, :] = torch.bmm(math_utils.matrix_from_quat(self._offset_rot), jacobian[:, 3:, :])
 
         return jacobian
+
     ###################################
 
     def _set_debug_vis_impl(self, debug_vis: bool):
@@ -732,7 +721,7 @@ class PoleBalancingEnv(DirectRLEnv):
                     markers={
                         "sphere": sim_utils.SphereCfg(
                             radius=0.005,
-                            visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(1.0, 0.0, 0.0), opacity= 0.5),
+                            visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(1.0, 0.0, 0.0), opacity=0.5),
                         ),
                     }
                 )

@@ -1,4 +1,5 @@
 """Launch Isaac Sim Simulator first."""
+
 import argparse
 
 from isaaclab.app import AppLauncher
@@ -14,9 +15,9 @@ app_launcher = AppLauncher(args_cli)
 simulation_app = app_launcher.app
 
 # simulation_app.set_setting("/app/useFabricSceneDelegate", True)
-#simulation_app.set_setting("/app/usdrt/scene_delegate/enableProxyCubes", False)
-#simulation_app.set_setting("/app/usdrt/scene_delegate/geometryStreaming/enabled", False)
-#simulation_app.set_setting("/omnihydra/parallelHydraSprimSync", False)
+# simulation_app.set_setting("/app/usdrt/scene_delegate/enableProxyCubes", False)
+# simulation_app.set_setting("/app/usdrt/scene_delegate/geometryStreaming/enabled", False)
+# simulation_app.set_setting("/omnihydra/parallelHydraSprimSync", False)
 
 """Rest everything follows."""
 import pathlib
@@ -28,14 +29,10 @@ from isaacsim.util.debug_draw import _debug_draw
 
 draw = _debug_draw.acquire_debug_draw_interface()
 
+import numpy as np
 import random
 
-import isaaclab.sim as sim_utils
-import numpy as np
 import warp as wp
-from isaaclab.assets import AssetBaseCfg
-from isaaclab.utils.assets import ISAAC_NUCLEUS_DIR
-from isaaclab.utils.timer import Timer
 from pxr import Gf, PhysxSchema, Sdf, Usd, UsdGeom, UsdPhysics, UsdShade, Vt
 from tacex_uipc import UipcObject, UipcObjectCfg, UipcSim, UipcSimCfg
 from tacex_uipc.utils import TetMeshCfg
@@ -44,12 +41,17 @@ from uipc.constitution import SoftPositionConstraint
 from uipc.core import Engine, Scene, SceneIO, World
 from uipc.geometry import GeometrySlot, SimplicialComplex, SimplicialComplexIO
 
+import isaaclab.sim as sim_utils
+from isaaclab.assets import AssetBaseCfg
+from isaaclab.utils.assets import ISAAC_NUCLEUS_DIR
+from isaaclab.utils.timer import Timer
+
 
 def main():
     """Main function."""
     # Initialize the simulation context
     # render_cfg = sim_utils.RenderCfg(rendering_mode=)
-    sim_cfg = sim_utils.SimulationCfg(dt=1/60)
+    sim_cfg = sim_utils.SimulationCfg(dt=1 / 60)
     sim = sim_utils.SimulationContext(sim_cfg)
     # Set main camera
     sim.set_camera_view([2.0, 0.0, 2.5], [-0.5, 0.0, 0.5])
@@ -87,13 +89,13 @@ def main():
     tet_cube_asset_path = pathlib.Path(__file__).parent.resolve() / "assets" / "cube.usd"
     cube_cfg = UipcObjectCfg(
         prim_path="/World/Objects/Cube0",
-        init_state=AssetBaseCfg.InitialStateCfg(pos=[0, 0, 2.25]), #rot=(0.72,-0.3,0.42,-0.45)
+        init_state=AssetBaseCfg.InitialStateCfg(pos=[0, 0, 2.25]),  # rot=(0.72,-0.3,0.42,-0.45)
         spawn=sim_utils.UsdFileCfg(
             usd_path=str(tet_cube_asset_path),
             # scale=(0.1, 0.1, 0.1)
         ),
         # mesh_cfg=mesh_cfg,
-        constitution_cfg=UipcObjectCfg.StableNeoHookeanCfg() #UipcObjectCfg.AffineBodyConstitutionCfg() #
+        constitution_cfg=UipcObjectCfg.StableNeoHookeanCfg(),  # UipcObjectCfg.AffineBodyConstitutionCfg() #
     )
     cube = UipcObject(cube_cfg, uipc_sim)
 
@@ -101,7 +103,7 @@ def main():
     spc = SoftPositionConstraint()
     # `apply` has to happen **before** the uipc_scene_object is created!
     # i.e. before UipcObject._initialize_impl() is called
-    spc.apply_to(cube.uipc_meshes[0], 100) # constraint strength ratio
+    spc.apply_to(cube.uipc_meshes[0], 100)  # constraint strength ratio
 
     # tet_ball_asset_path = pathlib.Path(__file__).parent.resolve() / "assets" / "ball.usd"
     # ball_cfg = UipcObjectCfg(
@@ -123,11 +125,12 @@ def main():
     # uipc scene, i.e. after UipcObject._initialize_impl() is called.
     # This is the case after sim.reset().
     animator = uipc_sim.scene.animator()
-    def animate_tet(info: Animation.UpdateInfo): # animation function
-        geo_slots:list[GeometrySlot] = info.geo_slots() # list of geo_slots -> multiple when uipc_object has instances
+
+    def animate_tet(info: Animation.UpdateInfo):  # animation function
+        geo_slots: list[GeometrySlot] = info.geo_slots()  # list of geo_slots -> multiple when uipc_object has instances
         geo: SimplicialComplex = geo_slots[0].geometry()
-        rest_geo_slots:list[GeometrySlot] = info.rest_geo_slots()
-        rest_geo:SimplicialComplex = rest_geo_slots[0].geometry()
+        rest_geo_slots: list[GeometrySlot] = info.rest_geo_slots()
+        rest_geo: SimplicialComplex = rest_geo_slots[0].geometry()
 
         is_constrained = geo.vertices().find(builtin.is_constrained)
         is_constrained_view = view(is_constrained)
@@ -135,8 +138,8 @@ def main():
         aim_position_view = view(aim_position)
         rest_position_view = rest_geo.positions().view()
 
-        is_constrained_view[0] = 1 # animate first vertex of the mesh
-        is_constrained_view[1] = 1 # as well as the second vertex
+        is_constrained_view[0] = 1  # animate first vertex of the mesh
+        is_constrained_view[1] = 1  # as well as the second vertex
 
         t = info.dt() * info.frame()
         theta = np.pi * t
@@ -150,7 +153,6 @@ def main():
     # because _initialize_impl() of the object is called in the sim.reset() method
     # and setup_scene() relies on objects being _initialize_impl()
     uipc_sim.setup_sim()
-
 
     # Now we are ready!
     print("[INFO]: Setup complete...")
@@ -175,7 +177,7 @@ def main():
             with Timer("[INFO]: Time taken for updating the render meshes", name="render_update"):
                 # render the new scene
                 uipc_sim.update_render_meshes()
-                #sim.forward()
+                # sim.forward()
                 # sim._update_fabric(0.0, 0.0)
 
             # get time reports
@@ -189,7 +191,6 @@ def main():
         if sim.is_playing() is False:
             start_uipc_test = True
             print("Start uipc simulation by pressing Play")
-
 
 
 if __name__ == "__main__":

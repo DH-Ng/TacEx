@@ -9,8 +9,6 @@ TODO:
     * Compute bboxes
 """
 
-
-
 import os
 
 from pxr import Gf, Kind, Sdf, Usd, UsdGeom, UsdShade, Vt
@@ -24,14 +22,7 @@ from vox2usd.constants import (
     ShaderVariantSetNames,
     StudMesh,
 )
-from vox2usd.vox import (
-    VoxBaseMaterial,
-    VoxGlassMaterial,
-    VoxGroup,
-    VoxReader,
-    VoxShape,
-    VoxTransform,
-)
+from vox2usd.vox import VoxBaseMaterial, VoxGlassMaterial, VoxGroup, VoxReader, VoxShape, VoxTransform
 
 
 class Vox2UsdConverter:
@@ -53,8 +44,16 @@ class Vox2UsdConverter:
         mesh_payload_identifier: The file path for the mesh payload.
         points_payload_identifier: The file path for the points payload.
     """
-    def __init__(self, vox_file, voxel_size=DEFAULT_METERS_PER_VOXEL, gamma_correct=True, gamma_value=2.2,
-                 use_physics=False, flatten=False):
+
+    def __init__(
+        self,
+        vox_file,
+        voxel_size=DEFAULT_METERS_PER_VOXEL,
+        gamma_correct=True,
+        gamma_value=2.2,
+        use_physics=False,
+        flatten=False,
+    ):
         """Vox2UsdConverter constructor
 
         Args:
@@ -83,7 +82,7 @@ class Vox2UsdConverter:
         VoxBaseMaterial.initialize(self.gamma_correct, self.gamma_value)
 
     def create_material(self, name, vox_mtl):
-        """ Creates a UsdShade.Material based on the provided MagicaVoxel material.
+        """Creates a UsdShade.Material based on the provided MagicaVoxel material.
 
         Args:
             name (str): Material prim name
@@ -114,6 +113,7 @@ class Vox2UsdConverter:
         print(f"\nImporting voxel file {self.vox_file_path}\n")
 
         import time
+
         time_start = time.time()
         VoxReader(self.vox_file_path).read()
 
@@ -128,7 +128,9 @@ class Vox2UsdConverter:
         model_api.SetKind(Kind.Tokens.component)
         model_api.SetAssetName(self.asset_name)
         model_api.SetAssetIdentifier(self.output_file_name)
-        self.geometry_scope = UsdGeom.Scope.Define(self.model_stage, asset_geom.GetPath().AppendPath(GEOMETRY_SCOPE_NAME))
+        self.geometry_scope = UsdGeom.Scope.Define(
+            self.model_stage, asset_geom.GetPath().AppendPath(GEOMETRY_SCOPE_NAME)
+        )
         self.looks_scope = UsdGeom.Scope.Define(self.model_stage, asset_geom.GetPath().AppendPath(LOOKS_SCOPE_NAME))
 
         self.geo_varset = asset_geom.GetPrim().GetVariantSets().AddVariantSet("Geometry")
@@ -150,13 +152,13 @@ class Vox2UsdConverter:
             mtl = VoxBaseMaterial.get(index)
             mtl = self.create_material(f"VoxelMtl_{mtl.get_display_id()}", mtl)
             self.used_mtls[index] = {
-                 "mtl": mtl,
-                 GeometryVariantSetNames.MERGED_MESHES: [],
-                 GeometryVariantSetNames.POINT_INSTANCES: {
-                     PointShapeVariantSetNames.CUBES: [],
-                     PointShapeVariantSetNames.SPHERES: [],
-                     PointShapeVariantSetNames.STUDS: []
-                 }
+                "mtl": mtl,
+                GeometryVariantSetNames.MERGED_MESHES: [],
+                GeometryVariantSetNames.POINT_INSTANCES: {
+                    PointShapeVariantSetNames.CUBES: [],
+                    PointShapeVariantSetNames.SPHERES: [],
+                    PointShapeVariantSetNames.STUDS: [],
+                },
             }
 
         mesh_stage = Usd.Stage.CreateNew(self.mesh_payload_identifier)
@@ -168,9 +170,13 @@ class Vox2UsdConverter:
         self._convert_node(mesh_stage, root_xform_node, mesh_stage.GetPseudoRoot(), self._voxels2mesh)
         self._convert_node(points_stage, root_xform_node, points_stage.GetPseudoRoot(), self._voxels2point_instances)
 
-        default_prim = mesh_stage.GetPrimAtPath(mesh_stage.GetPseudoRoot().GetPath().AppendPath(f"VoxelGroup_{root_group_node.node_id}"))
+        default_prim = mesh_stage.GetPrimAtPath(
+            mesh_stage.GetPseudoRoot().GetPath().AppendPath(f"VoxelGroup_{root_group_node.node_id}")
+        )
         mesh_stage.SetDefaultPrim(default_prim)
-        default_prim = points_stage.GetPrimAtPath(points_stage.GetPseudoRoot().GetPath().AppendPath(f"VoxelGroup_{root_group_node.node_id}"))
+        default_prim = points_stage.GetPrimAtPath(
+            points_stage.GetPseudoRoot().GetPath().AppendPath(f"VoxelGroup_{root_group_node.node_id}")
+        )
         points_stage.SetDefaultPrim(default_prim)
         mesh_stage.Save()
         points_stage.Save()
@@ -237,7 +243,7 @@ class Vox2UsdConverter:
         return self.model_stage.GetPrimAtPath(target_path)
 
     def _bind_mtl_to_prototypes(self, mtl, proto_targets, pt_shape_variant):
-        """ Binds the given material to the point instance prototypes.
+        """Binds the given material to the point instance prototypes.
 
         Args:
             pt_shape_variant: The shape variant to set before binding the material.
@@ -252,7 +258,7 @@ class Vox2UsdConverter:
                 UsdShade.MaterialBindingAPI(target_prim).Bind(mtl)
 
     def _convert_node(self, stage, node, parent_prim, voxel_convert_func):
-        """ Converts a vox node to USD.
+        """Converts a vox node to USD.
 
         Recursively traverses the vox data to convert all of the vox nodes. The vox transform
         nodes apply their data to their child group and shape nodes in order to reduce prim count.
@@ -358,9 +364,10 @@ class Vox2UsdConverter:
             # Create geom subsets if the mesh uses more than one material.
             mesh_binding_api = UsdShade.MaterialBindingAPI(mesh.GetPrim())
             for item in subsets:
-                subset = mesh_binding_api.CreateMaterialBindSubset("VoxelPart_{}".format(item["mtl_id"]),
-                                                                   Vt.IntArray(list(range(item["start_face_idx"],
-                                                                                          item["end_face_idx"]))))
+                subset = mesh_binding_api.CreateMaterialBindSubset(
+                    "VoxelPart_{}".format(item["mtl_id"]),
+                    Vt.IntArray(list(range(item["start_face_idx"], item["end_face_idx"]))),
+                )
                 self._add_binding_target(item["mtl_id"], subset.GetPath(), GeometryVariantSetNames.MERGED_MESHES)
         else:
             # This mesh uses only one material, so no need to create geom subsets.
@@ -394,8 +401,9 @@ class Vox2UsdConverter:
             shape_node (VoxShape): The node containing the source data to convert.
             parent_prim: The parent prim for the mesh.
         """
-        instancer = UsdGeom.PointInstancer.Define(stage, parent_prim.GetPath().AppendPath(
-            f"VoxelModel_{shape_node.node_id}"))
+        instancer = UsdGeom.PointInstancer.Define(
+            stage, parent_prim.GetPath().AppendPath(f"VoxelModel_{shape_node.node_id}")
+        )
         instancer.AddTransformOp().Set(Gf.Matrix4d(*xform_node.transform))
         # self._set_pivot(shape_node.model, instancer)
         instancer.CreatePrototypesRel()
@@ -428,9 +436,11 @@ class Vox2UsdConverter:
             ids.append(mtl2proto_id[mtl_id])
             position = [float(coord) * self.voxel_size for coord in voxel[:3]]
             # XY center the local origin on the model
-            position = [position[0] - int(shape_node.model.size[0] / 2.0),
-                        position[1] - int(shape_node.model.size[1] / 2.0),
-                        position[2] - int(shape_node.model.size[2] / 2.0)]
+            position = [
+                position[0] - int(shape_node.model.size[0] / 2.0),
+                position[1] - int(shape_node.model.size[1] / 2.0),
+                position[2] - int(shape_node.model.size[2] / 2.0),
+            ]
             positions.append(position)
         instancer.CreateProtoIndicesAttr()
         instancer.CreatePositionsAttr()
@@ -449,11 +459,14 @@ class Vox2UsdConverter:
             mtl_id: The unique id for the material for this prototype.
         """
         mtl_display_id = VoxBaseMaterial.get(mtl_id).get_display_id()
-        cube = UsdGeom.Cube.Define(stage,
-                                   proto_container.GetPath().AppendPath(f"VoxelCube_{mtl_display_id}"))
+        cube = UsdGeom.Cube.Define(stage, proto_container.GetPath().AppendPath(f"VoxelCube_{mtl_display_id}"))
         cube.CreateSizeAttr(self.voxel_size)
-        self._add_binding_target(mtl_id, cube.GetPath(), GeometryVariantSetNames.POINT_INSTANCES,
-                                 point_shape_var=PointShapeVariantSetNames.CUBES)
+        self._add_binding_target(
+            mtl_id,
+            cube.GetPath(),
+            GeometryVariantSetNames.POINT_INSTANCES,
+            point_shape_var=PointShapeVariantSetNames.CUBES,
+        )
         self._set_common_point_attrs(cube, instancer, mtl_id)
 
     def _create_sphere_geom(self, stage, instancer, proto_container, mtl_id):
@@ -471,8 +484,12 @@ class Vox2UsdConverter:
         sphere_path = proto_container.GetPath().AppendPath(f"VoxelSphere_{mtl_display_id}")
         sphere = UsdGeom.Sphere.Define(stage, sphere_path)
         sphere.CreateRadiusAttr(self.voxel_size / 2.0)
-        self._add_binding_target(mtl_id, sphere.GetPath(), GeometryVariantSetNames.POINT_INSTANCES,
-                                 point_shape_var=PointShapeVariantSetNames.SPHERES)
+        self._add_binding_target(
+            mtl_id,
+            sphere.GetPath(),
+            GeometryVariantSetNames.POINT_INSTANCES,
+            point_shape_var=PointShapeVariantSetNames.SPHERES,
+        )
         self._set_common_point_attrs(sphere, instancer, mtl_id)
 
     def _create_stud_geom(self, stage, instancer, proto_container, mtl_id):
@@ -494,8 +511,12 @@ class Vox2UsdConverter:
         mesh.CreateNormalsAttr(StudMesh.normals)
         mesh.SetNormalsInterpolation(StudMesh.normals_interpolation)
         mesh.CreateSubdivisionSchemeAttr(UsdGeom.Tokens.none)
-        self._add_binding_target(mtl_id, mesh.GetPath(), GeometryVariantSetNames.POINT_INSTANCES,
-                                 point_shape_var=PointShapeVariantSetNames.STUDS)
+        self._add_binding_target(
+            mtl_id,
+            mesh.GetPath(),
+            GeometryVariantSetNames.POINT_INSTANCES,
+            point_shape_var=PointShapeVariantSetNames.STUDS,
+        )
         self._set_common_point_attrs(mesh, instancer, mtl_id)
 
     def _set_common_point_attrs(self, geom, instancer, mtl_id):

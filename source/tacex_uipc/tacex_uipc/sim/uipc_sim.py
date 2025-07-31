@@ -4,34 +4,30 @@ import pathlib
 import weakref
 from typing import TYPE_CHECKING, Any, Dict, List, Tuple, Union
 
-import isaaclab.sim as sim_utils
 import omni.usd
 import usdrt
 import usdrt.Usd
-from isaaclab.utils import configclass
 from pxr import Gf, Sdf, Usd, UsdGeom
+
+import isaaclab.sim as sim_utils
+from isaaclab.utils import configclass
 
 try:
     from isaacsim.util.debug_draw import _debug_draw
+
     draw = _debug_draw.acquire_debug_draw_interface()
 except:
     draw = None
 
 import numpy as np
+
 import uipc
 import warp as wp
 from tacex_uipc.objects import UipcObject
 from tacex_uipc.utils import MeshGenerator
 from uipc import AngleAxis, Logger, Quaternion, Timer, Transform, Vector3, builtin, view
 from uipc.core import Engine, Scene, SceneIO, World
-from uipc.geometry import (
-    extract_surface,
-    flip_inward_triangles,
-    ground,
-    label_surface,
-    label_triangle_orient,
-    tetmesh,
-)
+from uipc.geometry import extract_surface, flip_inward_triangles, ground, label_surface, label_triangle_orient, tetmesh
 from uipc.unit import GPa, MPa
 
 
@@ -83,6 +79,7 @@ class UipcSimCfg:
 
         e.g. 0.1/1.0 = 10%/s change in transform
         """
+
     newton: Newton = Newton()
 
     @configclass
@@ -93,6 +90,7 @@ class UipcSimCfg:
         """
 
         tol_rate: float = 1e-3
+
     linear_system: LinearSystem = LinearSystem()
 
     @configclass
@@ -100,6 +98,7 @@ class UipcSimCfg:
         max_iter: int = 8
 
         report_energy: bool = False
+
     line_search: LineSearch = LineSearch()
 
     @configclass
@@ -123,6 +122,7 @@ class UipcSimCfg:
         """
         in [m/s]
         """
+
     contact: Contact = Contact()
 
     collision_detection_method: str = "linear_bvh"
@@ -132,13 +132,12 @@ class UipcSimCfg:
 
     diff_sim: bool = False
 
-class UipcSim():
+
+class UipcSim:
     cfg: UipcSimCfg
 
     def __init__(self, cfg: UipcSimCfg = None):
-        """Initialize the uipc simulation.
-
-        """
+        """Initialize the uipc simulation."""
         # will be initialized in `setup_sim()`
         self.isaac_sim = None
 
@@ -160,10 +159,7 @@ class UipcSim():
         # update uipc default config with our config
         uipc_config = Scene.default_config()
         uipc_config["dt"] = self.cfg.dt
-        uipc_config["sanity_check"] = {
-            "enable": self.cfg.sanity_check_enable,
-            "mode": self.cfg.sanity_check_mode
-        }
+        uipc_config["sanity_check"] = {"enable": self.cfg.sanity_check_enable, "mode": self.cfg.sanity_check_mode}
         uipc_config["gravity"] = [[self.cfg.gravity[0]], [self.cfg.gravity[1]], [self.cfg.gravity[2]]]
         uipc_config["collision_detection"]["method"] = self.cfg.collision_detection_method
         uipc_config["contact"] = {
@@ -171,9 +167,7 @@ class UipcSim():
             "constitution": self.cfg.contact.constitution,
             "d_hat": self.cfg.contact.d_hat,
             "eps_velocity": self.cfg.contact.eps_velocity,
-            "friction": {
-                "enable": self.cfg.contact.enable_friction
-            }
+            "friction": {"enable": self.cfg.contact.enable_friction},
         }
         uipc_config["diff_sim"] = {
             "enable": self.cfg.diff_sim,
@@ -191,9 +185,8 @@ class UipcSim():
             "max_iter": self.cfg.newton.max_iter,
             "use_adaptive_tol": self.cfg.newton.use_adaptive_tol,
             "velocity_tol": self.cfg.newton.velocity_tol,
-            "transrate_tol": self.cfg.newton.transrate_tol
+            "transrate_tol": self.cfg.newton.transrate_tol,
         }
-
 
         self.scene = Scene(uipc_config)
 
@@ -206,13 +199,12 @@ class UipcSim():
         self.scene.contact_tabular().default_model(
             friction_rate=self.cfg.contact.default_friction_ratio,
             resistance=self.cfg.contact.default_contact_resistance * GPa,
-            enable=self.cfg.contact.enable
+            enable=self.cfg.contact.enable,
         )
-
 
         # vertex offsets of the subsystems
         self._system_vertex_offsets = {
-            "uipc::backend::cuda::GlobalVertexManager": [0], # global vertex offset
+            "uipc::backend::cuda::GlobalVertexManager": [0],  # global vertex offset
             "uipc::backend::cuda::FiniteElementMethod": [0],
             "uipc::backend::cuda::AffineBodyDynamics": [0],
         }
@@ -250,7 +242,7 @@ class UipcSim():
             global_vertex_offset = int(gvo.view()[0])
             self._system_vertex_offsets["uipc::backend::cuda::GlobalVertexManager"].append(global_vertex_offset)
 
-            uipc_obj.global_system_id = len(self._system_vertex_offsets["uipc::backend::cuda::GlobalVertexManager"])-1
+            uipc_obj.global_system_id = len(self._system_vertex_offsets["uipc::backend::cuda::GlobalVertexManager"]) - 1
             print(f"{uipc_obj.cfg.prim_path} has global id {uipc_obj.global_system_id}")
 
         # initialize callbacks
@@ -276,10 +268,10 @@ class UipcSim():
         self.update_render_meshes()
 
     def update_render_meshes(self, dt=0):
-        all_trimesh_points = self.sio.simplicial_surface(2).positions().view().reshape(-1,3)
-        #triangles = self.sio.simplicial_surface(2).triangles().topo().view()
+        all_trimesh_points = self.sio.simplicial_surface(2).positions().view().reshape(-1, 3)
+        # triangles = self.sio.simplicial_surface(2).triangles().topo().view()
         for i, fabric_prim in enumerate(self._fabric_meshes):
-            trimesh_points = all_trimesh_points[self._surf_vertex_offsets[i]:self._surf_vertex_offsets[i+1]]
+            trimesh_points = all_trimesh_points[self._surf_vertex_offsets[i] : self._surf_vertex_offsets[i + 1]]
 
             fabric_mesh_points = fabric_prim.GetAttribute("points")
             fabric_mesh_points.Set(usdrt.Vt.Vec3fArray(trimesh_points))
@@ -314,7 +306,7 @@ class UipcSim():
         Won't work if the loaded tet meshes are different!
         """
         # frame_num = self.world.frame() + 1
-        if(self.world.recover(frame_num)):
+        if self.world.recover(frame_num):
             self.world.retrieve()
         else:
             print(f"No data for frame {frame_num}.")
@@ -325,7 +317,7 @@ class UipcSim():
             # print("obj id ", obj_id)
             obj = self.scene.objects().find(obj_id)
             obj_geometry_ids = obj.geometries().ids()
-            #obj_name = obj.name() #-- doesnt work, get error message (otherwise use this to set prim_path)
+            # obj_name = obj.name() #-- doesnt work, get error message (otherwise use this to set prim_path)
 
             # create prim for each geometry
             for id in obj_geometry_ids:
@@ -352,7 +344,7 @@ class UipcSim():
                         surf = extract_surface(geom)
 
                     surf_tri = surf.triangles().topo().view().reshape(-1).tolist()
-                    surf_points_world = surf.positions().view().reshape(-1,3)
+                    surf_points_world = surf.positions().view().reshape(-1, 3)
 
                     MeshGenerator.update_usd_mesh(prim=prim, surf_points=surf_points_world, triangles=surf_tri)
 
@@ -379,6 +371,4 @@ class UipcSim():
 
                     # save indices to later find corresponding points of the meshes for rendering
                     num_surf_points = surf_points_world.shape[0]
-                    self._surf_vertex_offsets.append(
-                        self._surf_vertex_offsets[-1] + num_surf_points
-                    )
+                    self._surf_vertex_offsets.append(self._surf_vertex_offsets[-1] + num_surf_points)

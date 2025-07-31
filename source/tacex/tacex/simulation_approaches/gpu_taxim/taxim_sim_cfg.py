@@ -1,13 +1,15 @@
+import torch
 from dataclasses import MISSING, dataclass
 from typing import TYPE_CHECKING, Any, Dict, List, Sequence, Tuple, Union
 
-import torch
 from isaaclab.utils import class_to_dict, configclass, to_camel_case
 
 from ..gelsight_simulator_cfg import GelSightSimulatorCfg
 from .taxim_sim import TaximSimulator
 
 """Configuration for a tactile RGB simulation with Taxim."""
+
+
 @configclass
 class TaximSimulatorCfg(GelSightSimulatorCfg):
     simulation_approach_class: type = TaximSimulator

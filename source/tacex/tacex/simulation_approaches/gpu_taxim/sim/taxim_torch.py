@@ -1,14 +1,14 @@
 from __future__ import annotations
 
+import numpy as np
+import torch
 import warnings
 from functools import lru_cache
 from pathlib import Path
+from torch.nn.functional import conv2d
 from typing import Any
 
-import numpy as np
-import torch
 import torch_scatter
-from torch.nn.functional import conv2d
 from torchvision.transforms import InterpolationMode
 from torchvision.transforms.functional import resize
 
@@ -31,9 +31,7 @@ def fast_conv2d(input: torch.Tensor, kernel: torch.Tensor) -> torch.Tensor:
     kpy = input_padded.shape[-2] - kernel.shape[-2]
     kpx = input_padded.shape[-1] - kernel.shape[-1]
     kernel_pad_size = (0, kpx, 0, kpy)
-    kernel_padded = torch.nn.functional.pad(
-        kernel, kernel_pad_size, mode="constant", value=0.0
-    )
+    kernel_padded = torch.nn.functional.pad(kernel, kernel_pad_size, mode="constant", value=0.0)
 
     input_ft = torch.fft.fft2(input_padded)
     kernel_ft = torch.fft.fft2(kernel_padded[None])
@@ -76,21 +74,14 @@ class TaximTorch(torch.nn.Module, TaximImpl[torch.Tensor, torch.device]):
             data = np.load(str(calib_folder / "polycalib.npz"))
             # The order of RGB in the data got mixed up: grad_b and grad_r are switched
             self.__poly_grad = (
-                torch.from_numpy(
-                    np.stack([data["grad_b"], data["grad_g"], data["grad_r"]], axis=0)
-                    / 255
-                )
+                torch.from_numpy(np.stack([data["grad_b"], data["grad_g"], data["grad_r"]], axis=0) / 255)
                 .float()
                 .to(device)
             )
 
-            gel_map = self.__np_img_to_torch(
-                np.load(str(calib_folder / "gelmap.npy")), has_channels=False
-            )
+            gel_map = self.__np_img_to_torch(np.load(str(calib_folder / "gelmap.npy")), has_channels=False)
             gel_map = (
-                self.__gaussian_blur(
-                    gel_map, self.sim_params.deform_final_sigma(gel_map.shape[1:])
-                )[0]
+                self.__gaussian_blur(gel_map, self.sim_params.deform_final_sigma(gel_map.shape[1:]))[0]
                 * self.sensor_params.pixmm
             )
 
@@ -104,19 +95,15 @@ class TaximTorch(torch.nn.Module, TaximImpl[torch.Tensor, torch.device]):
 
             # Shadow calibration
             self.__shadow_depth_0 = 0.4
-            shadow_data = np.load(
-                str(calib_folder / "shadowTable.npz"), allow_pickle=True
-            )
-            direction = (
-                torch.from_numpy(shadow_data["shadowDirections"]).float().to(device)
-            )
+            shadow_data = np.load(str(calib_folder / "shadowTable.npz"), allow_pickle=True)
+            direction = torch.from_numpy(shadow_data["shadowDirections"]).float().to(device)
 
             # use a fan of angles around the direction
             fan_angle = self.sim_params.fan_angle
             num_fan_rays = int(fan_angle * 2 / self.sim_params.fan_precision)
-            self.__shadow_direction_fan_angles = direction.unsqueeze(
-                -1
-            ) + torch.linspace(-fan_angle, fan_angle, num_fan_rays, device=device)
+            self.__shadow_direction_fan_angles = direction.unsqueeze(-1) + torch.linspace(
+                -fan_angle, fan_angle, num_fan_rays, device=device
+            )
 
             shadow_table = shadow_data["shadowTable"]
             # Append an extra empty entry for heights outside the range
@@ -131,10 +118,7 @@ class TaximTorch(torch.nn.Module, TaximImpl[torch.Tensor, torch.device]):
             max_shadow_table_len = max(map(len, shadow_table.reshape((-1,))))
             self.__shadow_table_padded = (
                 torch.tensor(
-                    [
-                        e + [np.inf] * (max_shadow_table_len - len(e))
-                        for e in shadow_table.reshape((-1,))
-                    ],
+                    [e + [np.inf] * (max_shadow_table_len - len(e)) for e in shadow_table.reshape((-1,))],
                     device=device,
                     dtype=torch.float,
                 ).reshape(shadow_table.shape + (-1,))
@@ -142,9 +126,7 @@ class TaximTorch(torch.nn.Module, TaximImpl[torch.Tensor, torch.device]):
             )
 
             self.__get_gel_map_cached = lru_cache(self.__get_gel_map)
-            self.__get_precomputed_features_cached = lru_cache(
-                self.__get_precomputed_features
-            )
+            self.__get_precomputed_features_cached = lru_cache(self.__get_precomputed_features)
             self.__get_background_img_cached = lru_cache(self.__get_background_img)
 
     @property
@@ -152,9 +134,7 @@ class TaximTorch(torch.nn.Module, TaximImpl[torch.Tensor, torch.device]):
         return self.__get_background_img_cached((self.height, self.width))
 
     def __get_background_img(self, shape: tuple[int, int]) -> torch.Tensor:
-        return resize(
-            self.__bg_proc, list(shape), interpolation=InterpolationMode.BILINEAR
-        )
+        return resize(self.__bg_proc, list(shape), interpolation=InterpolationMode.BILINEAR)
 
     def __get_precomputed_features(self, shape: tuple[int, int]) -> torch.Tensor:
         yy, xx = torch.meshgrid(
@@ -269,9 +249,7 @@ class TaximTorch(torch.nn.Module, TaximImpl[torch.Tensor, torch.device]):
         # look up polynomial table and assign intensity
         params = self.__poly_grad[:, idx_mag, idx_dir].transpose(0, 1)
         params_flat = torch.flatten(params, start_dim=-3, end_dim=-2)
-        sim_img_flat = (
-            self.__get_precomputed_features_cached(shape).unsqueeze(0) * params_flat
-        ).sum(-1)
+        sim_img_flat = (self.__get_precomputed_features_cached(shape).unsqueeze(0) * params_flat).sum(-1)
         sim_img_r = torch.unflatten(sim_img_flat, dim=-1, sizes=(height, width))
 
         if not shadow:
@@ -280,9 +258,7 @@ class TaximTorch(torch.nn.Module, TaximImpl[torch.Tensor, torch.device]):
             return torch.clip(sim_img, 0, 1)
 
         # find shadow attachment area
-        kernel_size_float = np.array(
-            self.sim_params.shadow_attachment_kernel_size(shape)
-        )
+        kernel_size_float = np.array(self.sim_params.shadow_attachment_kernel_size(shape))
         kernel_size_float_total = np.round(kernel_size_float * 2).astype(np.int_)
         first_round = kernel_size_float_total // 2
         rounds = [first_round, kernel_size_float_total - first_round]
@@ -304,14 +280,11 @@ class TaximTorch(torch.nn.Module, TaximImpl[torch.Tensor, torch.device]):
         contact_height_px = contact_height / self.sensor_params.pixmm
         contact_map = contact_height_px[boundary_contact_mask]
         height_idx = torch.floor(
-            (contact_map * self.sensor_params.pixmm - self.__shadow_depth_0)
-            / self.sim_params.height_precision
+            (contact_map * self.sensor_params.pixmm - self.__shadow_depth_0) / self.sim_params.height_precision
         ).long()
         height_idx_shifted = height_idx + 6
         max_height_idx = self.__shadow_table_padded.shape[2] - 1
-        height_idx_shifted[
-            (height_idx_shifted < 0) | (height_idx_shifted >= max_height_idx)
-        ] = max_height_idx
+        height_idx_shifted[(height_idx_shifted < 0) | (height_idx_shifted >= max_height_idx)] = max_height_idx
 
         shadow_table_sel = self.__shadow_table_padded[:, norm_idx, height_idx_shifted]
         thetas = self.__shadow_direction_fan_angles[norm_idx]
@@ -325,16 +298,10 @@ class TaximTorch(torch.nn.Module, TaximImpl[torch.Tensor, torch.device]):
         shadow_step = self.sim_params.shadow_step(shape)
 
         shadow_coords_x = (
-            x_coord_r
-            + shadow_step[1]
-            * (steps.reshape((1, 1, -1)) + 1)
-            * torch.cos(thetas).unsqueeze(-1)
+            x_coord_r + shadow_step[1] * (steps.reshape((1, 1, -1)) + 1) * torch.cos(thetas).unsqueeze(-1)
         ).long()
         shadow_coords_y = (
-            y_coord_r
-            + shadow_step[0]
-            * (steps.reshape((1, 1, -1)) + 1)
-            * torch.sin(thetas).unsqueeze(-1)
+            y_coord_r + shadow_step[0] * (steps.reshape((1, 1, -1)) + 1) * torch.sin(thetas).unsqueeze(-1)
         ).long()
         sc_x_clipped = torch.clip(shadow_coords_x, 0, width - 1)
         sc_y_clipped = torch.clip(shadow_coords_y, 0, height - 1)
@@ -345,23 +312,15 @@ class TaximTorch(torch.nn.Module, TaximImpl[torch.Tensor, torch.device]):
             & (shadow_coords_y < height)
             & (
                 deformed_gel_px[batch_idx[..., None, None], y_coord_r, x_coord_r]
-                < deformed_gel_px[
-                    batch_idx[..., None, None], sc_y_clipped, sc_x_clipped
-                ]
+                < deformed_gel_px[batch_idx[..., None, None], sc_y_clipped, sc_x_clipped]
             )
         )
         valid_sc_x = shadow_coords_x[sc_valid]
         valid_sc_y = shadow_coords_y[sc_valid]
-        valid_sc_batch = torch.broadcast_to(batch_idx[:, None, None], sc_valid.shape)[
-            sc_valid
-        ]
+        valid_sc_batch = torch.broadcast_to(batch_idx[:, None, None], sc_valid.shape)[sc_valid]
         sc_valid_idx_coord, _, sc_valid_idx_shadow_coord = torch.where(sc_valid)
-        valid_shadow_coords_values = shadow_table_sel[
-            :, sc_valid_idx_coord, sc_valid_idx_shadow_coord
-        ]
-        valid_shadow_coords_flat = (
-            valid_sc_batch * height + valid_sc_y
-        ) * width + valid_sc_x
+        valid_shadow_coords_values = shadow_table_sel[:, sc_valid_idx_coord, sc_valid_idx_shadow_coord]
+        valid_shadow_coords_flat = (valid_sc_batch * height + valid_sc_y) * width + valid_sc_x
         shadow_img_flat = torch.full(
             (sim_img_r.shape[1], sim_img_r.shape[0] * width * height),
             np.inf,
@@ -374,9 +333,7 @@ class TaximTorch(torch.nn.Module, TaximImpl[torch.Tensor, torch.device]):
             dim_size=bs * width * height,
             out=shadow_img_flat,
         )
-        shadow_img = torch.reshape(
-            shadow_img_flat, (sim_img_r.shape[1], bs, height, width)
-        ).transpose(0, 1)
+        shadow_img = torch.reshape(shadow_img_flat, (sim_img_r.shape[1], bs, height, width)).transpose(0, 1)
         sim_img_r = torch.minimum(sim_img_r, shadow_img)
 
         shadow_sim = self.__gaussian_blur(
@@ -384,15 +341,11 @@ class TaximTorch(torch.nn.Module, TaximImpl[torch.Tensor, torch.device]):
             self.sim_params.shadow_blur_sigma(shape),
         )
         shadow_sim_img = shadow_sim + self.__get_background_img_cached(shape)
-        shadow_sim_img_blurred = self.__gaussian_blur(
-            shadow_sim_img, self.sim_params.deform_final_sigma(shape)
-        )
+        shadow_sim_img_blurred = self.__gaussian_blur(shadow_sim_img, self.sim_params.deform_final_sigma(shape))
 
         return torch.clip(shadow_sim_img_blurred, 0, 1)
 
-    def __np_img_to_torch(
-        self, img: np.ndarray, has_channels: bool = True
-    ) -> torch.Tensor:
+    def __np_img_to_torch(self, img: np.ndarray, has_channels: bool = True) -> torch.Tensor:
         """
         Converts a numpy image to torch.
         :param img: Image to convert.
@@ -408,9 +361,7 @@ class TaximTorch(torch.nn.Module, TaximImpl[torch.Tensor, torch.device]):
 
     @classmethod
     def __get_gaussian_kernel1d(cls, sigma: float, kernel_size: int) -> torch.Tensor:
-        x = torch.linspace(
-            -(kernel_size - 1) * 0.5, (kernel_size - 1) * 0.5, steps=kernel_size
-        )
+        x = torch.linspace(-(kernel_size - 1) * 0.5, (kernel_size - 1) * 0.5, steps=kernel_size)
         pdf = torch.exp(-0.5 * (x / sigma).pow(2))
         return pdf / pdf.sum()
 
@@ -422,12 +373,8 @@ class TaximTorch(torch.nn.Module, TaximImpl[torch.Tensor, torch.device]):
         dtype: torch.dtype,
         device: torch.device,
     ) -> torch.Tensor:
-        kernel1d_x = cls.__get_gaussian_kernel1d(sigma[0], kernel_size[0]).to(
-            device, dtype=dtype
-        )
-        kernel1d_y = cls.__get_gaussian_kernel1d(sigma[1], kernel_size[1]).to(
-            device, dtype=dtype
-        )
+        kernel1d_x = cls.__get_gaussian_kernel1d(sigma[0], kernel_size[0]).to(device, dtype=dtype)
+        kernel1d_y = cls.__get_gaussian_kernel1d(sigma[1], kernel_size[1]).to(device, dtype=dtype)
         kernel2d = torch.mm(kernel1d_y[:, None], kernel1d_x[None, :])
         return kernel2d
 
@@ -451,11 +398,7 @@ class TaximTorch(torch.nn.Module, TaximImpl[torch.Tensor, torch.device]):
             sigma_np = np.array(sigma)
             # Ensure kernel size is odd
             kernel_size = (
-                np.round(
-                    np.sqrt(-2 * np.log(eps * np.sqrt(2 * np.pi) * sigma_np)) * sigma_np
-                ).astype(np.int_)
-                // 2
-                * 2
+                np.round(np.sqrt(-2 * np.log(eps * np.sqrt(2 * np.pi) * sigma_np)) * sigma_np).astype(np.int_) // 2 * 2
                 + 1
             ).tolist()
         kernel = cls.__get_gaussian_kernel2d(
@@ -465,9 +408,7 @@ class TaximTorch(torch.nn.Module, TaximImpl[torch.Tensor, torch.device]):
             device=img.device,
         )
         p = (np.array(kernel_size) - 1) // 2
-        img_padded = torch.nn.functional.pad(
-            img, (p[0], p[0], p[1], p[1]), mode="reflect"
-        )
+        img_padded = torch.nn.functional.pad(img, (p[0], p[0], p[1], p[1]), mode="reflect")
         return fast_conv2d(img_padded, kernel)
 
     def __process_initial_frame(self, f0: torch.Tensor):
@@ -477,9 +418,7 @@ class TaximTorch(torch.nn.Module, TaximImpl[torch.Tensor, torch.device]):
         :return: A 3xHxW torch tensor containing the processed initial frame.
         """
         # gaussian filtering with square kernel
-        f0_blurred = self.__gaussian_blur(
-            f0, self.sim_params.initial_frame_sigma(f0.shape[1:])
-        )
+        f0_blurred = self.__gaussian_blur(f0, self.sim_params.initial_frame_sigma(f0.shape[1:]))
 
         # Checking the difference between original and filtered image
         d_i = torch.mean(f0_blurred - f0, dim=0)
@@ -488,13 +427,9 @@ class TaximTorch(torch.nn.Module, TaximImpl[torch.Tensor, torch.device]):
         fmp = self.sim_params.frame_mixing_percentage
         thresh = self.sim_params.diff_threshold
 
-        return torch.where(
-            (d_i < thresh).unsqueeze(0), fmp * f0_blurred + (1 - fmp) * f0, f0
-        )
+        return torch.where((d_i < thresh).unsqueeze(0), fmp * f0_blurred + (1 - fmp) * f0, f0)
 
-    def __get_shifted_height_map(
-        self, pressing_depth_mm: float, height_map: torch.Tensor
-    ) -> torch.Tensor:
+    def __get_shifted_height_map(self, pressing_depth_mm: float, height_map: torch.Tensor) -> torch.Tensor:
         """
         Generate the shifted height map of the gel surface by interacting the object with the gel pad model. After
         shifting, the closest point of the height map will be pressing_depth_mm below the furthest point of the gel.
@@ -503,15 +438,9 @@ class TaximTorch(torch.nn.Module, TaximImpl[torch.Tensor, torch.device]):
         :return: Shifted height map in mm.
         """
         # shift the height map to interact with the object
-        return (
-            height_map
-            - height_map.amin(-1, keepdim=True).amin(-2, keepdim=True)
-            - pressing_depth_mm.view(-1,1,1)
-        )
+        return height_map - height_map.amin(-1, keepdim=True).amin(-2, keepdim=True) - pressing_depth_mm.view(-1, 1, 1)
 
-    def __compute_gel_pad_deformation(
-        self, height_map: torch.Tensor
-    ) -> tuple[torch.Tensor, torch.Tensor]:
+    def __compute_gel_pad_deformation(self, height_map: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         """
         Compute the deformation of the gel pad.
         :param height_map: Height map of the object in mm.
@@ -522,9 +451,7 @@ class TaximTorch(torch.nn.Module, TaximImpl[torch.Tensor, torch.device]):
         # get the contact area
         contact_mask = height_map < 0
 
-        joined_height_map = torch.minimum(
-            height_map, self.__get_gel_map_cached(height_map.shape[1:])
-        )
+        joined_height_map = torch.minimum(height_map, self.__get_gel_map_cached(height_map.shape[1:]))
 
         # contact mask which is a little smaller than the real contact mask
         mask = torch.logical_and(
@@ -536,9 +463,7 @@ class TaximTorch(torch.nn.Module, TaximImpl[torch.Tensor, torch.device]):
         # approximate soft body deformation with pyramid gaussian_filter
         height_map_blurred = joined_height_map
         for sigma in zip(*self.sim_params.deform_pyramid_sigma(height_map.shape[1:])):
-            height_map_blurred = self.__gaussian_blur(
-                height_map_blurred.unsqueeze(0), sigma
-            )[0]
+            height_map_blurred = self.__gaussian_blur(height_map_blurred.unsqueeze(0), sigma)[0]
             height_map_blurred[mask] = joined_height_map[mask]
         height_map_blurred = self.__gaussian_blur(
             height_map_blurred.unsqueeze(0),
@@ -547,9 +472,7 @@ class TaximTorch(torch.nn.Module, TaximImpl[torch.Tensor, torch.device]):
 
         return height_map_blurred, mask
 
-    def __generate_normals(
-        self, height_map: torch.Tensor
-    ) -> tuple[torch.Tensor, torch.Tensor]:
+    def __generate_normals(self, height_map: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         """
         Get the gradient (magnitude & direction) map from the height map.
         :param height_map: Height map to compute the gradients for.

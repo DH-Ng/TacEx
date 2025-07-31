@@ -1,36 +1,35 @@
 from __future__ import annotations
 
 import inspect
+import numpy as np
 import re
+import torch
 import weakref
 from typing import TYPE_CHECKING
 
-import isaaclab.sim as sim_utils
-import numpy as np
 import omni
-import torch
 from isaacsim.core.prims import XFormPrim
-from omni.physx import (
-    get_physx_cooking_interface,
-    get_physx_interface,
-    get_physx_scene_query_interface,
-)
+from omni.physx import get_physx_cooking_interface, get_physx_interface, get_physx_scene_query_interface
 from pxr import Gf, PhysxSchema, Sdf, Usd, UsdGeom, UsdPhysics, UsdShade, Vt
+
+import isaaclab.sim as sim_utils
 
 try:
     from isaacsim.util.debug_draw import _debug_draw
+
     draw = _debug_draw.acquire_debug_draw_interface()
 except:
     draw = None
+
+from tacex_uipc.objects import UipcObject
+from uipc import Animation, Vector3, builtin, view
+from uipc.constitution import SoftPositionConstraint
+from uipc.geometry import GeometrySlot, SimplicialComplex
 
 import isaaclab.utils.math as math_utils
 from isaaclab.assets import Articulation, AssetBase, AssetBaseCfg, RigidObject
 from isaaclab.utils import configclass
 from isaaclab.utils.math import transform_points
-from tacex_uipc.objects import UipcObject
-from uipc import Animation, Vector3, builtin, view
-from uipc.constitution import SoftPositionConstraint
-from uipc.geometry import GeometrySlot, SimplicialComplex
 
 
 @configclass
@@ -64,11 +63,15 @@ class UipcIsaacAttachmentsCfg:
     If the collision mesh of the isaaclab_rigid_object is in the radius of a point, then the
     point is considered "attached" to the isaaclab_rigid_object.
     """
-class UipcIsaacAttachments():
+
+
+class UipcIsaacAttachments:
     cfg: UipcIsaacAttachmentsCfg
 
-    #todo code init properly
-    def __init__(self, cfg: UipcIsaacAttachmentsCfg, uipc_object: UipcObject, isaaclab_rigid_object: RigidObject | Articulation) -> None:
+    # todo code init properly
+    def __init__(
+        self, cfg: UipcIsaacAttachmentsCfg, uipc_object: UipcObject, isaaclab_rigid_object: RigidObject | Articulation
+    ) -> None:
         # check that the config is valid
         cfg.validate()
         self.cfg = cfg.copy()
@@ -76,33 +79,39 @@ class UipcIsaacAttachments():
         self.uipc_object: UipcObject = uipc_object
         # check if prim of uipc_object has rigid body API applied to it, if yes -> throw error
         if UsdPhysics.RigidBodyAPI(self.uipc_object._prim_view.prims[0]):
-            raise RuntimeWarning(f"Prim {self.uipc_object.cfg.prim_path} of UIPC object is a Isaac Rigid Body. This (usually) leads to unwanted behavior (e.g. when part of articulation).")
+            raise RuntimeWarning(
+                f"Prim {self.uipc_object.cfg.prim_path} of UIPC object is a Isaac Rigid Body. This (usually) leads to"
+                " unwanted behavior (e.g. when part of articulation)."
+            )
 
         self.isaaclab_rigid_object: RigidObject | Articulation = isaaclab_rigid_object
 
-        self.rigid_body_id = None # used to query the position of the rigid body
+        self.rigid_body_id = None  # used to query the position of the rigid body
 
         self.uipc_object_vertex_indices = []
         self.attachment_points_init_positions = []
 
-        #self.attachments_offsets_idx_range = [0]
+        # self.attachments_offsets_idx_range = [0]
         self.aim_positions = np.zeros(0)
 
         # create the attachment
 
         if not self.cfg.compute_attachment_data:
-            #todo hmm, its kinda tricky. Can only use precomputed attachment data, if its the same tet mesh.
-            #-- how can we make sure that this case?
+            # todo hmm, its kinda tricky. Can only use precomputed attachment data, if its the same tet mesh.
+            # -- how can we make sure that this case?
 
             # Load precomputed attachmend data from USD prim.
-            prim_children = self.uipc_object._prim_view.prims[0].GetChildren() #todo properly deal with multiple meshs
+            prim_children = self.uipc_object._prim_view.prims[0].GetChildren()  # todo properly deal with multiple meshs
             prim = prim_children[0]
             usd_mesh = UsdGeom.Mesh(prim)
             attachment_offsets = np.array(prim.GetAttribute("attachment_offsets").Get())
             idx = prim.GetAttribute("attachment_indices").Get()
 
             if idx is None:
-                raise Exception(f"No precomputed attachment data found for prim at {str(usd_mesh.GetPath())}. Use set a cfg for the attachment to compute attachment data.")
+                raise Exception(
+                    f"No precomputed attachment data found for prim at {str(usd_mesh.GetPath())}. Use set a cfg for the"
+                    " attachment to compute attachment data."
+                )
         else:
             # compute attachment
             attachment_points_radius = self.cfg.attachment_points_radius
@@ -113,9 +122,11 @@ class UipcIsaacAttachments():
             print("isaac_rigid_prim ", isaac_rigid_prim_path)
 
             mesh = self.uipc_object.uipc_meshes[0]
-            tet_points_world = mesh.positions().view()[:,:,0]
-            tet_indices = mesh.tetrahedra().topo().view()[:,:,0]
-            attachment_offsets, idx, rigid_prims = self.compute_attachment_data(isaac_rigid_prim_path, tet_points_world, tet_indices, attachment_points_radius)
+            tet_points_world = mesh.positions().view()[:, :, 0]
+            tet_indices = mesh.tetrahedra().topo().view()[:, :, 0]
+            attachment_offsets, idx, rigid_prims = self.compute_attachment_data(
+                isaac_rigid_prim_path, tet_points_world, tet_indices, attachment_points_radius
+            )
 
         # set attachment data
         self.attachment_offsets = attachment_offsets
@@ -126,7 +137,7 @@ class UipcIsaacAttachments():
 
         # set uipc constraint
         soft_position_constraint = SoftPositionConstraint()
-        #todo handle multiple meshes properly (currently just single mesh)
+        # todo handle multiple meshes properly (currently just single mesh)
         soft_position_constraint.apply_to(self.uipc_object.uipc_meshes[0], self.cfg.constraint_strength_ratio)
 
         # flag for whether the asset is initialized
@@ -164,6 +175,7 @@ class UipcIsaacAttachments():
         if self._debug_vis_handle:
             self._debug_vis_handle.unsubscribe()
             self._debug_vis_handle = None
+
     """
     Properties
     """
@@ -220,7 +232,7 @@ class UipcIsaacAttachments():
             # create a subscriber for the post update event if it doesn't exist
             if self._debug_vis_handle is None:
                 app_interface = omni.kit.app.get_app_interface()
-                self._debug_vis_handle = app_interface.get_pre_update_event_stream().create_subscription_to_pop( #get_post_update_event_stream get_pre_update_event_stream
+                self._debug_vis_handle = app_interface.get_pre_update_event_stream().create_subscription_to_pop(  # get_post_update_event_stream get_pre_update_event_stream
                     lambda event, obj=weakref.proxy(self): obj._debug_vis_callback(event)
                 )
         else:
@@ -232,7 +244,9 @@ class UipcIsaacAttachments():
         return True
 
     @staticmethod
-    def compute_attachment_data(isaac_mesh_path, tet_points, tet_indices, sphere_radius=5e-4, max_dist=1e-5): # really small distances to prevent intersection with unwanted geometries
+    def compute_attachment_data(
+        isaac_mesh_path, tet_points, tet_indices, sphere_radius=5e-4, max_dist=1e-5
+    ):  # really small distances to prevent intersection with unwanted geometries
         """
 
         Returns: attachment_offsets, attachment_indices and the found rigid prims to the isaac_mesh_path
@@ -250,7 +264,9 @@ class UipcIsaacAttachments():
         # check that spawn was successful
         matching_prims = sim_utils.find_matching_prims(isaac_mesh_path)
         if len(matching_prims) == 0:
-            raise RuntimeError(f"Could not find prim with path {isaac_mesh_path}. The body_name in the cfg might not exist.")
+            raise RuntimeError(
+                f"Could not find prim with path {isaac_mesh_path}. The body_name in the cfg might not exist."
+            )
         init_prim = matching_prims[0]
 
         pose = omni.usd.get_world_transform_matrix(init_prim)
@@ -266,7 +282,7 @@ class UipcIsaacAttachments():
         attachment_offsets = []
 
         # get position of current object for offset computation
-        obj_pos = obj_position[0,:]
+        obj_pos = obj_position[0, :]
         # print("obj_pos ", obj_pos)
         # print("orient ", obj_orientation)
 
@@ -282,23 +298,31 @@ class UipcIsaacAttachments():
 
         for i, v in enumerate(vertex_positions):
             # print("raycast ", i)
-            ray_dir = [0,0,1] # unit direction of the sphere ray cast -> doesnt really matter here, cause we only use a super short ray.
-            hitInfo = get_physx_scene_query_interface().sweep_sphere_closest(radius=sphere_radius, origin=v, dir=ray_dir, distance=max_dist, bothSides=True)
+            ray_dir = [
+                0,
+                0,
+                1,
+            ]  # unit direction of the sphere ray cast -> doesnt really matter here, cause we only use a super short ray.
+            hitInfo = get_physx_scene_query_interface().sweep_sphere_closest(
+                radius=sphere_radius, origin=v, dir=ray_dir, distance=max_dist, bothSides=True
+            )
             if hitInfo["hit"]:
                 # print("hiiiit, ", hitInfo["collision"])
-                if str(init_prim.GetPath()) in hitInfo["collision"] : # prevent attaching to unrelated geometry
+                if str(init_prim.GetPath()) in hitInfo["collision"]:  # prevent attaching to unrelated geometry
                     attachment_points_positions.append(v)
                     # idx.append(i+min_vertex_idx) unlike the gipc simulation, we use the object specific idx here
                     idx.append(i)
-                    #TODO do this at the end and compute in a vectorized fashion?
+                    # TODO do this at the end and compute in a vectorized fashion?
                     # compute offsets from object position to attachment points
                     offset = v - obj_pos
                     offset = torch.tensor(offset, device="cuda:0").float()
-                    offset = math_utils.quat_apply_inverse(obj_orientation[0].reshape((1,4)), offset.reshape((1,3)))[0]
+                    offset = math_utils.quat_apply_inverse(obj_orientation[0].reshape((1, 4)), offset.reshape((1, 3)))[
+                        0
+                    ]
                     offset = offset.cpu().numpy()
                     attachment_offsets.append(offset)
 
-        attachment_points_positions = np.array(attachment_points_positions).reshape(-1,3)
+        attachment_points_positions = np.array(attachment_points_positions).reshape(-1, 3)
 
         # offset to later compute the `should-be` positions of the attachment point
         attachment_offsets = np.array(attachment_offsets).reshape(-1, 3)
@@ -325,22 +349,26 @@ class UipcIsaacAttachments():
 
     def _initialize_impl(self):
         if self.cfg.body_name is not None:
-            self.rigid_body_id , found_body_name = self.isaaclab_rigid_object.find_bodies(self.cfg.body_name)
+            self.rigid_body_id, found_body_name = self.isaaclab_rigid_object.find_bodies(self.cfg.body_name)
 
         self._create_animation()
 
         sim: sim_utils.SimulationContext = sim_utils.SimulationContext.instance()
-        sim.add_physics_callback(f"{self.uipc_object.cfg.prim_path}_X_{self.isaaclab_rigid_object.cfg.prim_path}_attachment_update", self._compute_aim_positions)
+        sim.add_physics_callback(
+            f"{self.uipc_object.cfg.prim_path}_X_{self.isaaclab_rigid_object.cfg.prim_path}_attachment_update",
+            self._compute_aim_positions,
+        )
 
     def _create_animation(self):
         animator = self.uipc_object._uipc_sim.scene.animator()
-        def animate_tet(info: Animation.UpdateInfo): # animation function
+
+        def animate_tet(info: Animation.UpdateInfo):  # animation function
             # print("test, ", self.aim_positions)
 
-            geo_slots:list[GeometrySlot] = info.geo_slots()
+            geo_slots: list[GeometrySlot] = info.geo_slots()
             geo: SimplicialComplex = geo_slots[0].geometry()
-            rest_geo_slots:list[GeometrySlot] = info.rest_geo_slots()
-            rest_geo:SimplicialComplex = rest_geo_slots[0].geometry()
+            rest_geo_slots: list[GeometrySlot] = info.rest_geo_slots()
+            rest_geo: SimplicialComplex = rest_geo_slots[0].geometry()
 
             is_constrained = geo.vertices().find(builtin.is_constrained)
             is_constrained_view = view(is_constrained)
@@ -350,7 +378,7 @@ class UipcIsaacAttachments():
 
             is_constrained_view[self.attachment_points_idx] = 1
 
-            aim_position_view[self.attachment_points_idx] = self.aim_positions.reshape(-1,3,1)
+            aim_position_view[self.attachment_points_idx] = self.aim_positions.reshape(-1, 3, 1)
 
         animator.insert(self.uipc_object.uipc_scene_objects[0], animate_tet)
 
@@ -370,7 +398,7 @@ class UipcIsaacAttachments():
             pose = pose[:, self.rigid_body_id, 0:7].clone()
         else:
             raise RuntimeError("Need an Articulation or a RigidBody object for the Isaac X UIPC attachment.")
-        #- doing this is undesirable -> need to update the scene to get newest data
+        # - doing this is undesirable -> need to update the scene to get newest data
         # pose = self.isaaclab_rigid_object.data.body_state_w[:, self.rigid_body_id, 0:7].clone()
 
         self.obj_pose = pose
@@ -379,11 +407,16 @@ class UipcIsaacAttachments():
         # self._draw.clear_points()
         # draw.draw_points(obj_pos, [(0,255,0,0.5)]*obj_pos.shape[0], [50]*obj_pos.shape[0]) # the new positions
 
-        attachment_offsets = torch.tensor(self.attachment_offsets.reshape((self._num_instances, self.num_attachment_points_per_obj, 3)), device=self.device).float()
+        attachment_offsets = torch.tensor(
+            self.attachment_offsets.reshape((self._num_instances, self.num_attachment_points_per_obj, 3)),
+            device=self.device,
+        ).float()
         # only access pose of a single body (thats why idx=0 in second dim)
-        aim_pos = transform_points(attachment_offsets, pos=pose[:, 0, 0:3], quat=pose[:, 0, 3:]) #todo give over batch of pos and quat for each instance (i.e. pos has shape N,3 and quat N,4)
+        aim_pos = transform_points(
+            attachment_offsets, pos=pose[:, 0, 0:3], quat=pose[:, 0, 3:]
+        )  # todo give over batch of pos and quat for each instance (i.e. pos has shape N,3 and quat N,4)
         aim_pos = aim_pos.cpu().numpy()
-        self.aim_positions = aim_pos.flatten().reshape(-1,3)
+        self.aim_positions = aim_pos.flatten().reshape(-1, 3)
 
         #      # extract velocity
         #      lin_vel = scene["robot"].data.body_state_w[:, robot_entity_cfg.body_ids[1], 7:10]
@@ -425,6 +458,7 @@ class UipcIsaacAttachments():
         if debug_vis:
             try:
                 from isaacsim.util.debug_draw import _debug_draw
+
                 self._draw = _debug_draw.acquire_debug_draw_interface()
             except:
                 self._draw = None
@@ -442,8 +476,10 @@ class UipcIsaacAttachments():
         self._draw.clear_points()
         self._draw.clear_lines()
 
-        #drawing with the debug method leads to render delay
-        self._draw.draw_points(self.aim_positions, [(255,0,0,0.5)]*self.aim_positions.shape[0], [60]*self.aim_positions.shape[0]) # the new positions
+        # drawing with the debug method leads to render delay
+        self._draw.draw_points(
+            self.aim_positions, [(255, 0, 0, 0.5)] * self.aim_positions.shape[0], [60] * self.aim_positions.shape[0]
+        )  # the new positions
         # pose = self.isaaclab_rigid_object.data.body_state_w[:, self.rigid_body_id, 0:7].clone()
         pose = self.obj_pose.clone()
 
@@ -453,5 +489,5 @@ class UipcIsaacAttachments():
             # print("Obj_center_debug ", obj_center)
             # draw.draw_points([obj_center], [(255,255,0,0.5)]*obj_center.shape[0], [50]*obj_center.shape[0]) # the new positions
             # print("")
-            for j in range(i, self._num_instances*self.num_attachment_points_per_obj):
-                self._draw.draw_lines([obj_center], [self.aim_positions[j]], [(255,255,0,0.5)], [10])
+            for j in range(i, self._num_instances * self.num_attachment_points_per_obj):
+                self._draw.draw_lines([obj_center], [self.aim_positions[j]], [(255, 255, 0, 0.5)], [10])

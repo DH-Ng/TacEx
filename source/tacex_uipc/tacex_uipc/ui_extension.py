@@ -23,6 +23,7 @@ from omni.physx import get_physx_cooking_interface, get_physx_interface
 draw = _debug_draw.acquire_debug_draw_interface()
 
 import numpy as np
+
 import pxr
 import wildmeshing as wm
 from omni.physx.scripts import deformableUtils
@@ -39,6 +40,7 @@ def get_selected_prim_path():
 
     return None if not paths else paths[0]
 
+
 def get_selected_prim_paths():
     """Return the paths of the selected prims"""
     context = omni.usd.get_context()
@@ -47,10 +49,12 @@ def get_selected_prim_paths():
 
     return paths
 
+
 def get_stage_id():
     """Return the stage Id of the current stage"""
     context = omni.usd.get_context()
     return context.get_stage_id()
+
 
 ### MESH STUFF
 def _generate_tet_mesh(path, tet_cfg=None):
@@ -58,9 +62,7 @@ def _generate_tet_mesh(path, tet_cfg=None):
     Need to make sure that we load the geom mesh in USD and not just the Xform of the prim
     """
     if tet_cfg is None:
-        tet_cfg = TetMeshCfg(
-            edge_length_r=0.25
-        )
+        tet_cfg = TetMeshCfg(edge_length_r=0.25)
 
     # # high res
     # if tet_cfg is None:
@@ -79,10 +81,10 @@ def _generate_tet_mesh(path, tet_cfg=None):
 
     tf_world = np.array(omni.usd.get_world_transform_matrix(geom_mesh))
     world_tet_points = tf_world.T @ np.vstack((tet_points.T, np.ones(tet_points.shape[0])))
-    world_tet_points = (world_tet_points[:-1].T)
+    world_tet_points = world_tet_points[:-1].T
 
     world_tet_surf_points = tf_world.T @ np.vstack((surf_points.T, np.ones(surf_points.shape[0])))
-    world_tet_surf_points = (world_tet_surf_points[:-1].T)
+    world_tet_surf_points = world_tet_surf_points[:-1].T
 
     draw.clear_points()
     draw.clear_lines()
@@ -90,8 +92,18 @@ def _generate_tet_mesh(path, tet_cfg=None):
     _draw_surface_trimesh(world_tet_surf_points, tet_surf_indices)
 
     # Dont save the transformed points ->  we want to save the local points. Transformations happens during scene creation
-    _create_tet_data_attributes(path, tet_points=tet_points, tet_indices=tet_indices, tet_surf_points=surf_points, tet_surf_indices=tet_surf_indices)
-    return f"Amount of tet points {len(tet_points)},\nAmount of tetrahedra: {int(len(tet_indices)/4)},\nAmount of surface points: {int(len(tet_surf_indices)/3)}"
+    _create_tet_data_attributes(
+        path,
+        tet_points=tet_points,
+        tet_indices=tet_indices,
+        tet_surf_points=surf_points,
+        tet_surf_indices=tet_surf_indices,
+    )
+    return (
+        f"Amount of tet points {len(tet_points)},\nAmount of tetrahedra: {int(len(tet_indices)/4)},\nAmount of surface"
+        f" points: {int(len(tet_surf_indices)/3)}"
+    )
+
 
 def _draw_tets(all_vertices, tet_indices):
     draw.clear_lines()
@@ -100,24 +112,30 @@ def _draw_tets(all_vertices, tet_indices):
     # draw.draw_points(all_vertices, [(255,0,0,1)]*len(all_vertices), [10]*len(all_vertices))
 
     # connect nodes according to tet_indices
-    color = [(125,0,0,0.5)]
+    color = [(125, 0, 0, 0.5)]
     for i in range(0, len(tet_indices), 4):
-        tet_points_idx = tet_indices[i:i+4]
+        tet_points_idx = tet_indices[i : i + 4]
         tet_points = [all_vertices[i] for i in tet_points_idx]
-        #draw.draw_points(tet_points, [(255,0,0,1)]*len(all_vertices), [10]*len(all_vertices))
-        draw.draw_lines([tet_points[0]]*3, tet_points[1:], color*3, [10]*3) # draw from point 0 to every other point (3 times 0, cause line from 0 to the other 3 points)
-        draw.draw_lines([tet_points[1]]*2, tet_points[2:], color*2, [10]*2)
-        draw.draw_lines([tet_points[2]], [tet_points[3]], color, [10]) # draw line between the other 2 points
+        # draw.draw_points(tet_points, [(255,0,0,1)]*len(all_vertices), [10]*len(all_vertices))
+        draw.draw_lines(
+            [tet_points[0]] * 3, tet_points[1:], color * 3, [10] * 3
+        )  # draw from point 0 to every other point (3 times 0, cause line from 0 to the other 3 points)
+        draw.draw_lines([tet_points[1]] * 2, tet_points[2:], color * 2, [10] * 2)
+        draw.draw_lines([tet_points[2]], [tet_points[3]], color, [10])  # draw line between the other 2 points
+
 
 def _draw_surface_trimesh(all_vertices, tet_surf_indices):
-    color = [(0,0,125,0.5)]
-    #draw surface mesh
+    color = [(0, 0, 125, 0.5)]
+    # draw surface mesh
     for i in range(0, len(tet_surf_indices), 3):
-        tri_points_idx = tet_surf_indices[i:i+3]
+        tri_points_idx = tet_surf_indices[i : i + 3]
         tri_points = [all_vertices[j] for j in tri_points_idx]
-        draw.draw_points(tri_points, [(255,255,255,1)]*len(tri_points), [40]*len(tri_points))
-        draw.draw_lines([tri_points[0]]*2, tri_points[1:], color*2, [10]*2) # draw from point 0 to every other point (3 times 0, cause line from 0 to the other 3 points)
-        draw.draw_lines([tri_points[1]]*1, tri_points[2:], color*1, [10]*1)
+        draw.draw_points(tri_points, [(255, 255, 255, 1)] * len(tri_points), [40] * len(tri_points))
+        draw.draw_lines(
+            [tri_points[0]] * 2, tri_points[1:], color * 2, [10] * 2
+        )  # draw from point 0 to every other point (3 times 0, cause line from 0 to the other 3 points)
+        draw.draw_lines([tri_points[1]] * 1, tri_points[2:], color * 1, [10] * 1)
+
 
 def _create_tet_data_attributes(path, tet_points, tet_indices, tet_surf_points, tet_surf_indices):
     """
@@ -146,13 +164,14 @@ def _create_tet_data_attributes(path, tet_points, tet_indices, tet_surf_points, 
     attr_tet_surf_indices = prim.CreateAttribute("tet_surf_indices", pxr.Sdf.ValueTypeNames.UIntArray)
     attr_tet_surf_indices.Set(tet_surf_indices)
 
-    print("*"*40)
+    print("*" * 40)
     print("Created tet data: ")
     print(f"tet_points (num {tet_points.shape[0]})")
     print(f"tet_indices (num {len(tet_indices)})")
     print(f"tet_surf_points (num {tet_surf_points.shape[0]})")
     print(f"tet_surf_indices (num {len(tet_surf_indices)})")
-    print("*"*40)
+    print("*" * 40)
+
 
 def _update_surf_mesh(path):
     stage = omni.usd.get_context().get_stage()
@@ -171,6 +190,7 @@ def _update_surf_mesh(path):
     MeshGenerator.update_usd_mesh_with_uipc_surface(prim)
     print("Update of surface Mesh via UIPC: ", path)
 
+
 def _create_attachment(paths):
     print("paths are ", paths)
 
@@ -187,7 +207,7 @@ def _create_attachment(paths):
     tf_world = np.array(omni.usd.get_world_transform_matrix(tet_prim))
     print("tf world ", tf_world)
     world_tet_points = tf_world.T @ np.vstack((tet_points.T, np.ones(tet_points.shape[0])))
-    world_tet_points = (world_tet_points[:-1].T)
+    world_tet_points = world_tet_points[:-1].T
 
     # disable collision of the mesh that should be simulated by uipc -> otherwise raycasts are only detecting the tet mesh
     try:
@@ -196,10 +216,13 @@ def _create_attachment(paths):
     except:
         pass
 
-    attachment_offsets, idx, rigid_prims = UipcIsaacAttachments.compute_attachment_data(isaac_mesh_path, world_tet_points, tet_indices)
+    attachment_offsets, idx, rigid_prims = UipcIsaacAttachments.compute_attachment_data(
+        isaac_mesh_path, world_tet_points, tet_indices
+    )
     _create_attachment_data_attributes(tet_mesh_path, attachment_offsets, idx)
 
     get_physx_interface().release_physics_objects()
+
 
 def _create_attachment_data_attributes(path, attachment_offsets, attachment_indices):
     stage = omni.usd.get_context().get_stage()
@@ -211,11 +234,12 @@ def _create_attachment_data_attributes(path, attachment_offsets, attachment_indi
     attr_attachment_indices = prim.CreateAttribute("attachment_indices", pxr.Sdf.ValueTypeNames.UIntArray)
     attr_attachment_indices.Set(attachment_indices)
 
-    print("*"*40)
+    print("*" * 40)
     print("Created tet data: ")
     print(f"attachment_offsets (num {attachment_offsets.shape[0]})")
     print(f"attachment_indices (num {len(attachment_indices)})")
-    print("*"*40)
+    print("*" * 40)
+
 
 ### for some funky UV stuff
 def _extract_primvar_st(path):
@@ -242,15 +266,13 @@ def _set_primvar_st(path):
     pv_api = UsdGeom.PrimvarsAPI(UsdGeom.Mesh(prim))
     if not pv_api.HasPrimvar("primvars:st"):
         pv = pv_api.CreatePrimvar(
-            "primvars:st",
-            Sdf.ValueTypeNames.TexCoord2fArray,
-            UsdGeom.Tokens.faceVarying,
-            uv_coor.size
+            "primvars:st", Sdf.ValueTypeNames.TexCoord2fArray, UsdGeom.Tokens.faceVarying, uv_coor.size
         )
     else:
         pv = pv_api.GetPrimvar("primvars:st")
     pv.Set(uv_coor)
     print("Set uv values for primvars:st")
+
 
 # Any class derived from `omni.ext.IExt` in top level module (defined in `python.modules` of `extension.toml`) will be
 # instantiated when extension gets enabled and `on_startup(ext_id)` will be called. Later when extension gets disabled
@@ -262,7 +284,10 @@ class TacexIPCExtension(omni.ext.IExt):
         print("[tacex_uipc] startup")
 
         self._window = omni.ui.Window(
-            "Generate Tet Meshes for the IPC simulation:", width=300, height=300, dockPreference=omni.ui.DockPreference.RIGHT_BOTTOM
+            "Generate Tet Meshes for the IPC simulation:",
+            width=300,
+            height=300,
+            dockPreference=omni.ui.DockPreference.RIGHT_BOTTOM,
         )
         self._t = 0
         self._dt = 0.01
@@ -286,7 +311,11 @@ class TacexIPCExtension(omni.ext.IExt):
 
                 omni.ui.Button("Compute Tet Mesh", clicked_fn=compute_tet_mesh, height=0)
                 omni.ui.Button("Update Surface Mesh", clicked_fn=update_surf_mesh, height=0)
-                omni.ui.Button("Create Attachment \n(Select rigid body, then tet mesh, then press button)", clicked_fn=create_attachment, height=0)
+                omni.ui.Button(
+                    "Create Attachment \n(Select rigid body, then tet mesh, then press button)",
+                    clicked_fn=create_attachment,
+                    height=0,
+                )
 
                 # experimental
                 def extract_primvar_st():
@@ -294,6 +323,7 @@ class TacexIPCExtension(omni.ext.IExt):
 
                 def set_primvar_st():
                     _set_primvar_st(get_selected_prim_path())
+
                 omni.ui.Button("Extract primvars:st values (uv map)", clicked_fn=extract_primvar_st, height=0)
                 omni.ui.Button("Set primvars:st values (uv map)", clicked_fn=set_primvar_st, height=0)
 

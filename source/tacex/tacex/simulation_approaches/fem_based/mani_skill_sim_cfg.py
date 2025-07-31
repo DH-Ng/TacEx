@@ -1,7 +1,7 @@
+import torch
 from dataclasses import MISSING, dataclass
 from typing import TYPE_CHECKING, Any, Dict, List, Sequence, Tuple, Union
 
-import torch
 from isaaclab.sensors import FrameTransformerCfg, OffsetCfg
 from isaaclab.utils import class_to_dict, configclass, to_camel_case
 
@@ -9,6 +9,8 @@ from ..gelsight_simulator_cfg import GelSightSimulatorCfg
 from .mani_skill_sim import ManiSkillSimulator
 
 """Configuration for marker motion simulation via FEM simulation (like ManiSkill-ViTac used)."""
+
+
 @configclass
 class ManiSkillSimulatorCfg(GelSightSimulatorCfg):
     simulation_approach_class: type = ManiSkillSimulator
@@ -51,6 +53,7 @@ class ManiSkillSimulatorCfg(GelSightSimulatorCfg):
     @configclass
     class MarkerParams:
         """Dimensions here are in mm (we assume that the world units are meters)"""
+
         # num_markers_col: int = 63
         # num_markers_row: int = 63
         num_markers: int = 128
@@ -58,9 +61,10 @@ class ManiSkillSimulatorCfg(GelSightSimulatorCfg):
         y0: float = 0
         dx: float = 0
         dy: float = 0
+
     marker_params: MarkerParams = MarkerParams()
 
-    init_marker_pos: tuple = ([[]],[[]])
+    init_marker_pos: tuple = ([[]], [[]])
     """Intial Marker positions.
 
     Tuple (xx_init pos, yy_init pos):

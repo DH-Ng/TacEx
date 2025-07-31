@@ -3,13 +3,18 @@
 #
 # SPDX-License-Identifier: BSD-3-Clause
 
+import torch
 from collections.abc import Sequence
 from typing import Any
 
 import carb
-import isaaclab.sim as sim_utils
 import omni.usd
-import torch
+from isaacsim.core.cloner import GridCloner
+from isaacsim.core.prims import XFormPrim
+from pxr import PhysxSchema
+from tacex_uipc.objects import UipcObject, UipcObjectCfg
+
+import isaaclab.sim as sim_utils
 from isaaclab.assets import (
     Articulation,
     ArticulationCfg,
@@ -22,17 +27,8 @@ from isaaclab.assets import (
     RigidObjectCollectionCfg,
 )
 from isaaclab.scene import InteractiveSceneCfg
-from isaaclab.sensors import (
-    ContactSensorCfg,
-    FrameTransformerCfg,
-    SensorBase,
-    SensorBaseCfg,
-)
+from isaaclab.sensors import ContactSensorCfg, FrameTransformerCfg, SensorBase, SensorBaseCfg
 from isaaclab.terrains import TerrainImporter, TerrainImporterCfg
-from isaacsim.core.cloner import GridCloner
-from isaacsim.core.prims import XFormPrim
-from pxr import PhysxSchema
-from tacex_uipc.objects import UipcObject, UipcObjectCfg
 
 
 class UipcInteractiveScene:
@@ -437,7 +433,7 @@ class UipcInteractiveScene:
         # -- sensors
         for sensor in self._sensors.values():
             sensor.reset(env_ids)
-        #todo add uipc_objects resest
+        # todo add uipc_objects resest
 
     def reset_to(
         self,
@@ -544,7 +540,7 @@ class UipcInteractiveScene:
             self._rigid_object_collections,
             self._sensors,
             self._extras,
-            self._uipc_objects
+            self._uipc_objects,
         ]:
             all_keys += list(asset_family.keys())
         return all_keys
@@ -571,7 +567,7 @@ class UipcInteractiveScene:
             self._rigid_object_collections,
             self._sensors,
             self._extras,
-            self._uipc_objects
+            self._uipc_objects,
         ]:
             out = asset_family.get(key)
             # if found, return

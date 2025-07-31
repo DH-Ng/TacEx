@@ -285,7 +285,7 @@ class BallRollingEnvCfg(DirectRLEnvCfg):
             sensor_camera_cfg = GelSightMiniCfg.SensorCameraCfg(
                 prim_path_appendix = "/Camera",
                 update_period= 0,
-                resolution = (320,240), #(120, 160),
+                resolution = (320,240),
                 data_types = ["depth"],
                 clipping_range = (0.024, 0.034),
             ),
@@ -478,22 +478,6 @@ class BallRollingEnv(DirectRLEnv):
 
     def _reset_idx(self, env_ids: torch.Tensor | None):
         super()._reset_idx(env_ids)
-
-        # obj_pos = self.object.data.default_root_state[env_ids]
-        # obj_pos[:, :3] += self.scene.env_origins[env_ids]
-        # self.object.write_root_state_to_sim(obj_pos, env_ids=env_ids)
-
-        # # set goal pos
-        # if self.goal_prim_view is not None:
-        #     goal_pos = obj_pos[:, :3]
-        #     goal_pos[:, 2] += 0.005 # gelpad height
-
-        #     # goal_orient = [num_envs, [0,1,0,0]]
-        #     goal_orient = torch.zeros_like(obj_pos[:, 3:7], device=self.device)
-        #     goal_orient[:, 1] = 1
-        #     self.goal_prim_view.set_world_poses(
-        #         positions=goal_pos, orientations=goal_orient
-        #     )
 
         # set goal pos
         if self.goal_prim_view is not None:

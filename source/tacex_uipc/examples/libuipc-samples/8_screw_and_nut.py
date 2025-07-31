@@ -21,27 +21,15 @@ args_cli = parser.parse_args()
 app_launcher = AppLauncher(args_cli)
 simulation_app = app_launcher.app
 
+import numpy as np
 import pathlib
 
-import isaaclab.sim as sim_utils
-import numpy as np
 import omni.usd
 import uipc
 import usdrt
-from isaaclab.utils.timer import Timer
 from pxr import Gf, Sdf, Usd, UsdGeom
 from tacex_uipc import UipcSim, UipcSimCfg
-from uipc import (
-    AngleAxis,
-    Animation,
-    Logger,
-    Quaternion,
-    Transform,
-    Vector2,
-    Vector3,
-    builtin,
-    view,
-)
+from uipc import AngleAxis, Animation, Logger, Quaternion, Transform, Vector2, Vector3, builtin, view
 from uipc.constitution import AffineBodyConstitution, RotatingMotor
 from uipc.core import Engine, Scene, SceneIO, World
 from uipc.geometry import (
@@ -57,11 +45,12 @@ from uipc.geometry import (
 )
 from uipc.unit import GPa, MPa
 
+import isaaclab.sim as sim_utils
+from isaaclab.utils.timer import Timer
+
 
 def setup_base_scene(sim: sim_utils.SimulationContext):
-    """To make the scene pretty.
-
-    """
+    """To make the scene pretty."""
     # set upAxis to Y to match libuipc-samples
     stage = omni.usd.get_context().get_stage()
     UsdGeom.SetStageUpAxis(stage, UsdGeom.Tokens.y)
@@ -72,7 +61,7 @@ def setup_base_scene(sim: sim_utils.SimulationContext):
         prim_path="/World/defaultGroundPlane",
         cfg=cfg_ground,
         translation=[0, -1, 0],
-        orientation=[0.7071068, -0.7071068, 0, 0]
+        orientation=[0.7071068, -0.7071068, 0, 0],
     )
 
     # spawn distant light
@@ -81,6 +70,7 @@ def setup_base_scene(sim: sim_utils.SimulationContext):
         color=(0.75, 0.75, 0.75),
     )
     cfg_light_dome.func("/World/lightDome", cfg_light_dome, translation=(1, 10, 0))
+
 
 def setup_libuipc_scene(scene):
     trimesh_path = str(pathlib.Path(__file__).parent.resolve() / "trimesh")
@@ -92,14 +82,14 @@ def setup_libuipc_scene(scene):
     rm = RotatingMotor()
     scene.contact_tabular().default_model(0, 1e9)
 
-    screw_obj = scene.objects().create('screw')
-    screw_mesh = io.read(f'{trimesh_path}/screw-and-nut/screw-big-2.obj')
+    screw_obj = scene.objects().create("screw")
+    screw_mesh = io.read(f"{trimesh_path}/screw-and-nut/screw-big-2.obj")
     label_surface(screw_mesh)
     abd.apply_to(screw_mesh, 100 * MPa)
     rm.apply_to(screw_mesh, 100, motor_axis=Vector3.UnitY(), motor_rot_vel=-np.pi)
     screw_obj.geometries().create(screw_mesh)
 
-    def screw_animation(info:Animation.UpdateInfo):
+    def screw_animation(info: Animation.UpdateInfo):
         geo_slots = info.geo_slots()
         geo_slot: SimplicialComplexSlot = geo_slots[0]
         geo = geo_slot.geometry()
@@ -109,8 +99,8 @@ def setup_libuipc_scene(scene):
 
     scene.animator().insert(screw_obj, screw_animation)
 
-    nut_obj = scene.objects().create('nut')
-    nut_mesh = io.read(f'{trimesh_path}/screw-and-nut/nut-big-2.obj')
+    nut_obj = scene.objects().create("nut")
+    nut_mesh = io.read(f"{trimesh_path}/screw-and-nut/nut-big-2.obj")
     label_surface(nut_mesh)
     abd.apply_to(nut_mesh, 100 * MPa)
     is_fixed = nut_mesh.instances().find(builtin.is_fixed)
@@ -122,7 +112,7 @@ def main():
     """Main function."""
     # Initialize the simulation context
     sim_cfg = sim_utils.SimulationCfg(
-        dt=1/60,
+        dt=1 / 60,
         gravity=[0.0, -9.8, 0.0],
     )
     sim = sim_utils.SimulationContext(sim_cfg)
@@ -143,7 +133,7 @@ def main():
         ),
         newton=UipcSimCfg.Newton(
             velocity_tol=0.05,
-        )
+        ),
     )
     uipc_sim = UipcSim(uipc_cfg)
 
@@ -171,17 +161,17 @@ def main():
         sim.render()
 
         if sim.is_playing():
-            if step==500:
+            if step == 500:
                 break
             print("")
             print("====================================================================================")
             print("====================================================================================")
             print("Step number ", step)
             if recover_sim:
-                if step==500:
+                if step == 500:
                     break
 
-                if (uipc_sim.world.recover(uipc_sim.world.frame() + 1)):
+                if uipc_sim.world.recover(uipc_sim.world.frame() + 1):
                     uipc_sim.world.retrieve()
                     print("Replaying frame ", uipc_sim.world.frame() + 1)
                 else:

@@ -7,12 +7,12 @@
 ## license agreement from NVIDIA CORPORATION is strictly prohibited.
 ##
 import math
+import numpy as np
 import random
 from ctypes import alignment
 
 import carb
 import carb.events
-import numpy as np
 import omni.ext
 import omni.ui as ui
 import omni.usd
@@ -30,7 +30,7 @@ try:
 
         x = positions[tid]
         offset = -wp.sin(x[0])
-        scale = wp.sin(5.0*t) * 0.05
+        scale = wp.sin(5.0 * t) * 0.05
 
         x = x + wp.vec3(0.0, offset * scale, 0.0)
 
@@ -122,6 +122,7 @@ def get_fabric_data_for_prim(stage_id, path):
 
     return result
 
+
 def apply_random_rotation(stage_id, path):
     """Apply a random world space rotation to a prim in Fabric"""
     if path is None:
@@ -171,12 +172,7 @@ def deform_mesh_with_warp(stage_id, path, time):
     pointsarray = np.array(points.Get())
     warparray = wp.array(pointsarray, dtype=wp.vec3, device="cuda")
 
-    wp.launch(
-        kernel=deform,
-        dim=len(pointsarray),
-        inputs=[warparray, time],
-        device="cuda"
-    )
+    wp.launch(kernel=deform, dim=len(pointsarray), inputs=[warparray, time], device="cuda")
 
     points.Set(Vt.Vec3fArray(warparray.numpy()))
 

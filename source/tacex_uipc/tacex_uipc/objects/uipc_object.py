@@ -6,13 +6,13 @@
 from __future__ import annotations
 
 import re
+import torch
 from collections.abc import Sequence
 from typing import TYPE_CHECKING
 
 import omni.log
 import omni.physics.tensors.impl.api as physx
 import omni.usd
-import torch
 import usdrt
 import usdrt.UsdGeom
 from isaacsim.core.prims import XFormPrim
@@ -22,40 +22,27 @@ from pxr import Gf, Usd, UsdGeom, UsdPhysics
 # enable_extension("isaacsim.util.debug_draw")
 try:
     from isaacsim.util.debug_draw import _debug_draw
+
     draw = _debug_draw.acquire_debug_draw_interface()
 except:
     draw = None
 
+import numpy as np
 import random
+
+import uipc
+import warp as wp
+from uipc import AngleAxis, Logger, Quaternion, Transform, Vector2, Vector3, builtin, view
+from uipc.constitution import AffineBodyConstitution, ElasticModuli, StableNeoHookean
+from uipc.core import Engine, Scene, SceneIO, World
+from uipc.geometry import extract_surface, flip_inward_triangles, label_surface, label_triangle_orient, tetmesh
+from uipc.unit import GPa, MPa
 
 import isaaclab.sim as sim_utils
 import isaaclab.utils.math as math_utils
 import isaaclab.utils.string as string_utils
-import numpy as np
-import uipc
-import warp as wp
 from isaaclab.assets import AssetBase, AssetBaseCfg
 from isaaclab.utils import configclass
-from uipc import (
-    AngleAxis,
-    Logger,
-    Quaternion,
-    Transform,
-    Vector2,
-    Vector3,
-    builtin,
-    view,
-)
-from uipc.constitution import AffineBodyConstitution, ElasticModuli, StableNeoHookean
-from uipc.core import Engine, Scene, SceneIO, World
-from uipc.geometry import (
-    extract_surface,
-    flip_inward_triangles,
-    label_surface,
-    label_triangle_orient,
-    tetmesh,
-)
-from uipc.unit import GPa, MPa
 
 wp.init()
 
@@ -143,7 +130,7 @@ class UipcObject(AssetBase):
         super().__init__(cfg)
         self._uipc_sim: UipcSim = uipc_sim
 
-        prim_paths_expr = self.cfg.prim_path #+ "/mesh"
+        prim_paths_expr = self.cfg.prim_path  # + "/mesh"
         print(f"Initializing uipc objects {prim_paths_expr}...")
         self._prim_view = XFormPrim(prim_paths_expr=prim_paths_expr, name=f"{prim_paths_expr}", usd=False)
         self._prim_view.initialize()
@@ -155,7 +142,11 @@ class UipcObject(AssetBase):
 
         self.uipc_meshes = []
         # setup tet meshes for uipc
-        for prim in self._prim_view.prims: # todo dont loop over all prims of the view -> just take one base prim. Rather loop over the prim children?
+        for (
+            prim
+        ) in (
+            self._prim_view.prims
+        ):  # todo dont loop over all prims of the view -> just take one base prim. Rather loop over the prim children?
             # need to access the mesh data of the usd prim
             prim_children = prim.GetChildren()
             usd_mesh = UsdGeom.Mesh(prim_children[0])
@@ -175,19 +166,21 @@ class UipcObject(AssetBase):
             else:
                 mesh_gen = MeshGenerator(config=self.cfg.mesh_cfg)
                 if type(self.cfg.mesh_cfg) == TetMeshCfg:
-                    tet_points, tet_indices, surf_points, tet_surf_indices = mesh_gen.generate_tet_mesh_for_prim(usd_mesh)
+                    tet_points, tet_indices, surf_points, tet_surf_indices = mesh_gen.generate_tet_mesh_for_prim(
+                        usd_mesh
+                    )
 
             # transform local tet points to world coor
             tf_world = omni.usd.get_world_transform_matrix(usd_mesh)
 
-            tet_points_world =  np.array(tf_world).T @ np.vstack((tet_points.T, np.ones(tet_points.shape[0])))
-            tet_points_world = (tet_points_world[:-1].T)
+            tet_points_world = np.array(tf_world).T @ np.vstack((tet_points.T, np.ones(tet_points.shape[0])))
+            tet_points_world = tet_points_world[:-1].T
 
             self.init_world_transform = torch.tensor(np.array(tf_world).T.copy(), device=self.uipc_sim.cfg.device)
 
             # uipc wants 2D array
-            tet_indices = np.array(tet_indices).reshape(-1,4)
-            tet_surf_indices = np.array(tet_surf_indices).reshape(-1,3)
+            tet_indices = np.array(tet_indices).reshape(-1, 4)
+            tet_surf_indices = np.array(tet_surf_indices).reshape(-1, 3)
 
             # create uipc mesh
             mesh = tetmesh(tet_points_world.copy(), tet_indices.copy())
@@ -195,12 +188,12 @@ class UipcObject(AssetBase):
             label_surface(mesh)
             label_triangle_orient(mesh)
             # flip the triangles inward for better rendering
-            mesh = flip_inward_triangles(mesh) #todo idk if this makes a difference for us
+            mesh = flip_inward_triangles(mesh)  # todo idk if this makes a difference for us
             self.uipc_meshes.append(mesh)
 
             # libuipc uses different indexing for the surface topology
             surf = extract_surface(mesh)
-            tet_surf_points_world = surf.positions().view().reshape(-1,3)
+            tet_surf_points_world = surf.positions().view().reshape(-1, 3)
             tet_surf_tri = surf.triangles().topo().view().reshape(-1).tolist()
 
             MeshGenerator.update_usd_mesh(prim=usd_mesh, surf_points=tet_surf_points_world, triangles=tet_surf_tri)
@@ -236,10 +229,8 @@ class UipcObject(AssetBase):
             self._uipc_sim._fabric_meshes.append(fabric_prim)
 
             # save surface offsets for finding corresponding surface points of the meshes for rendering
-            num_surf_points = tet_surf_points_world.shape[0] #np.unique(tet_surf_indices)
-            self._uipc_sim._surf_vertex_offsets.append(
-                self._uipc_sim._surf_vertex_offsets[-1] + num_surf_points
-            )
+            num_surf_points = tet_surf_points_world.shape[0]  # np.unique(tet_surf_indices)
+            self._uipc_sim._surf_vertex_offsets.append(self._uipc_sim._surf_vertex_offsets[-1] + num_surf_points)
 
             # required for writing vertex positions to sim
             num_vertex_points = mesh.positions().view().shape[0]
@@ -249,7 +240,7 @@ class UipcObject(AssetBase):
             self._uipc_sim._system_vertex_offsets[self._system_name].append(
                 self._uipc_sim._system_vertex_offsets[self._system_name][-1] + self._vertex_count
             )
-            self.local_system_id = len(self._uipc_sim._system_vertex_offsets[self._system_name])-1
+            self.local_system_id = len(self._uipc_sim._system_vertex_offsets[self._system_name]) - 1
 
             # will be updated once _uipc_sim.setup_sim() is called
             self.global_system_id = 0
@@ -282,9 +273,7 @@ class UipcObject(AssetBase):
 
     @property
     def uipc_sim(self) -> physx.RigidBodyView:
-        """uipc simulation instance of this uipc object.
-
-        """
+        """uipc simulation instance of this uipc object."""
         return self._uipc_sim
 
     """
@@ -292,7 +281,7 @@ class UipcObject(AssetBase):
     """
 
     def reset(self, env_ids: Sequence[int] | None = None):
-        #TODO implement this
+        # TODO implement this
         pass
         # # resolve all indices
         # if env_ids is None:
@@ -326,6 +315,7 @@ class UipcObject(AssetBase):
     """
     Operations - Write to simulation.
     """
+
     def write_vertex_positions_to_sim(self, vertex_positions: torch.Tensor, env_ids: Sequence[int] | None = None):
         """Set the root pose over selected environment indices into the simulation.
 
@@ -340,7 +330,6 @@ class UipcObject(AssetBase):
         if env_ids is None:
             env_ids = slice(None)
             physx_env_ids = self._ALL_INDICES
-
 
         # # note: we need to do this here since tensors are not set into simulation until step.
         # # set into internal buffers
@@ -358,18 +347,30 @@ class UipcObject(AssetBase):
         geo_slot = self.geo_slot_list[0]
         geo = geo_slot.geometry()
         gvo = geo.meta().find(builtin.global_vertex_offset)
-        print(f'global Vertex Offset: {gvo.view()}')
+        print(f"global Vertex Offset: {gvo.view()}")
         global_vertex_offset = int(gvo.view()[0])
-        local_vertex_offset = self._uipc_sim._system_vertex_offsets[self._system_name][self.local_system_id-1]
+        local_vertex_offset = self._uipc_sim._system_vertex_offsets[self._system_name][self.local_system_id - 1]
         print("system ", self._system_name)
         print("local sys id ", self.local_system_id)
         print("local vertex offset ", local_vertex_offset)
         print("vertex count ", self._vertex_count)
         print("")
         if self._system_name == "uipc::backend::cuda::AffineBodyDynamics":
-            self.uipc_sim.world.write_vertex_pos_to_sim(vertex_positions.cpu().numpy(), global_vertex_offset, self.local_system_id-1, self._vertex_count, self._system_name)
+            self.uipc_sim.world.write_vertex_pos_to_sim(
+                vertex_positions.cpu().numpy(),
+                global_vertex_offset,
+                self.local_system_id - 1,
+                self._vertex_count,
+                self._system_name,
+            )
         else:
-            self.uipc_sim.world.write_vertex_pos_to_sim(vertex_positions.cpu().numpy(), global_vertex_offset, local_vertex_offset, self._vertex_count, self._system_name)
+            self.uipc_sim.world.write_vertex_pos_to_sim(
+                vertex_positions.cpu().numpy(),
+                global_vertex_offset,
+                local_vertex_offset,
+                self._vertex_count,
+                self._system_name,
+            )
 
     """
     Internal helper.
@@ -391,7 +392,9 @@ class UipcObject(AssetBase):
         # save initial world vertex positions
         geom = self._uipc_sim.scene.geometries()
         geo_slot, geo_slot_rest = geom.find(self.obj_id)
-        self.init_vertex_pos = torch.tensor(geo_slot.geometry().positions().view().copy().reshape(-1,3), device=self.device)
+        self.init_vertex_pos = torch.tensor(
+            geo_slot.geometry().positions().view().copy().reshape(-1, 3), device=self.device
+        )
 
         # log information the uipc body
         omni.log.info(f"UIPC body initialized at: {self.cfg.prim_path}.")
@@ -413,7 +416,6 @@ class UipcObject(AssetBase):
 
         # add this object to the list of all uipc objects in the world
         self._uipc_sim.uipc_objects.append(self)
-
 
     def _create_buffers(self):
         """Create buffers for storing data."""
@@ -439,7 +441,7 @@ class UipcObject(AssetBase):
             # + tuple(self.cfg.init_state.ang_vel)
         )
         default_root_state = torch.tensor(default_root_state, dtype=torch.float, device=self.device)
-        #self._data.default_root_state = default_root_state.repeat(self.num_instances, 1)
+        # self._data.default_root_state = default_root_state.repeat(self.num_instances, 1)
 
     def _create_constitutions(self, mesh):
         # create constitutions
@@ -455,7 +457,7 @@ class UipcObject(AssetBase):
             moduli = ElasticModuli.youngs_poisson(youngs * MPa, poisson)
             # apply the constitution and contact model to the base mesh
             self.constitution.apply_to(mesh, moduli, mass_density=self.cfg.mass_density)
-            #needed for writing vertex position to sim
+            # needed for writing vertex position to sim
             self._system_name = "uipc::backend::cuda::FiniteElementMethod"
         elif type(self.constitution) == AffineBodyConstitution:
             stiffness = self.cfg.constitution_cfg.m_kappa

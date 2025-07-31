@@ -30,9 +30,7 @@ def _mk_taxim_torch(
             device = "cuda" if torch.cuda.is_available() else "cpu"
         return TaximTorch(device=device, calib_folder=calib_folder, params=params)
     except ImportError:
-        raise ImportError(
-            "Could not import torch or torch-scatter. Please install both to use the torch backend."
-        )
+        raise ImportError("Could not import torch or torch-scatter. Please install both to use the torch backend.")
 
 
 def _mk_taxim_jax(
@@ -45,13 +43,9 @@ def _mk_taxim_jax(
 
         from .taxim_jax import TaximJax
 
-        return TaximJax(
-            calib_folder=calib_folder, params=params, device=jax.devices(device)[0]
-        )
+        return TaximJax(calib_folder=calib_folder, params=params, device=jax.devices(device)[0])
     except ImportError:
-        raise ImportError(
-            "Could not import jax. Please install jax to use the jax backend."
-        )
+        raise ImportError("Could not import jax. Please install jax to use the jax backend.")
 
 
 @overload
@@ -59,8 +53,7 @@ def Taxim(
     calib_folder: Path = ...,
     params: dict[str, dict[str, Any]] | None = ...,
     backend: Literal["torch"] = ...,
-) -> TaximTorch:
-    ...
+) -> TaximTorch: ...
 
 
 @overload
@@ -68,8 +61,7 @@ def Taxim(
     calib_folder: Path = ...,
     params: dict[str, dict[str, Any]] | None = ...,
     backend: Literal["jax"] = ...,
-) -> TaximJax:
-    ...
+) -> TaximJax: ...
 
 
 @overload
@@ -77,8 +69,7 @@ def Taxim(
     calib_folder: Path = ...,
     params: dict[str, dict[str, Any]] | None = ...,
     backend: Literal["auto"] = ...,
-) -> Union[TaximTorch, TaximJax]:
-    ...
+) -> Union[TaximTorch, TaximJax]: ...
 
 
 def Taxim(

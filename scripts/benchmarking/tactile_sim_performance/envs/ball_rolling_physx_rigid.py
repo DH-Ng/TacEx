@@ -1,24 +1,25 @@
 from __future__ import annotations
 
+import numpy as np
+import psutil
+import torch
 from pathlib import Path
 
 import carb
+import pynvml
+from pxr import UsdGeom
+from tacex_assets import TACEX_ASSETS_DATA_DIR
+from tacex_assets.robots.franka.franka_gsmini_single_adapter_rigid import (
+    FRANKA_PANDA_ARM_GSMINI_SINGLE_ADAPTER_HIGH_PD_CFG,
+)
+from tacex_assets.sensors.gelsight_mini.gelsight_mini_cfg import GelSightMiniCfg
+from tacex_uipc import UipcRLEnv
+
 import isaaclab.sim as sim_utils
 import isaaclab.utils.math as lab_math
 import isaaclab.utils.math as math_utils
-import numpy as np
-import psutil
-import pynvml
-import torch
 from isaaclab.actuators.actuator_cfg import ImplicitActuatorCfg
-from isaaclab.assets import (
-    Articulation,
-    ArticulationCfg,
-    AssetBase,
-    AssetBaseCfg,
-    RigidObject,
-    RigidObjectCfg,
-)
+from isaaclab.assets import Articulation, ArticulationCfg, AssetBase, AssetBaseCfg, RigidObject, RigidObjectCfg
 from isaaclab.controllers.differential_ik import DifferentialIKController
 from isaaclab.controllers.differential_ik_cfg import DifferentialIKControllerCfg
 from isaaclab.envs import DirectRLEnv, DirectRLEnvCfg, ViewerCfg
@@ -32,13 +33,6 @@ from isaaclab.sim import PhysxCfg, SimulationCfg
 from isaaclab.sim.schemas.schemas_cfg import RigidBodyPropertiesCfg
 from isaaclab.utils import configclass
 from isaaclab.utils.assets import ISAAC_NUCLEUS_DIR
-from pxr import UsdGeom
-from tacex_assets import TACEX_ASSETS_DATA_DIR
-from tacex_assets.robots.franka.franka_gsmini_single_adapter_rigid import (
-    FRANKA_PANDA_ARM_GSMINI_SINGLE_ADAPTER_HIGH_PD_CFG,
-)
-from tacex_assets.sensors.gelsight_mini.gelsight_mini_cfg import GelSightMiniCfg
-from tacex_uipc import UipcRLEnv
 
 from tacex import GelSightSensor, GelSightSensorCfg
 from tacex.simulation_approaches.fots import FOTSMarkerSimulatorCfg
@@ -46,6 +40,7 @@ from tacex.simulation_approaches.gpu_taxim import TaximSimulatorCfg
 
 from isaaclab.markers import POSITION_GOAL_MARKER_CFG  # isort: skip
 from isaaclab.markers import CUBOID_MARKER_CFG  # isort: skip
+
 
 class CustomEnvWindow(BaseEnvWindow):
     """Window manager for the RL environment."""
@@ -85,11 +80,11 @@ class PhysXRigidEnvCfg(DirectRLEnvCfg):
     decimation = 1
     # simulation
     sim: SimulationCfg = SimulationCfg(
-        dt=1/60, #0.01, #1 / 120, #0.001
+        dt=1 / 60,  # 0.01, #1 / 120, #0.001
         render_interval=decimation,
-        #device="cpu",
+        # device="cpu",
         physx=PhysxCfg(
-            enable_ccd=True, # needed for more stable ball_rolling
+            enable_ccd=True,  # needed for more stable ball_rolling
             # bounce_threshold_velocity=10000,
         ),
         physics_material=sim_utils.RigidBodyMaterialCfg(
@@ -106,13 +101,13 @@ class PhysXRigidEnvCfg(DirectRLEnvCfg):
         num_envs=20,
         env_spacing=1.5,
         replicate_physics=True,
-        lazy_sensor_update=True, # only update sensors when they are accessed
+        lazy_sensor_update=True,  # only update sensors when they are accessed
     )
 
     # Ground-plane
     ground = AssetBaseCfg(
         prim_path="/World/defaultGroundPlane",
-        init_state=AssetBaseCfg.InitialStateCfg(pos=[0, 0, 0]), #pos=[0, 0, -1.05]
+        init_state=AssetBaseCfg.InitialStateCfg(pos=[0, 0, 0]),  # pos=[0, 0, -1.05]
         spawn=sim_utils.GroundPlaneCfg(),
     )
 
@@ -134,9 +129,9 @@ class PhysXRigidEnvCfg(DirectRLEnvCfg):
                 max_angular_velocity=1000.0,
                 max_linear_velocity=1000.0,
                 max_depenetration_velocity=5.0,
-                kinematic_enabled=True
-            )
-        )
+                kinematic_enabled=True,
+            ),
+        ),
     )
 
     ball = RigidObjectCfg(
@@ -144,7 +139,7 @@ class PhysXRigidEnvCfg(DirectRLEnvCfg):
         init_state=RigidObjectCfg.InitialStateCfg(pos=[0.5, 0.0, 0.01]),
         spawn=sim_utils.UsdFileCfg(
             usd_path=f"{TACEX_ASSETS_DATA_DIR}/Props/ball_wood.usd",
-            #scale=(0.8, 0.8, 0.8),
+            # scale=(0.8, 0.8, 0.8),
             rigid_props=sim_utils.RigidBodyPropertiesCfg(
                 solver_position_iteration_count=16,
                 solver_velocity_iteration_count=1,
@@ -153,8 +148,8 @@ class PhysXRigidEnvCfg(DirectRLEnvCfg):
                 max_depenetration_velocity=5.0,
                 kinematic_enabled=False,
                 disable_gravity=False,
-            )
-        )
+            ),
+        ),
     )
 
     robot: ArticulationCfg = FRANKA_PANDA_ARM_GSMINI_SINGLE_ADAPTER_HIGH_PD_CFG.replace(
@@ -177,45 +172,37 @@ class PhysXRigidEnvCfg(DirectRLEnvCfg):
     marker_cfg.markers["frame"].scale = (0.01, 0.01, 0.01)
     marker_cfg.prim_path = "/Visuals/FrameTransformer"
 
-    #MARK: GelSight Mini Config
+    # MARK: GelSight Mini Config
     gsmini = GelSightMiniCfg(
         prim_path="/World/envs/env_.*/Robot/gelsight_mini_case",
-        sensor_camera_cfg = GelSightMiniCfg.SensorCameraCfg(
-            prim_path_appendix = "/Camera",
-            update_period= 0,
-            resolution = (320, 240), #(120, 160),
-            data_types = ["depth"],
-            clipping_range = (0.024, 0.034),
+        sensor_camera_cfg=GelSightMiniCfg.SensorCameraCfg(
+            prim_path_appendix="/Camera",
+            update_period=0,
+            resolution=(320, 240),
+            data_types=["depth"],
+            clipping_range=(0.024, 0.034),
         ),
-        device = "cuda",
-        debug_vis=True, # for rendering sensor output in the gui
+        device="cuda",
+        debug_vis=True,  # for rendering sensor output in the gui
         marker_motion_sim_cfg=FOTSMarkerSimulatorCfg(
-            lamb = [0.00125,0.00021,0.00038],
-            pyramid_kernel_size = [51, 21, 11, 5], #[11, 11, 11, 11, 11, 5],
-            kernel_size = 5,
-            marker_params = FOTSMarkerSimulatorCfg.MarkerParams(
-                num_markers_col=9,
-                num_markers_row=11,
-                num_markers=99,
-                x0=15,
-                y0=26,
-                dx=26,
-                dy=29
+            lamb=[0.00125, 0.00021, 0.00038],
+            pyramid_kernel_size=[51, 21, 11, 5],  # [11, 11, 11, 11, 11, 5],
+            kernel_size=5,
+            marker_params=FOTSMarkerSimulatorCfg.MarkerParams(
+                num_markers_col=9, num_markers_row=11, num_markers=99, x0=15, y0=26, dx=26, dy=29
             ),
-            tactile_img_res = (640, 480),
-            device = "cuda",
-            frame_transformer_cfg = FrameTransformerCfg(
-                prim_path="/World/envs/env_.*/Robot/gelsight_mini_gelpad", #"/World/envs/env_.*/Robot/gelsight_mini_case",
+            tactile_img_res=(640, 480),
+            device="cuda",
+            frame_transformer_cfg=FrameTransformerCfg(
+                prim_path="/World/envs/env_.*/Robot/gelsight_mini_gelpad",  # "/World/envs/env_.*/Robot/gelsight_mini_case",
                 # you have to make sure that the asset frame center is correct, otherwise wrong shear/twist motions
                 source_frame_offset=OffsetCfg(
                     # rot=(0.0, 0.92388, -0.38268, 0.0) # values for the robot used here
                 ),
-                target_frames=[
-                    FrameTransformerCfg.FrameCfg(prim_path="/World/envs/env_.*/ball")
-                ],
+                target_frames=[FrameTransformerCfg.FrameCfg(prim_path="/World/envs/env_.*/ball")],
                 debug_vis=True,
                 visualizer_cfg=marker_cfg,
-            )
+            ),
         ),
         data_types=["tactile_rgb", "marker_motion"],
     )
@@ -235,6 +222,7 @@ class PhysXRigidEnvCfg(DirectRLEnvCfg):
     action_space = 0
     observation_space = 0
     state_space = 0
+
 
 class PhysXRigidEnv(UipcRLEnv):
     cfg: PhysXRigidEnvCfg
@@ -266,7 +254,7 @@ class PhysXRigidEnv(UipcRLEnv):
         # create buffer to store actions (= ik_commands)
         self.ik_commands = torch.zeros((self.num_envs, self._ik_controller.action_dim), device=self.device)
         # ee orientation should always be (0,1,0,0)
-        self.ik_commands[:, 3:] = torch.tensor([0,1,0,0],device=self.device)
+        self.ik_commands[:, 3:] = torch.tensor([0, 1, 0, 0], device=self.device)
 
         # for moving ee and ball in a specific pattern
         # Define goals for the end effector of the franka arm by adding offsets to the current ball position
@@ -274,33 +262,33 @@ class PhysXRigidEnv(UipcRLEnv):
         gel_length = self.cfg.gsmini.gelpad_dimensions.length
         gel_width = self.cfg.gsmini.gelpad_dimensions.width
         gel_height = self.cfg.gsmini.gelpad_dimensions.height
-        z_offset = ball_radius - gel_height/2
+        z_offset = ball_radius - gel_height / 2
 
-        above_ball = torch.tensor([0, 0, ball_radius*2],device=self.device)
-        center = torch.tensor([0, 0, z_offset],device=self.device)
-        backward = torch.tensor([-gel_length/2, 0, z_offset],device=self.device)
-        forward = torch.tensor([gel_length, 0, z_offset],device=self.device)
-        left = torch.tensor([0, gel_width/2, z_offset],device=self.device)
-        right = torch.tensor([0, -gel_width, z_offset],device=self.device)
-        pose_for_reset = torch.tensor([0, 0, ball_radius + 4*gel_height],device=self.device)
+        above_ball = torch.tensor([0, 0, ball_radius * 2], device=self.device)
+        center = torch.tensor([0, 0, z_offset], device=self.device)
+        backward = torch.tensor([-gel_length / 2, 0, z_offset], device=self.device)
+        forward = torch.tensor([gel_length, 0, z_offset], device=self.device)
+        left = torch.tensor([0, gel_width / 2, z_offset], device=self.device)
+        right = torch.tensor([0, -gel_width, z_offset], device=self.device)
+        pose_for_reset = torch.tensor([0, 0, ball_radius + 4 * gel_height], device=self.device)
 
         self.pattern_offsets = [
-            above_ball, # first, place ee above ball
-            center, # then ee to the center of the ball, so that there is contact
-            backward, # move ee backwards
+            above_ball,  # first, place ee above ball
+            center,  # then ee to the center of the ball, so that there is contact
+            backward,  # move ee backwards
             forward,
-            center, # back to the center
-            left, # move ee to the left
+            center,  # back to the center
+            left,  # move ee to the left
             right,
             # repeat pattern
             center,
-            backward, # move ee backwards
+            backward,  # move ee backwards
             forward,
-            center, # back to the center
-            left, # move ee to the left
+            center,  # back to the center
+            left,  # move ee to the left
             right,
             center,
-            pose_for_reset # move ee over ball again, to prevent that the ball gets thrown around when the scene is resetted (not sure why this happens tho, I think cause the ball spawns directly where the ee is)
+            pose_for_reset,  # move ee over ball again, to prevent that the ball gets thrown around when the scene is resetted (not sure why this happens tho, I think cause the ball spawns directly where the ee is)
         ]
         # Track the given command
         self.current_goal_idx = 0
@@ -322,19 +310,16 @@ class PhysXRigidEnv(UipcRLEnv):
             init_state=AssetBaseCfg.InitialStateCfg(pos=(0, 0, 0)),
             spawn=sim_utils.GroundPlaneCfg(
                 physics_material=sim_utils.RigidBodyMaterialCfg(
-                friction_combine_mode="multiply",
-                restitution_combine_mode="multiply",
-                static_friction=1.0,
-                dynamic_friction=1.0,
-                restitution=0.0,
+                    friction_combine_mode="multiply",
+                    restitution_combine_mode="multiply",
+                    static_friction=1.0,
+                    dynamic_friction=1.0,
+                    restitution=0.0,
                 ),
             ),
         )
         ground.spawn.func(
-            ground.prim_path,
-            ground.spawn,
-            translation=ground.init_state.pos,
-            orientation=ground.init_state.rot
+            ground.prim_path, ground.spawn, translation=ground.init_state.pos, orientation=ground.init_state.rot
         )
 
         marker_cfg = FRAME_MARKER_CFG.copy()
@@ -349,7 +334,7 @@ class PhysXRigidEnv(UipcRLEnv):
                     prim_path="/World/envs/env_.*/Robot/panda_hand",
                     name="end_effector",
                     offset=OffsetCfg(
-                        pos=(0.0, 0.0, 0.131), #0.1034
+                        pos=(0.0, 0.0, 0.131),  # 0.1034
                     ),
                 ),
             ],
@@ -364,7 +349,6 @@ class PhysXRigidEnv(UipcRLEnv):
         light_cfg.func("/World/Light", light_cfg)
 
     def _setup_scene(self):
-
         self._setup_base_scene()
 
         self.object = RigidObject(self.cfg.ball)
@@ -376,16 +360,15 @@ class PhysXRigidEnv(UipcRLEnv):
         self.gsmini = GelSightSensor(self.cfg.gsmini)
         self.scene.sensors["gsmini"] = self.gsmini
 
-
-    #MARK: pre-physics step calls
+    # MARK: pre-physics step calls
 
     def _pre_physics_step(self, actions: torch.Tensor):
         # update movement pattern according to the ball position
         ball_pos = self.object.data.root_pos_w - self.scene.env_origins
 
         # change goal
-        if (self.step_count+1) % self.num_step_goal_change == 0:
-            self.current_goal_idx = (self.current_goal_idx+1)  % len(self.pattern_offsets)
+        if (self.step_count + 1) % self.num_step_goal_change == 0:
+            self.current_goal_idx = (self.current_goal_idx + 1) % len(self.pattern_offsets)
         self.ik_commands[:, :3] = ball_pos + self.pattern_offsets[self.current_goal_idx]
 
         self._ik_controller.set_command(self.ik_commands)
@@ -406,16 +389,15 @@ class PhysXRigidEnv(UipcRLEnv):
 
     # post-physics step calls
 
-    #MARK: dones
-    def _get_dones(self) -> tuple[torch.Tensor, torch.Tensor]: # which environment is done
+    # MARK: dones
+    def _get_dones(self) -> tuple[torch.Tensor, torch.Tensor]:  # which environment is done
         pass
 
-    #MARK: rewards
+    # MARK: rewards
     def _get_rewards(self) -> torch.Tensor:
         pass
 
     def _reset_idx(self, env_ids: torch.Tensor | None):
-
         obj_pos = self.object.data.default_root_state[env_ids]
         obj_pos[:, :3] += self.scene.env_origins[env_ids]
         self.object.write_root_state_to_sim(obj_pos, env_ids=env_ids)
@@ -431,7 +413,7 @@ class PhysXRigidEnv(UipcRLEnv):
         # reset goal
         self.current_goal_idx = 0
 
-    #MARK: observations
+    # MARK: observations
     def _get_observations(self) -> dict:
         pass
 
@@ -468,7 +450,7 @@ class PhysXRigidEnv(UipcRLEnv):
         # compute the pose of the body in the root frame
         ee_pose_b, ee_quat_b = math_utils.subtract_frame_transforms(root_pos_w, root_quat_w, ee_pos_w, ee_quat_w)
         # account for the offset
-        #if self.cfg.body_offset is not None:
+        # if self.cfg.body_offset is not None:
         ee_pose_b, ee_quat_b = math_utils.combine_frame_transforms(
             ee_pose_b, ee_quat_b, self._offset_pos, self._offset_rot
         )
@@ -485,7 +467,7 @@ class PhysXRigidEnv(UipcRLEnv):
         jacobian = self.jacobian_b
 
         # account for the offset
-        #if self.cfg.body_offset is not None:
+        # if self.cfg.body_offset is not None:
         # Modify the jacobian to account for the offset
         # -- translational part
         # v_link = v_ee + w_ee x r_link_ee = v_J_ee * q + w_J_ee * q x r_link_ee

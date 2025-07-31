@@ -1,5 +1,4 @@
 import math
-
 import numpy as np
 import scipy
 
@@ -106,16 +105,12 @@ def in_hull(p, hull):
 def vertical_ray_intersects_segment(ray_point, segment_start, segment_end):
     if segment_start[0] == segment_end[0]:
         return False
-    segment_slope = (segment_end[1] - segment_start[1]) / (
-        segment_end[0] - segment_start[0]
-    )
+    segment_slope = (segment_end[1] - segment_start[1]) / (segment_end[0] - segment_start[0])
     segment_b = segment_end[1] - segment_end[0] * segment_slope
 
     intersect_point = (ray_point[0], ray_point[0] * segment_slope + segment_b)
     if intersect_point[1] >= ray_point[1]:
-        intersect_ratio = (ray_point[0] - segment_start[0]) / (
-            segment_end[0] - segment_start[0]
-        )
+        intersect_ratio = (ray_point[0] - segment_start[0]) / (segment_end[0] - segment_start[0])
         if 0 <= intersect_ratio < 1:
             return True
         else:
@@ -143,9 +138,7 @@ def generate_rectangle(center, size, theta, rotation_first=False):
     center_x, center_y = center
     x, y = size
     v = np.array([[-x / 2, -y / 2], [x / 2, -y / 2], [x / 2, y / 2], [-x / 2, y / 2]])
-    rot = np.array(
-        [[math.cos(theta), -math.sin(theta)], [math.sin(theta), math.cos(theta)]]
-    )
+    rot = np.array([[math.cos(theta), -math.sin(theta)], [math.sin(theta), math.cos(theta)]])
     if not rotation_first:
         v_rotated = (rot @ v.T).T + np.array([center_x, center_y])
     else:

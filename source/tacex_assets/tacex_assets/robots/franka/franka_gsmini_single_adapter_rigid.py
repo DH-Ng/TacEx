@@ -15,20 +15,21 @@ The following configurations are available:
 Reference: https://github.com/frankaemika/franka_ros
 """
 
+from tacex_assets import TACEX_ASSETS_DATA_DIR
+
 import isaaclab.sim as sim_utils
 from isaaclab.actuators import ImplicitActuatorCfg
 from isaaclab.assets import ArticulationCfg
-from tacex_assets import TACEX_ASSETS_DATA_DIR
 
 ##
 # Configuration
 ##
 
-#todo find a good way to save the prim path of the sensor for the user?
-#-> currently, we need to look into the asset to figure out the prim name (in this case its /gelsight_mini_case)
+# todo find a good way to save the prim path of the sensor for the user?
+# -> currently, we need to look into the asset to figure out the prim name (in this case its /gelsight_mini_case)
 FRANKA_PANDA_ARM_GSMINI_SINGLE_ADAPTER_CFG = ArticulationCfg(
     spawn=sim_utils.UsdFileCfg(
-       usd_path=f"{TACEX_ASSETS_DATA_DIR}/Robots/Franka/GelSight_Mini/Single_Adapter/physx_rigid_gelpad.usd",
+        usd_path=f"{TACEX_ASSETS_DATA_DIR}/Robots/Franka/GelSight_Mini/Single_Adapter/physx_rigid_gelpad.usd",
         activate_contact_sensors=False,
         rigid_props=sim_utils.RigidBodyPropertiesCfg(
             disable_gravity=False,
@@ -48,7 +49,7 @@ FRANKA_PANDA_ARM_GSMINI_SINGLE_ADAPTER_CFG = ArticulationCfg(
             "panda_joint5": 0.0,
             "panda_joint6": 3.037,
             "panda_joint7": 0.741,
-            #"panda_finger_joint.*": 0.04,
+            # "panda_finger_joint.*": 0.04,
         },
     ),
     actuators={

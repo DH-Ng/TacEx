@@ -77,13 +77,13 @@ from scripts.benchmarks.utils import (
 
 imports_time_begin = time.perf_counter_ns()
 
+import gymnasium as gym
+import numpy as np
 import os
+import torch
 from datetime import datetime
 
-import gymnasium as gym
 import isaaclab_tasks  # noqa: F401
-import numpy as np
-import torch
 from isaaclab.envs import DirectMARLEnvCfg, DirectRLEnvCfg, ManagerBasedRLEnvCfg
 from isaaclab.utils.dict import print_dict
 from isaaclab_tasks.utils.hydra import hydra_task_config

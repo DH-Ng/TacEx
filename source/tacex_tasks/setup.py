@@ -1,8 +1,8 @@
 """Installation script for the 'tacex_tasks' python package."""
 
 import os
-
 import toml
+
 from setuptools import setup
 
 # Obtain the extension data from the extension.toml file

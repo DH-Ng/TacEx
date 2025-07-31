@@ -15,10 +15,11 @@ The following configurations are available:
 Reference: https://github.com/frankaemika/franka_ros
 """
 
+from tacex_assets import TACEX_ASSETS_DATA_DIR
+
 import isaaclab.sim as sim_utils
 from isaaclab.actuators import ImplicitActuatorCfg
 from isaaclab.assets import ArticulationCfg
-from tacex_assets import TACEX_ASSETS_DATA_DIR
 
 ##
 # Configuration
@@ -46,7 +47,7 @@ FRANKA_PANDA_ARM_WITH_ONE_GSMINI_CFG = ArticulationCfg(
             "panda_joint5": 0.0,
             "panda_joint6": 3.037,
             "panda_joint7": 0.741,
-            #"panda_finger_joint.*": 0.04,
+            # "panda_finger_joint.*": 0.04,
         },
     ),
     actuators={

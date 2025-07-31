@@ -1,15 +1,17 @@
 from __future__ import annotations
 
+import torch
 import weakref
 from typing import TYPE_CHECKING
 
-import isaaclab.utils.math as math_utils
 import omni.physics.tensors.impl.api as physx
-import torch
+
+import isaaclab.utils.math as math_utils
 from isaaclab.utils.buffers import TimestampedBuffer
 
 try:
     from isaacsim.util.debug_draw import _debug_draw
+
     draw = _debug_draw.acquire_debug_draw_interface()
 except:
     draw = None
@@ -107,7 +109,6 @@ class UipcObjectDeformableData:
     and 1 for non-kinematic vertices.
     """
 
-
     ##
     # Properties.
     ##
@@ -118,9 +119,13 @@ class UipcObjectDeformableData:
         if self._nodal_pos_w.timestamp < self._sim_timestamp:
             # get current world vertex positions
             geom = self._uipc_sim.scene.geometries()
-            geo_slot, geo_slot_rest = geom.find(self._uipc_object.obj_id) #todo instead of finding obj, lets just save ref to geo_slot
+            geo_slot, geo_slot_rest = geom.find(
+                self._uipc_object.obj_id
+            )  # todo instead of finding obj, lets just save ref to geo_slot
 
-            vertex_positions_world = torch.tensor(geo_slot.geometry().positions().view().reshape(-1,3), device=self.device)
+            vertex_positions_world = torch.tensor(
+                geo_slot.geometry().positions().view().reshape(-1, 3), device=self.device
+            )
             self._nodal_pos_w.data = vertex_positions_world
 
             self._nodal_pos_w.timestamp = self._sim_timestamp
@@ -130,8 +135,12 @@ class UipcObjectDeformableData:
     def surf_nodal_pos_w(self):
         """Nodal positions in simulation world frame. Shape is (num_instances, max_sim_vertices_per_body, 3)."""
         if self._nodal_pos_w.timestamp < self._sim_timestamp:
-            all_trimesh_points = self._uipc_sim.sio.simplicial_surface(2).positions().view().reshape(-1,3)
-            surf_points = all_trimesh_points[self._uipc_sim._surf_vertex_offsets[self._uipc_object.obj_id-1]:self._uipc_sim._surf_vertex_offsets[self._uipc_object.obj_id]]
+            all_trimesh_points = self._uipc_sim.sio.simplicial_surface(2).positions().view().reshape(-1, 3)
+            surf_points = all_trimesh_points[
+                self._uipc_sim._surf_vertex_offsets[self._uipc_object.obj_id - 1] : self._uipc_sim._surf_vertex_offsets[
+                    self._uipc_object.obj_id
+                ]
+            ]
             self._nodal_pos_w.data = torch.tensor(surf_points, device=self.device, dtype=torch.float)
 
             self._nodal_pos_w.timestamp = self._sim_timestamp
@@ -149,7 +158,7 @@ class UipcObjectDeformableData:
         This quantity is computed as the mean of the nodal positions.
         """
         # return self.nodal_pos_w.mean(dim=1)
-        return self.surf_nodal_pos_w.mean(dim=0).reshape(1,3) #todo need to adjust once we go multi env
+        return self.surf_nodal_pos_w.mean(dim=0).reshape(1, 3)  # todo need to adjust once we go multi env
 
     # @property
     # def root_vel_w(self) -> torch.Tensor:

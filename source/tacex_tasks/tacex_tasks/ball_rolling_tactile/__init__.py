@@ -15,7 +15,7 @@ from .ball_rolling_depth import (  # need to import BallRollingEnv here, otherwi
     BallRollingEnvCfg,
 )
 
-#isaaclab -p ./scripts/reinforcement_learning/skrl/train.py --task TacEx-Ball-Rolling-Tactile-Depth-v1 --num_envs 1024 --enable_cameras
+# isaaclab -p ./scripts/reinforcement_learning/skrl/train.py --task TacEx-Ball-Rolling-Tactile-Depth-v1 --num_envs 1024 --enable_cameras
 gym.register(
     id="TacEx-Ball-Rolling-Tactile-Depth-v1",
     entry_point=f"{__name__}.ball_rolling_depth:BallRollingEnv",
@@ -43,10 +43,7 @@ gym.register(
     },
 )
 
-from .ball_rolling_tactile_rgb_uipc import (
-    BallRollingTactileRGBUipcCfg,
-    BallRollingTactileRGBUipcEnv,
-)
+from .ball_rolling_tactile_rgb_uipc import BallRollingTactileRGBUipcCfg, BallRollingTactileRGBUipcEnv
 
 gym.register(
     id="TacEx-Ball-Rolling-Tactile-RGB-Uipc-v0",

@@ -1,13 +1,12 @@
 from __future__ import annotations
 
 import json
+import numpy as np
+import torch
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Generic, TypeVar, overload
-
-import numpy as np
-import torch
 
 from .calibration import CALIB_GELSIGHT
 
@@ -41,22 +40,12 @@ class SimulatorParameters:
                 assert len(shape) == 2
                 w_val = value[0]
                 h_val = value[1]
-                w_val = (
-                    tuple(e * shape[1] for e in w_val)
-                    if isinstance(w_val, tuple)
-                    else w_val * shape[1]
-                )
-                h_val = (
-                    tuple(e * shape[0] for e in h_val)
-                    if isinstance(h_val, tuple)
-                    else h_val * shape[0]
-                )
+                w_val = tuple(e * shape[1] for e in w_val) if isinstance(w_val, tuple) else w_val * shape[1]
+                h_val = tuple(e * shape[0] for e in h_val) if isinstance(h_val, tuple) else h_val * shape[0]
                 return w_val, h_val
 
             return return_fn
-        raise AttributeError(
-            f"'{type(self).__name__}' object has no attribute '{item}'"
-        )
+        raise AttributeError(f"'{type(self).__name__}' object has no attribute '{item}'")
 
 
 @dataclass(frozen=False)
@@ -101,11 +90,7 @@ class TaximImpl(Generic[ArrayType, DeviceType], ABC):
         with (calib_folder / "params.json").open() as f:
             default_params = json.load(f)
 
-        params = (
-            self.__update_dict_recursive(default_params, params)
-            if params is not None
-            else default_params
-        )
+        params = self.__update_dict_recursive(default_params, params) if params is not None else default_params
 
         self.__sim_params = SimulatorParameters(**lists_to_tuples(params["simulator"]))
         self.__sensor_params = SensorParameters(**lists_to_tuples(params["sensor"]))
@@ -119,8 +104,7 @@ class TaximImpl(Generic[ArrayType, DeviceType], ABC):
         with_shadow: bool = True,
         press_depth: float | None = None,
         orig_hm_fmt: bool = False,
-    ) -> ArrayType:
-        ...
+    ) -> ArrayType: ...
 
     @overload
     def render(
@@ -129,8 +113,7 @@ class TaximImpl(Generic[ArrayType, DeviceType], ABC):
         with_shadow: bool = True,
         press_depth: float | None = None,
         orig_hm_fmt: bool = False,
-    ) -> np.ndarray:
-        ...
+    ) -> np.ndarray: ...
 
     def render(
         self,
@@ -211,9 +194,11 @@ class TaximImpl(Generic[ArrayType, DeviceType], ABC):
         if len(unknown_keys) > 0:
             raise ValueError(f"Unknown key(s): {', '.join(map(str, unknown_keys))}")
         return {
-            k: cls.__update_dict_recursive(default[k], update[k])
-            if isinstance(default[k], dict) and k in update
-            else update.get(k, default[k])
+            k: (
+                cls.__update_dict_recursive(default[k], update[k])
+                if isinstance(default[k], dict) and k in update
+                else update.get(k, default[k])
+            )
             for k in default.keys()
         }
 

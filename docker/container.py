@@ -109,7 +109,7 @@ def main(args: argparse.Namespace):
             ci.environ.update(x11_envar)
         # build and start the container
         ci.build()
-    elif args.command =="start":
+    elif args.command == "start":
         x11_outputs = x11_utils.x11_check(ci.statefile)
         # if x11 forwarding is enabled, add the x11 yaml and environment variables
         if x11_outputs is not None:

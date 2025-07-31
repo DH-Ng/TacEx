@@ -4,13 +4,14 @@ import omni.usd
 from pxr import Gf, UsdGeom
 
 
-class Example():
-
+class Example:
     def create_tet(self):
         # Create Point List
         N = 500
         scale = 0.05
-        self.point_list = [(random.uniform(-2.0, 2.0), random.uniform(-0.1, 0.1), random.uniform(-1.0, 1.0)) for _ in range(N)]
+        self.point_list = [
+            (random.uniform(-2.0, 2.0), random.uniform(-0.1, 0.1), random.uniform(-1.0, 1.0)) for _ in range(N)
+        ]
         self.colors = [(1, 1, 1, 1) for _ in range(N)]
         self.sizes = [(random.uniform(0.1, 2.0), random.uniform(0.1, 2.0), random.uniform(0.1, 2.0)) for _ in range(N)]
         self.face_count = 4
@@ -21,10 +22,10 @@ class Example():
 
         tet = UsdGeom.Mesh.Define(stage, tet_path)
         tet.CreatePointsAttr([(0.0, 0.0, 0.0), (1.0, 0.0, 0.0), (0.0, 1.0, 0.0), (0.0, 0.0, 1.0)])
-        tet.CreateFaceVertexCountsAttr([3]*self.face_count)
-        tet.CreateFaceVertexIndicesAttr([0,1,2, 0,1,3, 0,2,3, 1,2,3])
+        tet.CreateFaceVertexCountsAttr([3] * self.face_count)
+        tet.CreateFaceVertexIndicesAttr([0, 1, 2, 0, 1, 3, 0, 2, 3, 1, 2, 3])
         tet.CreateDisplayColorPrimvar().Set([(0, 1, 1)])
-        tet.CreateDisplayOpacityPrimvar().Set([0.15]*self.face_count)
+        tet.CreateDisplayOpacityPrimvar().Set([0.15] * self.face_count)
         tet.AddScaleOp().Set(Gf.Vec3d(1, 1, 1) * scale)
 
         # Set up Point Instancer
@@ -46,7 +47,9 @@ class Example():
         # Create Point List
         N = 500
         scale = 0.05
-        self.point_list = [(random.uniform(-2.0, 2.0), random.uniform(-0.1, 0.1), random.uniform(-1.0, 1.0)) for _ in range(N)]
+        self.point_list = [
+            (random.uniform(-2.0, 2.0), random.uniform(-0.1, 0.1), random.uniform(-1.0, 1.0)) for _ in range(N)
+        ]
         self.colors = [(1, 1, 1, 1) for _ in range(N)]
         self.sizes = [(random.uniform(0.1, 2.0), random.uniform(0.1, 2.0), random.uniform(0.1, 2.0)) for _ in range(N)]
 
@@ -77,6 +80,7 @@ class Example():
             self.point_list[i] = (random.uniform(-2.0, 2.0), random.uniform(-0.1, 0.1), random.uniform(-1.0, 1.0))
         # update the points
         self.positions_attr.Set(self.point_list)
+
 
 import asyncio
 

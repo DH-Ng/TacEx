@@ -44,14 +44,15 @@ simulation_app = app_launcher.app
 
 """Rest everything follows."""
 
-import os
-from datetime import datetime
-
 import gymnasium as gym
+import os
+import torch
+from datetime import datetime
 
 # Import extensions to set up environment tasks
 import tacex_tasks  # noqa: F401
-import torch
+from rsl_rl.runners import OnPolicyRunner
+
 from isaaclab.envs import (
     DirectMARLEnv,
     DirectMARLEnvCfg,
@@ -64,7 +65,6 @@ from isaaclab.utils.io import dump_pickle, dump_yaml
 from isaaclab_rl.rsl_rl import RslRlOnPolicyRunnerCfg, RslRlVecEnvWrapper
 from isaaclab_tasks.utils import get_checkpoint_path
 from isaaclab_tasks.utils.hydra import hydra_task_config
-from rsl_rl.runners import OnPolicyRunner
 
 torch.backends.cuda.matmul.allow_tf32 = True
 torch.backends.cudnn.allow_tf32 = True

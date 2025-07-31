@@ -62,11 +62,11 @@ simulation_app = app_launcher.app
 
 """Rest everything follows."""
 
+import gymnasium as gym
 import os
 import random
 from datetime import datetime
 
-import gymnasium as gym
 import skrl
 from packaging import version
 
@@ -86,6 +86,7 @@ elif args_cli.ml_framework.startswith("jax"):
 
 # import isaaclab_tasks  # noqa: F401
 import tacex_tasks
+
 from isaaclab.envs import (
     DirectMARLEnv,
     DirectMARLEnvCfg,

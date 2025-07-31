@@ -60,12 +60,12 @@ simulation_app = app_launcher.app
 
 """Rest everything follows."""
 
+import gymnasium as gym
 import os
 import time
-
-import gymnasium as gym
-import skrl
 import torch
+
+import skrl
 from packaging import version
 
 # check for minimum supported skrl version
@@ -84,15 +84,12 @@ elif args_cli.ml_framework.startswith("jax"):
 
 # import isaaclab_tasks  # noqa: F401
 import tacex_tasks
+
 from isaaclab.envs import DirectMARLEnv, multi_agent_to_single_agent
 from isaaclab.utils.dict import print_dict
 from isaaclab.utils.pretrained_checkpoint import get_published_pretrained_checkpoint
 from isaaclab_rl.skrl import SkrlVecEnvWrapper
-from isaaclab_tasks.utils import (
-    get_checkpoint_path,
-    load_cfg_from_registry,
-    parse_env_cfg,
-)
+from isaaclab_tasks.utils import get_checkpoint_path, load_cfg_from_registry, parse_env_cfg
 
 # config shortcuts
 algorithm = args_cli.algorithm.lower()

@@ -6,7 +6,6 @@
     isaaclab -p ./examples/falling_cubes.py
 """
 
-
 """Launch Isaac Sim Simulator first."""
 import argparse
 
@@ -23,9 +22,9 @@ app_launcher = AppLauncher(args_cli)
 simulation_app = app_launcher.app
 
 # simulation_app.set_setting("/app/useFabricSceneDelegate", True)
-#simulation_app.set_setting("/app/usdrt/scene_delegate/enableProxyCubes", False)
-#simulation_app.set_setting("/app/usdrt/scene_delegate/geometryStreaming/enabled", False)
-#simulation_app.set_setting("/omnihydra/parallelHydraSprimSync", False)
+# simulation_app.set_setting("/app/usdrt/scene_delegate/enableProxyCubes", False)
+# simulation_app.set_setting("/app/usdrt/scene_delegate/geometryStreaming/enabled", False)
+# simulation_app.set_setting("/omnihydra/parallelHydraSprimSync", False)
 
 """Rest everything follows."""
 import pathlib
@@ -37,20 +36,21 @@ from isaacsim.util.debug_draw import _debug_draw
 
 draw = _debug_draw.acquire_debug_draw_interface()
 
+import numpy as np
 import random
 
-import isaaclab.sim as sim_utils
-import numpy as np
 import warp as wp
-from isaaclab.assets import AssetBaseCfg
-from isaaclab.utils.assets import ISAAC_NUCLEUS_DIR
-from isaaclab.utils.timer import Timer
 from pxr import Gf, PhysxSchema, Sdf, Usd, UsdGeom, UsdPhysics, UsdShade, Vt
 from tacex_uipc import UipcObject, UipcObjectCfg, UipcSim, UipcSimCfg
 from tacex_uipc.utils import TetMeshCfg
 
 # import vtk
 from uipc.core import Engine, Scene, SceneIO, World
+
+import isaaclab.sim as sim_utils
+from isaaclab.assets import AssetBaseCfg
+from isaaclab.utils.assets import ISAAC_NUCLEUS_DIR
+from isaaclab.utils.timer import Timer
 
 
 def design_scene():
@@ -68,6 +68,7 @@ def design_scene():
 
     # create a new xform prim for all objects to be spawned under
     prims_utils.define_prim("/World/Objects", "Xform")
+
 
 def main():
     """Main function."""
@@ -87,31 +88,25 @@ def main():
     uipc_sim = UipcSim(uipc_cfg)
 
     # spawn uipc objects
-    bolt_asset_path = pathlib.Path(__file__).parent.resolve() / "assets" / "nut_and_bolt" /"m20_bolt_wt.usd"
-    nut_asset_path = pathlib.Path(__file__).parent.resolve() / "assets" / "nut_and_bolt" /"m20_nut_wt.usd"
+    bolt_asset_path = pathlib.Path(__file__).parent.resolve() / "assets" / "nut_and_bolt" / "m20_bolt_wt.usd"
+    nut_asset_path = pathlib.Path(__file__).parent.resolve() / "assets" / "nut_and_bolt" / "m20_nut_wt.usd"
 
     cube_cfg = UipcObjectCfg(
         prim_path="/World/Objects/Cube0",
-        init_state=AssetBaseCfg.InitialStateCfg(pos=[0, 0, 1.25]), #rot=(0.72,-0.3,0.42,-0.45)
-        spawn=sim_utils.UsdFileCfg(
-            usd_path=str(tet_cube_asset_path),
-            scale=(0.75, 0.75, 0.75)
-        ),
+        init_state=AssetBaseCfg.InitialStateCfg(pos=[0, 0, 1.25]),  # rot=(0.72,-0.3,0.42,-0.45)
+        spawn=sim_utils.UsdFileCfg(usd_path=str(tet_cube_asset_path), scale=(0.75, 0.75, 0.75)),
         # mesh_cfg=mesh_cfg,
-        constitution_cfg=UipcObjectCfg.StableNeoHookeanCfg()
+        constitution_cfg=UipcObjectCfg.StableNeoHookeanCfg(),
     )
     cube = UipcObject(cube_cfg, uipc_sim)
 
     rot = (random.uniform(-1.0, 1.0), random.uniform(-1.0, 1.0), random.uniform(-1.0, 1.0), random.uniform(-1.0, 1.0))
     cube_cfg = UipcObjectCfg(
         prim_path="/World/Objects/CubeTop",
-        init_state=AssetBaseCfg.InitialStateCfg(pos=[0, 0, 2.65 + 0.3*num_cubes],rot=rot),
-        spawn=sim_utils.UsdFileCfg(
-            usd_path=str(tet_cube_asset_path),
-            scale=(1.0, 1.0, 1.0)
-        ),
+        init_state=AssetBaseCfg.InitialStateCfg(pos=[0, 0, 2.65 + 0.3 * num_cubes], rot=rot),
+        spawn=sim_utils.UsdFileCfg(usd_path=str(tet_cube_asset_path), scale=(1.0, 1.0, 1.0)),
         # mesh_cfg=mesh_cfg,
-        constitution_cfg=UipcObjectCfg.AffineBodyConstitutionCfg()#UipcObjectCfg.StableNeoHookeanCfg()
+        constitution_cfg=UipcObjectCfg.AffineBodyConstitutionCfg(),  # UipcObjectCfg.StableNeoHookeanCfg()
     )
     cube_top = UipcObject(cube_cfg, uipc_sim)
 
@@ -157,7 +152,7 @@ def main():
             # gipc_sim.render_tet_surface_wireframes(clean_up_first=True)
             with Timer("[INFO]: Time taken for updating the render meshes.", name="render_update"):
                 uipc_sim.update_render_meshes()
-                #sim.forward()
+                # sim.forward()
                 # sim._update_fabric(0.0, 0.0)
                 # render the updated meshes
                 sim.render()
@@ -173,7 +168,7 @@ def main():
             start_uipc_test = True
             print("Start uipc simulation by pressing Play")
 
-        if step % 250 == 0: #500
+        if step % 250 == 0:  # 500
             print("")
             print("====================================================================================")
             print("====================================================================================")
@@ -183,22 +178,25 @@ def main():
                 cube.write_vertex_positions_to_sim(vertex_positions=cube.init_vertex_pos)
                 cube_top.write_vertex_positions_to_sim(vertex_positions=cube_top.init_vertex_pos)
 
-                small_cube_id = random.randint(0, num_cubes-1)
-                cubes[small_cube_id].write_vertex_positions_to_sim(vertex_positions=cubes[small_cube_id].init_vertex_pos)
+                small_cube_id = random.randint(0, num_cubes - 1)
+                cubes[small_cube_id].write_vertex_positions_to_sim(
+                    vertex_positions=cubes[small_cube_id].init_vertex_pos
+                )
 
                 uipc_sim.reset()
                 # start_uipc_test = False
                 # draw.clear_points()
                 # draw.clear_lines()
                 sim.render()
-            avg_uipc_step_time = total_uipc_sim_time/step
+            avg_uipc_step_time = total_uipc_sim_time / step
             print(f"Sim step for uipc took in avg {avg_uipc_step_time} per frame.")
 
-            avg_uipc_render_time = total_uipc_render_time/step
+            avg_uipc_render_time = total_uipc_render_time / step
             print(f"Render update for uipc took in avg {avg_uipc_render_time} per frame.")
             print("====================================================================================")
 
             step = 1
+
 
 if __name__ == "__main__":
     # run the main function

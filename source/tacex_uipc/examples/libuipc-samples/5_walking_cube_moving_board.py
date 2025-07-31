@@ -27,35 +27,24 @@ args_cli = parser.parse_args()
 app_launcher = AppLauncher(args_cli)
 simulation_app = app_launcher.app
 
+import numpy as np
 import pathlib
 
-import isaaclab.sim as sim_utils
-import numpy as np
 import omni.usd
 import usdrt
-from isaaclab.utils.timer import Timer
 from pxr import Gf, Sdf, Usd, UsdGeom
 from tacex_uipc import UipcSim, UipcSimCfg
 from uipc import Logger, Matrix4x4, Transform, Vector2, Vector3, builtin, view
-from uipc.constitution import (
-    AffineBodyConstitution,
-    RotatingMotor,
-    SoftTransformConstraint,
-)
+from uipc.constitution import AffineBodyConstitution, RotatingMotor, SoftTransformConstraint
 from uipc.core import Animation, Engine, Scene, World
-from uipc.geometry import (
-    SimplicialComplex,
-    SimplicialComplexIO,
-    SimplicialComplexSlot,
-    ground,
-    label_surface,
-)
+from uipc.geometry import SimplicialComplex, SimplicialComplexIO, SimplicialComplexSlot, ground, label_surface
+
+import isaaclab.sim as sim_utils
+from isaaclab.utils.timer import Timer
 
 
 def setup_base_scene(sim: sim_utils.SimulationContext):
-    """To make the scene pretty.
-
-    """
+    """To make the scene pretty."""
     # set upAxis to Y to match libuipc-samples
     stage = omni.usd.get_context().get_stage()
     UsdGeom.SetStageUpAxis(stage, UsdGeom.Tokens.y)
@@ -66,7 +55,7 @@ def setup_base_scene(sim: sim_utils.SimulationContext):
         prim_path="/World/defaultGroundPlane",
         cfg=cfg_ground,
         translation=[0, -2, 0],
-        orientation=[0.7071068, -0.7071068, 0, 0]
+        orientation=[0.7071068, -0.7071068, 0, 0],
     )
 
     # spawn distant light
@@ -75,6 +64,7 @@ def setup_base_scene(sim: sim_utils.SimulationContext):
         color=(0.75, 0.75, 0.75),
     )
     cfg_light_dome.func("/World/lightDome", cfg_light_dome, translation=(1, 10, 0))
+
 
 def setup_libuipc_scene(scene):
     trimesh_path = str(pathlib.Path(__file__).parent.resolve() / "trimesh")
@@ -95,7 +85,7 @@ def setup_libuipc_scene(scene):
         return sc
 
     io = SimplicialComplexIO()
-    cube_mesh = io.read(f'{trimesh_path}/cube.obj')
+    cube_mesh = io.read(f"{trimesh_path}/cube.obj")
     cube_mesh = process_surface(cube_mesh)
 
     # move the cube up for 2.5 meters
@@ -104,27 +94,27 @@ def setup_libuipc_scene(scene):
     t.translate(Vector3.UnitY() * 2.5)
     trans_view[0] = t.matrix()
 
-    abd.apply_to(cube_mesh, 1e8) # 100 MPa
+    abd.apply_to(cube_mesh, 1e8)  # 100 MPa
     default_element.apply_to(cube_mesh)
     # constraint the rotation
     rm.apply_to(cube_mesh, 100, motor_rot_vel=np.pi)
-    cube_object = scene.objects().create('cube')
+    cube_object = scene.objects().create("cube")
     cube_object.geometries().create(cube_mesh)
 
     pre_transform = Transform.Identity()
     pre_transform.scale(Vector3.Values([3, 0.1, 6]))
 
     io = SimplicialComplexIO(pre_transform)
-    ground_mesh = io.read(f'{tetmesh_path}/cube.msh')
+    ground_mesh = io.read(f"{tetmesh_path}/cube.msh")
     ground_mesh = process_surface(ground_mesh)
     ground_mesh.instances().resize(2)
 
-    abd.apply_to(ground_mesh, 1e7) # 10 MPa
+    abd.apply_to(ground_mesh, 1e7)  # 10 MPa
     default_element.apply_to(ground_mesh)
     stc.apply_to(ground_mesh, Vector2.Values([100.0, 100.0]))
     is_fixed = ground_mesh.instances().find(builtin.is_fixed)
     is_fixed_view = view(is_fixed)
-    is_fixed_view[0] = 1 # fix the lower board
+    is_fixed_view[0] = 1  # fix the lower board
     is_fixed_view[1] = 0
 
     trans_view = view(ground_mesh.transforms())
@@ -134,12 +124,12 @@ def setup_libuipc_scene(scene):
     t.translate(Vector3.UnitZ() * -2.5 + Vector3.UnitY() * 1)
     trans_view[1] = t.matrix()
 
-    ground_object = scene.objects().create('ground')
+    ground_object = scene.objects().create("ground")
     ground_object.geometries().create(ground_mesh)
 
     animator = scene.animator()
 
-    def cube_animation(info:Animation.UpdateInfo):
+    def cube_animation(info: Animation.UpdateInfo):
         geo_slots = info.geo_slots()
         geo_slot: SimplicialComplexSlot = geo_slots[0]
         geo = geo_slot.geometry()
@@ -147,10 +137,9 @@ def setup_libuipc_scene(scene):
         view(is_constrained)[0] = 1
         RotatingMotor.animate(geo, info.dt())
 
-
-    def ground_animation(info:Animation.UpdateInfo):
+    def ground_animation(info: Animation.UpdateInfo):
         geo_slot: SimplicialComplexSlot = info.geo_slots()[0]
-        rest_geo_slot : SimplicialComplexSlot = info.rest_geo_slots()[0]
+        rest_geo_slot: SimplicialComplexSlot = info.rest_geo_slots()[0]
         geo = geo_slot.geometry()
         rest_geo = rest_geo_slot.geometry()
 
@@ -158,12 +147,12 @@ def setup_libuipc_scene(scene):
         view(is_constrained)[1] = 1
 
         current_t = info.dt() * info.frame()
-        angular_velocity = np.pi # 180 degree per second
+        angular_velocity = np.pi  # 180 degree per second
         theta = angular_velocity * current_t
 
-        T:Matrix4x4 = rest_geo.transforms().view()[1]
+        T: Matrix4x4 = rest_geo.transforms().view()[1]
         Y = np.sin(theta) * 0.4
-        T:Transform = Transform(T)
+        T: Transform = Transform(T)
         p = T.translation()
         p[1] += Y
         T = Transform.Identity()
@@ -175,11 +164,12 @@ def setup_libuipc_scene(scene):
     animator.insert(cube_object, cube_animation)
     animator.insert(ground_object, ground_animation)
 
+
 def main():
     """Main function."""
     # Initialize the simulation context
     sim_cfg = sim_utils.SimulationCfg(
-        dt=1/60,
+        dt=1 / 60,
         gravity=[0.0, -9.8, 0.0],
     )
     sim = sim_utils.SimulationContext(sim_cfg)
@@ -193,11 +183,7 @@ def main():
         ground_normal=[0, 1, 0],
         ground_height=-2.0,
         # logger_level="Info",
-        contact=UipcSimCfg.Contact(
-            default_friction_ratio=0.5,
-            default_contact_resistance=1e9,
-            d_hat=0.01
-        )
+        contact=UipcSimCfg.Contact(default_friction_ratio=0.5, default_contact_resistance=1e9, d_hat=0.01),
     )
     uipc_sim = UipcSim(uipc_cfg)
 
@@ -239,6 +225,7 @@ def main():
             total_uipc_render_time += Timer.get_timer_info("render_update")
 
             step += 1
+
 
 if __name__ == "__main__":
     # run the main function
