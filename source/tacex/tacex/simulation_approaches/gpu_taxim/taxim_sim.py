@@ -40,7 +40,7 @@ class TaximSimulator(GelSightSimulator):
             self._device = self.cfg.device
 
         self._num_envs = self.sensor._num_envs
-        # todo make size adaptable? I mean with env_ids. This way we would always simulate everythings
+        # todo make size adaptable? I mean with env_ids. This way we would always simulate everything
         self._indentation_depth = torch.zeros((self.sensor._num_envs), device=self.sensor._device)
         """Indentation depth, i.e. how deep the object is pressed into the gelpad.
         Values are in mm.
@@ -110,8 +110,6 @@ class TaximSimulator(GelSightSimulator):
             1, 3
         )  # *255).type(torch.uint8)
 
-        tactile_rgb = self.tactile_rgb_img[0].cpu().numpy()
-
         return self.tactile_rgb_img
 
     def compute_indentation_depth(self):
@@ -147,7 +145,7 @@ class TaximSimulator(GelSightSimulator):
 
         If only optical simulation is used, then only an optical img is displayed.
         If only the marker simulatios is used, then only an image displaying the marker positions is displayed.
-        If both, optical and marker simulation, are used, then the images are overlayed.
+        If both, optical and marker simulation, are used, then the images are overlaid.
         """
         # note: parent only deals with callbacks. not their visibility
         if debug_vis:
@@ -170,8 +168,8 @@ class TaximSimulator(GelSightSimulator):
         for i, prim in enumerate(self.sensor.prim_view.prims):
             if "tactile_rgb" in self.sensor.cfg.data_types:
                 show_img = prim.GetAttribute("debug_tactile_rgb").Get()
-                if show_img == True:
-                    if not (str(i) in self._debug_windows):
+                if show_img:
+                    if str(i) not in self._debug_windows:
                         # create a window
                         window = omni.ui.Window(
                             self.sensor._prim_view.prim_paths[i] + "/taxim_rgb",
@@ -197,7 +195,7 @@ class TaximSimulator(GelSightSimulator):
                         self._debug_img_providers[str(i)].set_bytes_data(
                             frame.flatten().data, [width, height]
                         )  # method signature: (numpy.ndarray[numpy.uint8], (width, height))
-                        image = omni.ui.ImageWithProvider(
+                        omni.ui.ImageWithProvider(
                             self._debug_img_providers[str(i)]
                         )  # , fill_policy=omni.ui.IwpFillPolicy.IWP_PRESERVE_ASPECT_FIT -> fill_policy by default: specifying the width and height of the item causes the image to be scaled to that size
                 elif str(i) in self._debug_windows:

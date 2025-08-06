@@ -1,30 +1,14 @@
 from __future__ import annotations
 
-import numpy as np
-import psutil
 import torch
-from pathlib import Path
-
-import carb
-import pynvml
-from pxr import UsdGeom
-from tacex_assets import TACEX_ASSETS_DATA_DIR
-from tacex_assets.robots.franka.franka_gsmini_single_adapter_rigid import (
-    FRANKA_PANDA_ARM_GSMINI_SINGLE_ADAPTER_HIGH_PD_CFG,
-)
-from tacex_assets.sensors.gelsight_mini.gelsight_mini_cfg import GelSightMiniCfg
-from tacex_uipc import UipcRLEnv
 
 import isaaclab.sim as sim_utils
-import isaaclab.utils.math as lab_math
 import isaaclab.utils.math as math_utils
-from isaaclab.actuators.actuator_cfg import ImplicitActuatorCfg
-from isaaclab.assets import Articulation, ArticulationCfg, AssetBase, AssetBaseCfg, RigidObject, RigidObjectCfg
+from isaaclab.assets import Articulation, ArticulationCfg, AssetBaseCfg, RigidObject, RigidObjectCfg
 from isaaclab.controllers.differential_ik import DifferentialIKController
 from isaaclab.controllers.differential_ik_cfg import DifferentialIKControllerCfg
-from isaaclab.envs import DirectRLEnv, DirectRLEnvCfg, ViewerCfg
+from isaaclab.envs import DirectRLEnvCfg, ViewerCfg
 from isaaclab.envs.ui import BaseEnvWindow
-from isaaclab.markers import VisualizationMarkers
 from isaaclab.markers.config import FRAME_MARKER_CFG
 from isaaclab.scene import InteractiveSceneCfg
 from isaaclab.sensors import FrameTransformer, FrameTransformerCfg
@@ -32,14 +16,17 @@ from isaaclab.sensors.frame_transformer.frame_transformer_cfg import OffsetCfg
 from isaaclab.sim import PhysxCfg, SimulationCfg
 from isaaclab.sim.schemas.schemas_cfg import RigidBodyPropertiesCfg
 from isaaclab.utils import configclass
-from isaaclab.utils.assets import ISAAC_NUCLEUS_DIR
 
-from tacex import GelSightSensor, GelSightSensorCfg
+from tacex import GelSightSensor
 from tacex.simulation_approaches.fots import FOTSMarkerSimulatorCfg
-from tacex.simulation_approaches.gpu_taxim import TaximSimulatorCfg
 
-from isaaclab.markers import POSITION_GOAL_MARKER_CFG  # isort: skip
-from isaaclab.markers import CUBOID_MARKER_CFG  # isort: skip
+from tacex_assets import TACEX_ASSETS_DATA_DIR
+from tacex_assets.robots.franka.franka_gsmini_single_rigid import (
+    FRANKA_PANDA_ARM_SINGLE_GSMINI_HIGH_PD_RIGID_CFG,
+)
+from tacex_assets.sensors.gelsight_mini.gelsight_mini_cfg import GelSightMiniCfg
+
+from tacex_uipc import UipcRLEnv
 
 
 class CustomEnvWindow(BaseEnvWindow):
@@ -64,7 +51,6 @@ class CustomEnvWindow(BaseEnvWindow):
 
 @configclass
 class PhysXRigidEnvCfg(DirectRLEnvCfg):
-
     # viewer settings
     viewer: ViewerCfg = ViewerCfg()
     viewer.eye = (1.9, 1.4, 0.3)
@@ -107,7 +93,6 @@ class PhysXRigidEnvCfg(DirectRLEnvCfg):
     # Ground-plane
     ground = AssetBaseCfg(
         prim_path="/World/defaultGroundPlane",
-        init_state=AssetBaseCfg.InitialStateCfg(pos=[0, 0, 0]),  # pos=[0, 0, -1.05]
         spawn=sim_utils.GroundPlaneCfg(),
     )
 
@@ -120,7 +105,7 @@ class PhysXRigidEnvCfg(DirectRLEnvCfg):
     # plate
     plate = RigidObjectCfg(
         prim_path="/World/envs/env_.*/ground_plate",
-        init_state=RigidObjectCfg.InitialStateCfg(pos=[0.5, 0, 0]),
+        init_state=RigidObjectCfg.InitialStateCfg(pos=(0.5, 0, 0)),
         spawn=sim_utils.UsdFileCfg(
             usd_path=f"{TACEX_ASSETS_DATA_DIR}/Props/plate.usd",
             rigid_props=RigidBodyPropertiesCfg(
@@ -136,7 +121,7 @@ class PhysXRigidEnvCfg(DirectRLEnvCfg):
 
     ball = RigidObjectCfg(
         prim_path="/World/envs/env_.*/ball",
-        init_state=RigidObjectCfg.InitialStateCfg(pos=[0.5, 0.0, 0.01]),
+        init_state=RigidObjectCfg.InitialStateCfg(pos=(0.5, 0.0, 0.01)),
         spawn=sim_utils.UsdFileCfg(
             usd_path=f"{TACEX_ASSETS_DATA_DIR}/Props/ball_wood.usd",
             # scale=(0.8, 0.8, 0.8),
@@ -152,7 +137,7 @@ class PhysXRigidEnvCfg(DirectRLEnvCfg):
         ),
     )
 
-    robot: ArticulationCfg = FRANKA_PANDA_ARM_GSMINI_SINGLE_ADAPTER_HIGH_PD_CFG.replace(
+    robot: ArticulationCfg = FRANKA_PANDA_ARM_SINGLE_GSMINI_HIGH_PD_RIGID_CFG.replace(
         prim_path="/World/envs/env_.*/Robot",
         init_state=ArticulationCfg.InitialStateCfg(
             joint_pos={
@@ -230,7 +215,7 @@ class PhysXRigidEnv(UipcRLEnv):
     def __init__(self, cfg: PhysXRigidEnvCfg, render_mode: str | None = None, **kwargs):
         super().__init__(cfg, render_mode, **kwargs)
 
-        #### Stuff for IK ##################################################
+        # --- for IK ---
         # create the differential IK controller
         self._ik_controller = DifferentialIKController(
             cfg=self.cfg.ik_controller_cfg, num_envs=self.num_envs, device=self.device
@@ -249,14 +234,15 @@ class PhysXRigidEnv(UipcRLEnv):
         # ee offset w.r.t panda hand -> based on the asset
         self._offset_pos = torch.tensor([0.0, 0.0, 0.131], device=self.device).repeat(self.num_envs, 1)
         self._offset_rot = torch.tensor([1.0, 0.0, 0.0, 0.0], device=self.device).repeat(self.num_envs, 1)
-        ####################################################################
 
         # create buffer to store actions (= ik_commands)
         self.ik_commands = torch.zeros((self.num_envs, self._ik_controller.action_dim), device=self.device)
         # ee orientation should always be (0,1,0,0)
         self.ik_commands[:, 3:] = torch.tensor([0, 1, 0, 0], device=self.device)
 
-        # for moving ee and ball in a specific pattern
+        # ---
+
+        # --- for moving ee and ball in a specific pattern ---
         # Define goals for the end effector of the franka arm by adding offsets to the current ball position
         ball_radius = self.cfg.ball_radius
         gel_length = self.cfg.gsmini.gelpad_dimensions.length
@@ -288,12 +274,14 @@ class PhysXRigidEnv(UipcRLEnv):
             left,  # move ee to the left
             right,
             center,
-            pose_for_reset,  # move ee over ball again, to prevent that the ball gets thrown around when the scene is resetted (not sure why this happens tho, I think cause the ball spawns directly where the ee is)
+            pose_for_reset,  # move ee over ball again, to prevent that the ball gets thrown around when the scene is reset (not sure why this happens tho, I think cause the ball spawns directly where the ee is)
         ]
         # Track the given command
         self.current_goal_idx = 0
         self.num_step_goal_change = 50
         self.step_count = 0
+
+        # ---
 
         # add handle for debug visualization (this is set to a valid handle inside set_debug_vis)
         self.set_debug_vis(self.cfg.debug_vis)
@@ -302,7 +290,7 @@ class PhysXRigidEnv(UipcRLEnv):
         self._robot = Articulation(self.cfg.robot)
         self.scene.articulations["robot"] = self._robot
 
-        plate = RigidObject(self.cfg.plate)
+        RigidObject(self.cfg.plate)
 
         # Ground-plane
         ground = AssetBaseCfg(
@@ -417,12 +405,10 @@ class PhysXRigidEnv(UipcRLEnv):
     def _get_observations(self) -> dict:
         pass
 
-    ####
-    ## Helper Functions
-    ####
+    """
+    Helper Functions for IK control (from task_space_actions.py of IsaacLab).
+    """
 
-    ################################# For IK
-    #  From task_space_actions.py
     @property
     def jacobian_w(self) -> torch.Tensor:
         return self._robot.root_physx_view.get_jacobians()[:, self._jacobi_body_idx, :, :]

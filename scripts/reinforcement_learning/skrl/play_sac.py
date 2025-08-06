@@ -19,9 +19,17 @@ from omni.isaac.lab.app import AppLauncher
 # add argparse arguments
 parser = argparse.ArgumentParser(description="Play a checkpoint of an RL agent from skrl.")
 parser.add_argument("--video", action="store_true", default=False, help="Record videos during training.")
-parser.add_argument("--video_length", type=int, default=200, help="Length of the recorded video (in steps).")
 parser.add_argument(
-    "--disable_fabric", action="store_true", default=False, help="Disable fabric and use USD I/O operations."
+    "--video_length",
+    type=int,
+    default=200,
+    help="Length of the recorded video (in steps).",
+)
+parser.add_argument(
+    "--disable_fabric",
+    action="store_true",
+    default=False,
+    help="Disable fabric and use USD I/O operations.",
 )
 parser.add_argument("--num_envs", type=int, default=None, help="Number of environments to simulate.")
 parser.add_argument("--task", type=str, default=None, help="Name of the task.")
@@ -70,33 +78,28 @@ if version.parse(skrl.__version__) < version.parse(SKRL_VERSION):
     )
     exit()
 
-if args_cli.ml_framework.startswith("torch"):
-    from skrl.utils.runner.torch import Runner
-elif args_cli.ml_framework.startswith("jax"):
-    from skrl.utils.runner.jax import Runner
+if args_cli.ml_framework.startswith("torch") or args_cli.ml_framework.startswith("jax"):
+    pass
 
 import copy
 
 # required for manual SAC instantiation
-import torch
 import torch.nn as nn
 
 import omni.isaac.lab_tasks  # noqa: F401
-import tacex_rl.tasks
 from omni.isaac.lab.envs import DirectMARLEnv, multi_agent_to_single_agent
 from omni.isaac.lab.utils.dict import print_dict
-from omni.isaac.lab_tasks.utils import get_checkpoint_path, load_cfg_from_registry, parse_env_cfg
+from omni.isaac.lab_tasks.utils import (
+    get_checkpoint_path,
+    load_cfg_from_registry,
+    parse_env_cfg,
+)
 from omni.isaac.lab_tasks.utils.wrappers.skrl import SkrlVecEnvWrapper
 
 # import the skrl components to build the RL system
 from skrl.agents.torch.sac import SAC, SAC_DEFAULT_CONFIG
-from skrl.envs.loaders.torch import load_isaaclab_env
-from skrl.envs.wrappers.torch import wrap_env
 from skrl.memories.torch import RandomMemory
 from skrl.models.torch import DeterministicMixin, GaussianMixin, Model
-from skrl.resources.preprocessors.torch import RunningStandardScaler
-from skrl.trainers.torch import SequentialTrainer
-from skrl.utils import set_seed
 
 # config shortcuts
 algorithm = args_cli.algorithm.lower()
@@ -191,7 +194,10 @@ def main():
 
     # parse configuration
     env_cfg = parse_env_cfg(
-        args_cli.task, device=args_cli.device, num_envs=args_cli.num_envs, use_fabric=not args_cli.disable_fabric
+        args_cli.task,
+        device=args_cli.device,
+        num_envs=args_cli.num_envs,
+        use_fabric=not args_cli.disable_fabric,
     )
     try:
         experiment_cfg = load_cfg_from_registry(args_cli.task, f"skrl_{algorithm}_cfg_entry_point")
@@ -207,7 +213,9 @@ def main():
         resume_path = os.path.abspath(args_cli.checkpoint)
     else:
         resume_path = get_checkpoint_path(
-            log_root_path, run_dir=f".*_{algorithm}_{args_cli.ml_framework}", other_dirs=["checkpoints"]
+            log_root_path,
+            run_dir=f".*_{algorithm}_{args_cli.ml_framework}",
+            other_dirs=["checkpoints"],
         )
     log_dir = os.path.dirname(os.path.dirname(resume_path))
 
@@ -245,13 +253,13 @@ def main():
     # instantiate the agent's models (function approximators).
     # SAC requires 5 models, visit its documentation for more details
     # https://skrl.readthedocs.io/en/latest/api/agents/sac.html#models
-    models = {}
-    models["policy"] = StochasticActor(env.observation_space, env.action_space, device)
-    models["critic_1"] = Critic(env.observation_space, env.action_space, device)
-    models["critic_2"] = Critic(env.observation_space, env.action_space, device)
-    models["target_critic_1"] = Critic(env.observation_space, env.action_space, device)
-    models["target_critic_2"] = Critic(env.observation_space, env.action_space, device)
-
+    models = {
+        "policy": StochasticActor(env.observation_space, env.action_space, device),
+        "critic_1": Critic(env.observation_space, env.action_space, device),
+        "critic_2": Critic(env.observation_space, env.action_space, device),
+        "target_critic_1": Critic(env.observation_space, env.action_space, device),
+        "target_critic_2": Critic(env.observation_space, env.action_space, device),
+    }
     cfg = SAC_DEFAULT_CONFIG.copy()
     cfg.update(_process_cfg(experiment_cfg["agent"]))
 

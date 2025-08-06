@@ -1,5 +1,5 @@
 """
-Ball Rolling Enviornments:
+Ball Rolling Environments:
 Goal is to roll a ball to a random target position.
 """
 
@@ -25,7 +25,7 @@ gym.register(
     kwargs={
         "env_cfg_entry_point": BallRollingEnvCfg,
         "rl_games_cfg_entry_point": f"{agents.__name__}:rl_games_ppo_cfg.yaml",
-        "rsl_rl_cfg_entry_point": agents.rsl_rl_cfg.BallRollingPPORunnerCfg,  #! we are using this one
+        "rsl_rl_cfg_entry_point": agents.rsl_rl_cfg.BallRollingPPORunnerCfg,
         "skrl_cfg_entry_point": f"{agents.__name__}:skrl_ppo_cfg.yaml",
         "skrl_sac_cfg_entry_point": f"{agents.__name__}:skrl_sac_cfg.yaml",
     },
@@ -43,7 +43,7 @@ gym.register(
     kwargs={
         "env_cfg_entry_point": BallRollingIKResetEnvCfg,
         "rl_games_cfg_entry_point": f"{agents.__name__}:rl_games_ppo_cfg.yaml",
-        "rsl_rl_cfg_entry_point": agents.rsl_rl_cfg.BallRollingPPORunnerCfg,  #! we are using this one
+        "rsl_rl_cfg_entry_point": agents.rsl_rl_cfg.BallRollingPPORunnerCfg,
         "skrl_cfg_entry_point": f"{agents.__name__}:skrl_ppo_cfg.yaml",
         "skrl_sac_cfg_entry_point": f"{agents.__name__}:skrl_sac_cfg.yaml",
     },
@@ -57,7 +57,7 @@ gym.register(
 #     kwargs={
 #         "env_cfg_entry_point": BallRollingIKResetEnvCfg,
 #         "rl_games_cfg_entry_point": f"{agents.__name__}:rl_games_ppo_cfg.yaml",
-#         "rsl_rl_cfg_entry_point": agents.rsl_rl_cfg.BallRollingPPORunnerCfg, #! we are using this one
+#         "rsl_rl_cfg_entry_point": agents.rsl_rl_cfg.BallRollingPPORunnerCfg,
 #         "skrl_cfg_entry_point": f"{agents.__name__}:skrl_ppo_cfg.yaml",
 #         "skrl_sac_cfg_entry_point": f"{agents.__name__}:skrl_sac_cfg.yaml",
 #     },

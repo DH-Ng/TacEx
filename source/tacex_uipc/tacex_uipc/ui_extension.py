@@ -1,33 +1,25 @@
-## Copyright (c) 2023, NVIDIA CORPORATION.  All rights reserved.
-##
-## NVIDIA CORPORATION and its licensors retain all intellectual property
-## and proprietary rights in and to this software, related documentation
-## and any modifications thereto.  Any use, reproduction, disclosure or
-## distribution of this software and related documentation without an express
-## license agreement from NVIDIA CORPORATION is strictly prohibited.
-##
-import math
-import random
-from ctypes import alignment
+# Copyright (c) 2023, NVIDIA CORPORATION.  All rights reserved.
+#
+# NVIDIA CORPORATION and its licensors retain all intellectual property
+# and proprietary rights in and to this software, related documentation
+# and any modifications thereto.  Any use, reproduction, disclosure or
+# distribution of this software and related documentation without an express
+# license agreement from NVIDIA CORPORATION is strictly prohibited.
+#
 
-import carb
-import carb.events
-import isaacsim.core.utils.xforms as xform_utils
 import omni.ext
-from isaacsim.core.prims import XFormPrim
 from isaacsim.util.debug_draw import _debug_draw
 
 # import omni.usd
-from omni.physx import get_physx_cooking_interface, get_physx_interface
+from omni.physx import get_physx_interface
 
 draw = _debug_draw.acquire_debug_draw_interface()
 
 import numpy as np
 
 import pxr
-import wildmeshing as wm
-from omni.physx.scripts import deformableUtils
-from pxr import Gf, Sdf, UsdGeom
+from pxr import Sdf, UsdGeom
+
 from tacex_uipc.sim import UipcIsaacAttachments
 from tacex_uipc.utils import MeshGenerator, TetMeshCfg
 
@@ -56,10 +48,10 @@ def get_stage_id():
     return context.get_stage_id()
 
 
-### MESH STUFF
 def _generate_tet_mesh(path, tet_cfg=None):
-    """
-    Need to make sure that we load the geom mesh in USD and not just the Xform of the prim
+    """Generates a tetrahedra mesh for a USD trimesh.
+
+    You need to make sure that the USD path belongs to the geom_mesh and not just the Xform of the prim.
     """
     if tet_cfg is None:
         tet_cfg = TetMeshCfg(edge_length_r=0.25)
@@ -100,8 +92,8 @@ def _generate_tet_mesh(path, tet_cfg=None):
         tet_surf_indices=tet_surf_indices,
     )
     return (
-        f"Amount of tet points {len(tet_points)},\nAmount of tetrahedra: {int(len(tet_indices)/4)},\nAmount of surface"
-        f" points: {int(len(tet_surf_indices)/3)}"
+        f"Amount of tet points {len(tet_points)},\nAmount of tetrahedra: {int(len(tet_indices) / 4)},\nAmount of"
+        f" surface points: {int(len(tet_surf_indices) / 3)}"
     )
 
 
@@ -213,7 +205,7 @@ def _create_attachment(paths):
     try:
         collision_enabled = tet_prim.GetAttribute("physics:collisionEnabled")
         collision_enabled.Set(False)
-    except:
+    except RuntimeError:
         pass
 
     attachment_offsets, idx, rigid_prims = UipcIsaacAttachments.compute_attachment_data(
@@ -241,7 +233,7 @@ def _create_attachment_data_attributes(path, attachment_offsets, attachment_indi
     print("*" * 40)
 
 
-### for some funky UV stuff
+# --- for some funky UV texture stuff (just experimental) ---
 def _extract_primvar_st(path):
     stage = omni.usd.get_context().get_stage()
     prim = stage.GetPrimAtPath(path)
@@ -272,6 +264,9 @@ def _set_primvar_st(path):
         pv = pv_api.GetPrimvar("primvars:st")
     pv.Set(uv_coor)
     print("Set uv values for primvars:st")
+
+
+# ---
 
 
 # Any class derived from `omni.ext.IExt` in top level module (defined in `python.modules` of `extension.toml`) will be

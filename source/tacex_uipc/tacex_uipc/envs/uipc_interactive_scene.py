@@ -12,7 +12,6 @@ import omni.usd
 from isaacsim.core.cloner import GridCloner
 from isaacsim.core.prims import XFormPrim
 from pxr import PhysxSchema
-from tacex_uipc.objects import UipcObject, UipcObjectCfg
 
 import isaaclab.sim as sim_utils
 from isaaclab.assets import (
@@ -29,6 +28,8 @@ from isaaclab.assets import (
 from isaaclab.scene import InteractiveSceneCfg
 from isaaclab.sensors import ContactSensorCfg, FrameTransformerCfg, SensorBase, SensorBaseCfg
 from isaaclab.terrains import TerrainImporter, TerrainImporterCfg
+
+from tacex_uipc.objects import UipcObject, UipcObjectCfg
 
 
 class UipcInteractiveScene:
@@ -433,7 +434,7 @@ class UipcInteractiveScene:
         # -- sensors
         for sensor in self._sensors.values():
             sensor.reset(env_ids)
-        # todo add uipc_objects resest
+        # todo add uipc_objects reset
 
     def reset_to(
         self,

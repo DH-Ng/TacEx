@@ -2,14 +2,6 @@ from __future__ import annotations
 
 import torch
 
-from tacex_assets import TACEX_ASSETS_DATA_DIR
-from tacex_assets.robots.franka.franka_gsmini_single_adapter_uipc import (
-    FRANKA_PANDA_ARM_GSMINI_SINGLE_ADAPTER_HIGH_PD_CFG,
-)
-from tacex_assets.sensors.gelsight_mini.gelsight_mini_cfg import GelSightMiniCfg
-from tacex_uipc import UipcIsaacAttachments, UipcIsaacAttachmentsCfg, UipcObject, UipcObjectCfg, UipcSimCfg
-from tacex_uipc.utils import TetMeshCfg
-
 import isaaclab.sim as sim_utils
 from isaaclab.assets import ArticulationCfg, AssetBaseCfg
 from isaaclab.markers.config import FRAME_MARKER_CFG
@@ -19,14 +11,24 @@ from isaaclab.sim import PhysxCfg, SimulationCfg
 from isaaclab.utils import configclass
 
 from tacex import GelSightSensor
-from tacex.simulation_approaches.fots import FOTSMarkerSimulatorCfg
-from tacex.simulation_approaches.gpu_taxim import TaximSimulatorCfg
+
+from tacex_assets import TACEX_ASSETS_DATA_DIR
+from tacex_assets.robots.franka.franka_gsmini_single_uipc import (
+    FRANKA_PANDA_ARM_SINGLE_GSMINI_HIGH_PD_UIPC_CFG,
+)
+from tacex_assets.sensors.gelsight_mini.gelsight_mini_cfg import GelSightMiniCfg
+
+from tacex_uipc import UipcIsaacAttachments, UipcIsaacAttachmentsCfg, UipcObject, UipcObjectCfg, UipcSimCfg
+from tacex_uipc.utils import TetMeshCfg
 
 try:
     from isaacsim.util.debug_draw import _debug_draw
 
     draw = _debug_draw.acquire_debug_draw_interface()
-except:
+except ImportError:
+    import warnings
+
+    warnings.warn("_debug_draw failed to import", ImportWarning)
     draw = None
 
 from .ball_rolling_physx_rigid import PhysXRigidEnv, PhysXRigidEnvCfg
@@ -78,7 +80,7 @@ class UipcEnvCfg(PhysXRigidEnvCfg):
         constitution_cfg=UipcObjectCfg.AffineBodyConstitutionCfg(),  # UipcObjectCfg.StableNeoHookeanCfg() #
     )
 
-    robot: ArticulationCfg = FRANKA_PANDA_ARM_GSMINI_SINGLE_ADAPTER_HIGH_PD_CFG.replace(
+    robot: ArticulationCfg = FRANKA_PANDA_ARM_SINGLE_GSMINI_HIGH_PD_UIPC_CFG.replace(
         prim_path="/World/envs/env_.*/Robot",
         init_state=ArticulationCfg.InitialStateCfg(
             joint_pos={
@@ -162,7 +164,7 @@ class UipcEnv(PhysXRigidEnv):
         self.gsmini = GelSightSensor(self.cfg.gsmini)
         self.scene.sensors["gsmini"] = self.gsmini
 
-        ### UIPC simulation setup
+        # --- UIPC simulation setup ---
 
         # gelpad simulated via uipc
         self._uipc_gelpad: UipcObject = UipcObject(self.cfg.gelpad_cfg, self.uipc_sim)
@@ -187,7 +189,6 @@ class UipcEnv(PhysXRigidEnv):
         self._ik_controller.set_command(self.ik_commands)
 
     def _reset_idx(self, env_ids: torch.Tensor | None):
-
         # reset robot state
         joint_pos = self._robot.data.default_joint_pos[env_ids]
         joint_vel = torch.zeros_like(joint_pos)

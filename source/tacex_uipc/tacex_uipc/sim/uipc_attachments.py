@@ -2,15 +2,12 @@ from __future__ import annotations
 
 import inspect
 import numpy as np
-import re
 import torch
 import weakref
-from typing import TYPE_CHECKING
 
 import omni
-from isaacsim.core.prims import XFormPrim
-from omni.physx import get_physx_cooking_interface, get_physx_interface, get_physx_scene_query_interface
-from pxr import Gf, PhysxSchema, Sdf, Usd, UsdGeom, UsdPhysics, UsdShade, Vt
+from omni.physx import get_physx_interface, get_physx_scene_query_interface
+from pxr import UsdGeom, UsdPhysics
 
 import isaaclab.sim as sim_utils
 
@@ -18,18 +15,22 @@ try:
     from isaacsim.util.debug_draw import _debug_draw
 
     draw = _debug_draw.acquire_debug_draw_interface()
-except:
+except ImportError:
+    import warnings
+
+    warnings.warn("_debug_draw failed to import", ImportWarning)
     draw = None
 
-from tacex_uipc.objects import UipcObject
-from uipc import Animation, Vector3, builtin, view
+from uipc import Animation, builtin, view
 from uipc.constitution import SoftPositionConstraint
 from uipc.geometry import GeometrySlot, SimplicialComplex
 
 import isaaclab.utils.math as math_utils
-from isaaclab.assets import Articulation, AssetBase, AssetBaseCfg, RigidObject
+from isaaclab.assets import Articulation, RigidObject
 from isaaclab.utils import configclass
 from isaaclab.utils.math import transform_points
+
+from tacex_uipc.objects import UipcObject
 
 
 @configclass
@@ -259,8 +260,9 @@ class UipcIsaacAttachments:
         # note: currently the spawner does not work if there is a regex pattern in the leaf
         #   For example, if the prim path is "/World/Robot_[1,2]" since the spawner will not
         #   know which prim to spawn. This is a limitation of the spawner and not the asset.
-        asset_path = isaac_mesh_path.split("/")[-1]
-        asset_path_is_regex = re.match(r"^[a-zA-Z0-9/_]+$", asset_path) is None
+        # asset_path = isaac_mesh_path.split("/")[-1]
+        # asset_path_is_regex = re.match(r"^[a-zA-Z0-9/_]+$", asset_path) is None
+
         # check that spawn was successful
         matching_prims = sim_utils.find_matching_prims(isaac_mesh_path)
         if len(matching_prims) == 0:
@@ -294,7 +296,7 @@ class UipcIsaacAttachments:
         # print("topology ", topology)
 
         vertex_positions = tet_points
-        indices = tet_indices
+        # indices = tet_indices
 
         for i, v in enumerate(vertex_positions):
             # print("raycast ", i)
@@ -302,7 +304,7 @@ class UipcIsaacAttachments:
                 0,
                 0,
                 1,
-            ]  # unit direction of the sphere ray cast -> doesnt really matter here, cause we only use a super short ray.
+            ]  # unit direction of the sphere ray cast -> doesn't really matter here, cause we only use a super short ray.
             hitInfo = get_physx_scene_query_interface().sweep_sphere_closest(
                 radius=sphere_radius, origin=v, dir=ray_dir, distance=max_dist, bothSides=True
             )
@@ -367,14 +369,14 @@ class UipcIsaacAttachments:
 
             geo_slots: list[GeometrySlot] = info.geo_slots()
             geo: SimplicialComplex = geo_slots[0].geometry()
-            rest_geo_slots: list[GeometrySlot] = info.rest_geo_slots()
-            rest_geo: SimplicialComplex = rest_geo_slots[0].geometry()
+            # rest_geo_slots: list[GeometrySlot] = info.rest_geo_slots()
+            # rest_geo: SimplicialComplex = rest_geo_slots[0].geometry()
 
             is_constrained = geo.vertices().find(builtin.is_constrained)
             is_constrained_view = view(is_constrained)
             aim_position = geo.vertices().find(builtin.aim_position)
             aim_position_view = view(aim_position)
-            rest_position_view = rest_geo.positions().view()
+            # rest_position_view = rest_geo.positions().view()
 
             is_constrained_view[self.attachment_points_idx] = 1
 
@@ -411,7 +413,7 @@ class UipcIsaacAttachments:
             self.attachment_offsets.reshape((self._num_instances, self.num_attachment_points_per_obj, 3)),
             device=self.device,
         ).float()
-        # only access pose of a single body (thats why idx=0 in second dim)
+        # only access pose of a single body (that's why idx=0 in second dim)
         aim_pos = transform_points(
             attachment_offsets, pos=pose[:, 0, 0:3], quat=pose[:, 0, 3:]
         )  # todo give over batch of pos and quat for each instance (i.e. pos has shape N,3 and quat N,4)
@@ -460,13 +462,14 @@ class UipcIsaacAttachments:
                 from isaacsim.util.debug_draw import _debug_draw
 
                 self._draw = _debug_draw.acquire_debug_draw_interface()
-            except:
+            except ImportError:
+                import warnings
+
+                warnings.warn("_debug_draw failed to import", ImportWarning)
                 self._draw = None
                 print("No debug_vis for attachment. Reason: Cannot import _debug_draw")
-                return
 
     def _debug_vis_callback(self, event):
-
         if self.aim_positions.shape[0] == 0:
             return
 

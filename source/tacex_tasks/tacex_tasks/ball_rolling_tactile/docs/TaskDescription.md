@@ -36,7 +36,7 @@ Otherwise, we would have a lot useless tactile images if the agent has to learn 
 ## depth_map
 Inherits from the base env.
 Difference: uses depth map from camera, instead of height map.
-And the privileged data is omitted. Instead of having the current ball position as an observation, the inital ball position is used.
+And the privileged data is omitted. Instead of having the current ball position as an observation, the initial ball position is used.
 
 - Actions (=5): Task space with relative IK Controller (dx, dy, dz, droll, dpitch)
     - dyaw is omitted, since the z rotation of the ee is irrelevant for our task (a fixed value is passed over during pre_physics step)

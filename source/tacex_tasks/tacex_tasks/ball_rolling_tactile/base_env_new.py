@@ -8,23 +8,9 @@ from __future__ import annotations
 import math
 import torch
 
-from isaacsim.core.utils.stage import get_current_stage
-from isaacsim.core.utils.torch.transformations import tf_combine, tf_inverse, tf_vector
-from pxr import UsdGeom
-
-# from tactile_sim import GsMiniSensorCfg, GsMiniSensor
-from tacex_assets import TACEX_ASSETS_DATA_DIR
-from tacex_assets.robots.franka.franka_gsmini_single_adapter_rigid import (
-    FRANKA_PANDA_ARM_GSMINI_SINGLE_ADAPTER_HIGH_PD_CFG,
-)
-from tacex_assets.sensors.gelsight_mini.gelsight_mini_cfg import GelSightMiniCfg
-from tacex_tasks.utils import DirectLiveVisualizer
-
 import isaaclab.sim as sim_utils
-import isaaclab.utils.math as lab_math
 import isaaclab.utils.math as math_utils
-from isaaclab.actuators.actuator_cfg import ImplicitActuatorCfg
-from isaaclab.assets import Articulation, ArticulationCfg, AssetBase, AssetBaseCfg, RigidObject, RigidObjectCfg
+from isaaclab.assets import Articulation, ArticulationCfg, AssetBaseCfg, RigidObject, RigidObjectCfg
 from isaaclab.controllers.differential_ik import DifferentialIKController
 from isaaclab.controllers.differential_ik_cfg import DifferentialIKControllerCfg
 from isaaclab.envs import DirectRLEnv, DirectRLEnvCfg, ViewerCfg
@@ -38,25 +24,27 @@ from isaaclab.sensors.frame_transformer.frame_transformer_cfg import OffsetCfg
 from isaaclab.sim import PhysxCfg, SimulationCfg
 from isaaclab.sim.schemas.schemas_cfg import RigidBodyPropertiesCfg
 from isaaclab.utils import configclass
-from isaaclab.utils.assets import ISAAC_NUCLEUS_DIR
 from isaaclab.utils.math import (
-    combine_frame_transforms,
     euler_xyz_from_quat,
     sample_uniform,
     subtract_frame_transforms,
     wrap_to_pi,
 )
-from isaaclab.utils.noise import GaussianNoiseCfg, NoiseModelCfg, UniformNoiseCfg
+from isaaclab.utils.noise import NoiseModelCfg, UniformNoiseCfg
 
 from tacex import GelSightSensor
-from tacex.simulation_approaches.fots import FOTSMarkerSimulator, FOTSMarkerSimulatorCfg
+
+# from tactile_sim import GsMiniSensorCfg, GsMiniSensor
+from tacex_assets import TACEX_ASSETS_DATA_DIR
+from tacex_assets.robots.franka.franka_gsmini_single_rigid import (
+    FRANKA_PANDA_ARM_SINGLE_GSMINI_HIGH_PD_RIGID_CFG,
+)
+from tacex_assets.sensors.gelsight_mini.gelsight_mini_cfg import GelSightMiniCfg
+
+from tacex_tasks.utils import DirectLiveVisualizer
 
 #  from isaaclab.controllers.differential_ik_cfg import DifferentialIKControllerCfg
 # from isaaclab.envs.mdp.actions.actions_cfg import DifferentialInverseKinematicsActionCfg
-
-
-from isaaclab.markers import POSITION_GOAL_MARKER_CFG  # isort: skip
-from isaaclab.markers import CUBOID_MARKER_CFG  # isort: skip
 
 
 class CustomEnvWindow(BaseEnvWindow):
@@ -81,7 +69,6 @@ class CustomEnvWindow(BaseEnvWindow):
 
 @configclass
 class BallRollingEnvCfg(DirectRLEnvCfg):
-
     # viewer settings
     viewer: ViewerCfg = ViewerCfg()
     viewer.eye = (1, -0.5, 0.1)
@@ -118,7 +105,7 @@ class BallRollingEnvCfg(DirectRLEnvCfg):
     scene: InteractiveSceneCfg = InteractiveSceneCfg(num_envs=1024, env_spacing=1, replicate_physics=True)
 
     # use robot with stiff PD control for better IK tracking
-    robot: ArticulationCfg = FRANKA_PANDA_ARM_GSMINI_SINGLE_ADAPTER_HIGH_PD_CFG.replace(
+    robot: ArticulationCfg = FRANKA_PANDA_ARM_SINGLE_GSMINI_HIGH_PD_RIGID_CFG.replace(
         prim_path="/World/envs/env_.*/Robot",
         init_state=ArticulationCfg.InitialStateCfg(
             joint_pos={
@@ -167,7 +154,7 @@ class BallRollingEnvCfg(DirectRLEnvCfg):
                 offset=OffsetCfg(
                     pos=(0.0, 0.0, 0.131),  # 0ffset from panda hand frame origin to gelpad top
                     rot=(0.0, 0.0, 1.0, 0.0),
-                    # rot=(0, 0.92388, -0.38268, 0) # our panda hand asset has rotation from (180,0,-45) -> we substract 180 for defining the rotation limits
+                    # rot=(0, 0.92388, -0.38268, 0) # our panda hand asset has rotation from (180,0,-45) -> we subtract 180 for defining the rotation limits
                 ),
             ),
         ],
@@ -256,7 +243,7 @@ class BallRollingEnvCfg(DirectRLEnvCfg):
     success_reward = {
         "weight": 15.0,
         "threshold": 0.005,
-    }  # 0.0025 we count it as a sucess when dist obj <-> goal is less than the threshold
+    }  # 0.0025 we count it as a success when dist obj <-> goal is less than the threshold
 
     # extra reward scales
     action_rate_penalty_scale = [
@@ -272,7 +259,7 @@ class BallRollingEnvCfg(DirectRLEnvCfg):
 
     # env
     episode_length_s = 8.3333  # 1000 timesteps (dt = 1/120 -> 8.3333/(1/120) = 1000)
-    action_space = 6  # we use relative task_space actions: (dx, dy, dz, droll, dpitch) -> dyaw is ommitted
+    action_space = 6  # we use relative task_space actions: (dx, dy, dz, droll, dpitch) -> dyaw is omitted
     observation_space = {
         "proprio_obs": 14,  # 16, # 3 for ee pos, 2 for orient (roll, pitch), 2 for init goal-pos (x,y), 5 for actions
         "vision_obs": [32, 32, 1],  # from tactile sensor
@@ -319,7 +306,8 @@ class BallRollingEnv(DirectRLEnv):
         self.robot_dof_upper_limits = self._robot.data.soft_joint_pos_limits[0, :, 1].to(device=self.device)
         self.robot_dof_speed_scales = torch.ones_like(self.robot_dof_lower_limits)
 
-        #### Stuff for IK actions ##################################################
+        # --- For IK actions ---
+
         # create the differential IK controller
         self._ik_controller = DifferentialIKController(
             cfg=self.cfg.ik_controller_cfg, num_envs=self.num_envs, device=self.device
@@ -340,7 +328,7 @@ class BallRollingEnv(DirectRLEnv):
         self._offset_rot = torch.tensor([0.0, 0.0, 1.0, 0.0], device=self.device).repeat(self.num_envs, 1)
         # self._offset_rot = torch.tensor([0, 0.92388, -0.38268, 0], device=self.device).repeat(self.num_envs, 1)
 
-        ####################################################################
+        # ---
 
         # create auxiliary variables for computing applied action, observations and rewards
         self.processed_actions = torch.zeros((self.num_envs, self._ik_controller.action_dim), device=self.device)
@@ -424,7 +412,7 @@ class BallRollingEnv(DirectRLEnv):
         # plate
         plate = RigidObjectCfg(
             prim_path="/World/envs/env_.*/plate",
-            init_state=RigidObjectCfg.InitialStateCfg(pos=[0.5, 0, 0]),
+            init_state=RigidObjectCfg.InitialStateCfg(pos=(0.5, 0, 0)),
             spawn=sim_utils.UsdFileCfg(
                 usd_path=f"{TACEX_ASSETS_DATA_DIR}/Props/plate.usd",
                 rigid_props=RigidBodyPropertiesCfg(
@@ -450,7 +438,7 @@ class BallRollingEnv(DirectRLEnv):
     def _pre_physics_step(self, actions: torch.Tensor):
         self.prev_actions[:] = self.actions
         self.actions[:] = actions.clamp(-1.0, 1.0)
-        #! preprocess the action and turn it into IK action
+        # preprocess the action and turn it into IK action
         # self.processed_actions[:, :5] = self.actions
         # # fixed z rotation
         # self.processed_actions[:, 5] = 0 # dont change the z rotation
@@ -510,7 +498,7 @@ class BallRollingEnv(DirectRLEnv):
             # | success
         )
 
-        #! new goal position, if sucess
+        # new goal position, if successful
         success_env = (obj_goal_distance <= self.cfg.success_reward["threshold"]).nonzero(as_tuple=False).squeeze(-1)
         if len(success_env) > 0:
             self._goal_pos_w[success_env, :2] = (
@@ -640,11 +628,11 @@ class BallRollingEnv(DirectRLEnv):
             "success_reward": success_reward.float().mean(),
             # penalties for nice looking behavior
             "action_rate_penalty": (
-                self.cfg.action_rate_penalty_scale[self.curriculum_phase_id] * action_rate_penalty
-            ).mean(),
+                (self.cfg.action_rate_penalty_scale[self.curriculum_phase_id] * action_rate_penalty).mean()
+            ),
             "joint_vel_penalty": (
-                self.cfg.joint_vel_penalty_scale[self.curriculum_phase_id] * joint_vel_penalty
-            ).mean(),
+                (self.cfg.joint_vel_penalty_scale[self.curriculum_phase_id] * joint_vel_penalty).mean()
+            ),
             # task metrics
             "Metric/ee_obj_error": object_ee_distance.mean(),
             "Metric/ee_goal_error": ee_goal_distance.mean(),
@@ -766,12 +754,10 @@ class BallRollingEnv(DirectRLEnv):
             self.visualizers["Observations"].terms["sensor_output"] = vision_obs.clone()
         return {"policy": obs}
 
-    ####
-    ## Helper Functions
-    ####
+    """
+    Helper Functions for IK control (from task_space_actions.py of IsaacLab).
+    """
 
-    ################################# For IK
-    #  From task_space_actions.py
     @property
     def jacobian_w(self) -> torch.Tensor:
         return self._robot.root_physx_view.get_jacobians()[:, self._jacobi_body_idx, :, :]

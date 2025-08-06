@@ -2,14 +2,12 @@
 # from meshpy.tet import MeshInfo, build, Options
 from isaacsim.util.debug_draw import _debug_draw
 from omni.physx.scripts import deformableUtils
-from pxr import Gf, Sdf, Usd, UsdGeom, UsdPhysics
+from pxr import Sdf, Usd, UsdGeom
 
 draw = _debug_draw.acquire_debug_draw_interface()
 
 import numpy as np
 import random
-from collections.abc import MutableMapping
-from numpy.linalg import norm
 
 import wildmeshing as wm
 
@@ -138,7 +136,7 @@ class MeshGenerator:
         # tet_points = mesh.vertices
         # tet_indices = mesh.voxels
 
-        #! Wildmeshing
+        # use Wildmeshing
         # reference: https://github.com/wildmeshing/wildmeshing-python/blob/master/wildmeshing/runners.py
         self.tetrahedralizer = wm.Tetrahedralizer(
             stop_quality=self.cfg["stop_quality"],  # Specify max AMIPS energy for stopping mesh optimization"
@@ -228,7 +226,7 @@ class MeshGenerator:
         triangles = np.array(triangles, dtype=np.uint32).reshape(-1, 3)
         points = np.array(points, dtype=np.float64)
 
-        #! Pymesh
+        # use Pymesh
         # mesh = pymesh.form_mesh(points, triangles)
         # print("input tri mesh")
         # print(f"#vertices {mesh.num_vertices}, #faces {mesh.num_faces}")
@@ -239,7 +237,7 @@ class MeshGenerator:
         # # # mesh, info = pymesh.remove_isolated_vertices(mesh)
         # # # mesh, info = pymesh.remove_degenerated_triangles(mesh, num_iterations=5)
 
-        # #mesh = self.fix_mesh(mesh, detail="very low") # doesnt work well, idk why... Maybe input mesh is not good enough
+        # #mesh = self.fix_mesh(mesh, detail="very low") # doesn't work well, idk why... Maybe input mesh is not good enough
         # # print("tri mesh after cleanup: ")
         # # print(f"#vertices {mesh.num_vertices}, #faces {mesh.num_faces}")
 

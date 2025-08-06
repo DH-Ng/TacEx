@@ -1,8 +1,4 @@
-import torch
-from dataclasses import MISSING, dataclass
-from typing import TYPE_CHECKING, Any, Dict, List, Sequence, Tuple, Union
-
-from isaaclab.utils import class_to_dict, configclass, to_camel_case
+from isaaclab.utils import configclass
 
 """Configuration for a tactile RGB simulation with Taxim."""
 

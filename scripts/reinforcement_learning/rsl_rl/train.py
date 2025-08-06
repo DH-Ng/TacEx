@@ -15,7 +15,6 @@ from isaaclab.app import AppLauncher
 # local imports
 import cli_args  # isort: skip
 
-
 # add argparse arguments
 parser = argparse.ArgumentParser(description="Train an RL agent with RSL-RL.")
 parser.add_argument("--video", action="store_true", default=False, help="Record videos during training.")
@@ -49,8 +48,6 @@ import os
 import torch
 from datetime import datetime
 
-# Import extensions to set up environment tasks
-import tacex_tasks  # noqa: F401
 from rsl_rl.runners import OnPolicyRunner
 
 from isaaclab.envs import (
@@ -65,6 +62,9 @@ from isaaclab.utils.io import dump_pickle, dump_yaml
 from isaaclab_rl.rsl_rl import RslRlOnPolicyRunnerCfg, RslRlVecEnvWrapper
 from isaaclab_tasks.utils import get_checkpoint_path
 from isaaclab_tasks.utils.hydra import hydra_task_config
+
+# Import extensions to set up environment tasks
+import tacex_tasks  # noqa: F401
 
 torch.backends.cuda.matmul.allow_tf32 = True
 torch.backends.cudnn.allow_tf32 = True

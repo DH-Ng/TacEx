@@ -21,5 +21,5 @@ TACEX_ASSETS_METADATA = toml.load(os.path.join(TACEX_ASSETS_EXT_DIR, "config", "
 # Configure the module-level variables
 __version__ = TACEX_ASSETS_METADATA["package"]["version"]
 
-from .robots import *
-from .sensors import *
+from .robots import *  # noqa: F403
+from .sensors import *  # noqa: F403

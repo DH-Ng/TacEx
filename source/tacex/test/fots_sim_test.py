@@ -1,8 +1,3 @@
-# Copyright (c) 2022-2024, The Isaac Lab Project Developers.
-# All rights reserved.
-#
-# SPDX-License-Identifier: BSD-3-Clause
-
 from __future__ import annotations
 
 import argparse
@@ -34,7 +29,6 @@ simulation_app = app_launcher.app
 import datetime
 import json
 import numpy as np
-import platform
 import psutil
 import time
 import torch
@@ -43,50 +37,35 @@ from pathlib import Path
 
 import carb
 import pynvml
-from isaacsim.core.utils.stage import get_current_stage
-from isaacsim.core.utils.torch.transformations import tf_combine, tf_inverse, tf_vector
-from pxr import UsdGeom
-from tacex_assets import TACEX_ASSETS_DATA_DIR
-from tacex_assets.robots.franka.franka_gsmini_single_adapter_rigid import (
-    FRANKA_PANDA_ARM_GSMINI_SINGLE_ADAPTER_HIGH_PD_CFG,
-)
-from tacex_assets.sensors.gelsight_mini.gelsight_mini_cfg import GelSightMiniCfg
 
 import isaaclab.sim as sim_utils
-import isaaclab.utils.math as lab_math
 import isaaclab.utils.math as math_utils
-from isaaclab.actuators.actuator_cfg import ImplicitActuatorCfg
-from isaaclab.assets import Articulation, ArticulationCfg, AssetBase, AssetBaseCfg, RigidObject, RigidObjectCfg
+from isaaclab.assets import Articulation, ArticulationCfg, AssetBaseCfg, RigidObject, RigidObjectCfg
 from isaaclab.controllers.differential_ik import DifferentialIKController
 from isaaclab.controllers.differential_ik_cfg import DifferentialIKControllerCfg
 from isaaclab.envs import DirectRLEnv, DirectRLEnvCfg, ViewerCfg
 from isaaclab.envs.ui import BaseEnvWindow
-from isaaclab.markers import VisualizationMarkers
 from isaaclab.markers.config import FRAME_MARKER_CFG
 from isaaclab.scene import InteractiveSceneCfg
 from isaaclab.sensors import FrameTransformer, FrameTransformerCfg, OffsetCfg
 from isaaclab.sim import PhysxCfg, SimulationCfg
 from isaaclab.sim.schemas.schemas_cfg import RigidBodyPropertiesCfg
 from isaaclab.utils import configclass
-from isaaclab.utils.assets import ISAAC_NUCLEUS_DIR
 from isaaclab.utils.math import (
-    combine_frame_transforms,
-    euler_xyz_from_quat,
     sample_uniform,
-    subtract_frame_transforms,
-    wrap_to_pi,
 )
 
 from tacex import GelSightSensor
 from tacex.simulation_approaches.fots import FOTSMarkerSimulatorCfg
-from tacex.simulation_approaches.gpu_taxim import TaximSimulatorCfg
+
+from tacex_assets import TACEX_ASSETS_DATA_DIR
+from tacex_assets.robots.franka.franka_gsmini_single_rigid import (
+    FRANKA_PANDA_ARM_SINGLE_GSMINI_HIGH_PD_RIGID_CFG,
+)
+from tacex_assets.sensors.gelsight_mini.gelsight_mini_cfg import GelSightMiniCfg
 
 #  from isaaclab.controllers.differential_ik_cfg import DifferentialIKControllerCfg
 # from isaaclab.envs.mdp.actions.actions_cfg import DifferentialInverseKinematicsActionCfg
-
-
-from isaaclab.markers import POSITION_GOAL_MARKER_CFG  # isort: skip
-from isaaclab.markers import CUBOID_MARKER_CFG  # isort: skip
 
 
 class CustomEnvWindow(BaseEnvWindow):
@@ -111,7 +90,6 @@ class CustomEnvWindow(BaseEnvWindow):
 
 @configclass
 class BallRollingEnvCfg(DirectRLEnvCfg):
-
     # viewer settings
     viewer: ViewerCfg = ViewerCfg()
     viewer.eye = (1.9, 1.4, 0.3)
@@ -167,13 +145,13 @@ class BallRollingEnvCfg(DirectRLEnvCfg):
     # plate
     plate = AssetBaseCfg(
         prim_path="/World/envs/env_.*/plate",
-        init_state=AssetBaseCfg.InitialStateCfg(pos=[0.5, 0, 0]),
+        init_state=AssetBaseCfg.InitialStateCfg(pos=(0.5, 0, 0)),
         spawn=sim_utils.UsdFileCfg(usd_path=f"{TACEX_ASSETS_DATA_DIR}/Props/plate.usd"),
     )
 
     ball = RigidObjectCfg(
         prim_path="/World/envs/env_.*/ball",
-        init_state=RigidObjectCfg.InitialStateCfg(pos=[0.5, 0.0, 0.015]),
+        init_state=RigidObjectCfg.InitialStateCfg(pos=(0.5, 0.0, 0.015)),
         spawn=sim_utils.UsdFileCfg(
             usd_path=f"{TACEX_ASSETS_DATA_DIR}/Props/ball_wood.usd",
             # scale=(0.8, 0.8, 0.8),
@@ -189,7 +167,7 @@ class BallRollingEnvCfg(DirectRLEnvCfg):
         ),
     )
 
-    robot: ArticulationCfg = FRANKA_PANDA_ARM_GSMINI_SINGLE_ADAPTER_HIGH_PD_CFG.replace(
+    robot: ArticulationCfg = FRANKA_PANDA_ARM_SINGLE_GSMINI_HIGH_PD_RIGID_CFG.replace(
         prim_path="/World/envs/env_.*/Robot",
         init_state=ArticulationCfg.InitialStateCfg(
             joint_pos={
@@ -270,7 +248,7 @@ class BallRollingEnv(DirectRLEnv):
     def __init__(self, cfg: BallRollingEnvCfg, render_mode: str | None = None, **kwargs):
         super().__init__(cfg, render_mode, **kwargs)
 
-        #### Stuff for IK ##################################################
+        # --- for IK ---
         # create the differential IK controller
         self._ik_controller = DifferentialIKController(
             cfg=self.cfg.ik_controller_cfg, num_envs=self.num_envs, device=self.device
@@ -289,7 +267,7 @@ class BallRollingEnv(DirectRLEnv):
         # ee offset w.r.t panda hand -> based on the asset
         self._offset_pos = torch.tensor([0.0, 0.0, 0.131], device=self.device).repeat(self.num_envs, 1)
         self._offset_rot = torch.tensor([1.0, 0.0, 0.0, 0.0], device=self.device).repeat(self.num_envs, 1)
-        ####################################################################
+        # ---
 
         # create buffer to store actions (= ik_commands)
         self.ik_commands = torch.zeros((self.num_envs, self._ik_controller.action_dim), device=self.device)
@@ -310,7 +288,6 @@ class BallRollingEnv(DirectRLEnv):
         forward = torch.tensor([gel_length, 0, z_offset], device=self.device)
         left = torch.tensor([0, gel_width / 2, z_offset], device=self.device)
         right = torch.tensor([0, -gel_width, z_offset], device=self.device)
-        pose_for_reset = torch.tensor([0, 0, ball_radius + 4 * gel_height], device=self.device)
 
         self.pattern_offsets = [
             above_ball,  # first, place ee above ball
@@ -328,7 +305,6 @@ class BallRollingEnv(DirectRLEnv):
             left,  # move ee to the left
             right,
             center,
-            # pose_for_reset # move ee over ball again, to prevent that the ball gets thrown around when the scene is resetted (not sure why this happens tho, I think cause the ball spawns directly where the ee is)
         ]
         # Track the given command
         self.current_goal_idx = 0
@@ -394,7 +370,7 @@ class BallRollingEnv(DirectRLEnv):
         # plate
         plate = RigidObjectCfg(
             prim_path="/World/envs/env_.*/plate",
-            init_state=RigidObjectCfg.InitialStateCfg(pos=[0.5, 0, 0]),
+            init_state=RigidObjectCfg.InitialStateCfg(pos=(0.5, 0, 0)),
             spawn=sim_utils.UsdFileCfg(
                 usd_path=f"{TACEX_ASSETS_DATA_DIR}/Props/plate.usd",
                 rigid_props=RigidBodyPropertiesCfg(
@@ -496,12 +472,10 @@ class BallRollingEnv(DirectRLEnv):
     def _get_observations(self) -> dict:
         pass
 
-    ####
-    ## Helper Functions
-    ####
+    """
+    Helper Functions for IK control (from task_space_actions.py of IsaacLab).
+    """
 
-    ################################# For IK
-    #  From task_space_actions.py
     @property
     def jacobian_w(self) -> torch.Tensor:
         return self._robot.root_physx_view.get_jacobians()[:, self._jacobi_body_idx, :, :]
@@ -613,7 +587,7 @@ def run_simulator(env: BallRollingEnv):
         for data_type in env.cfg.gsmini.data_types:
             env.gsmini._prim_view.prims[0].GetAttribute(f"debug_{data_type}").Set(True)
 
-    #! for time measurements
+    # for time measurements
     timestamp = f"{datetime.datetime.now():%Y-%m-%d-%H_%M_%S}"
     output_dir = Path(__file__).parent.resolve()
     file_name = str(output_dir) + f"/envs_{env.num_envs}_{timestamp}.txt"
@@ -645,9 +619,13 @@ def run_simulator(env: BallRollingEnv):
 
             if len(frame_times_physics) != 0:
                 print("Current total amount of 'in-contact' frames per env: ", len(frame_times_physics))
-                print(f"Total sim time currently: {time.time()-total_sim_time:8.4f}ms")
-                print(f"Avg physics_sim time per env:    {np.mean(np.array(frame_times_physics)/env.num_envs):8.4f}ms")
-                print(f"Avg tactile_sim time per env:    {np.mean(np.array(frame_times_tactile)/env.num_envs):8.4f}ms")
+                print(f"Total sim time currently: {time.time() - total_sim_time:8.4f}ms")
+                print(
+                    f"Avg physics_sim time per env:    {np.mean(np.array(frame_times_physics) / env.num_envs):8.4f}ms"
+                )
+                print(
+                    f"Avg tactile_sim time per env:    {np.mean(np.array(frame_times_tactile) / env.num_envs):8.4f}ms"
+                )
                 print(
                     f"| CPU:{system_utilization_analytics[0]}% | "
                     f"RAM:{system_utilization_analytics[1]}% | "
@@ -656,8 +634,7 @@ def run_simulator(env: BallRollingEnv):
                 )
                 print("")
 
-                # #! write down the average simulation times
-                # todo make code more clean by using dictionaries to collect information and then just dumpt them into txt
+                # write down the average simulation times
                 if current_num_resets == save_after_num_resets:
                     print("*" * 15)
                     print("Writing performance data into ", file_name)
@@ -666,12 +643,6 @@ def run_simulator(env: BallRollingEnv):
                         f.write("Sensor Config: \n")
                         f.write(json.dumps(env.cfg.gsmini.to_dict(), indent=2))
                         f.write("\n")
-                        # f.write("CPU Info: \n")
-                        # f.write(f"Name: {platform.processor()} \n")
-                        # f.write(f"Physical cores: {psutil.cpu_count(logical=False)} \n")
-                        # f.write(f"Total cores: {psutil.cpu_count(logical=True)} \n")
-                        # f.write("\n")
-                        # currently only works with one gpu -> #todo add an for loop, for multiple
                         f.write("GPU Info: \n")
                         f.write(f"Name: {pynvml.nvmlDeviceGetName(pynvml.nvmlDeviceGetHandleByIndex(0))} \n")
                         f.write(f"Driver: {pynvml.nvmlSystemGetDriverVersion()} \n")
@@ -682,14 +653,14 @@ def run_simulator(env: BallRollingEnv):
                             f"Total amount of 'in-contact' frames per env (ran pattern {current_num_resets} times):"
                             f" {len(frame_times_physics)}\n"
                         )
-                        f.write(f"Total sim time: {time.time()-total_sim_time:8.4f}ms \n")
+                        f.write(f"Total sim time: {time.time() - total_sim_time:8.4f}ms \n")
                         f.write(
                             "Avg physics_sim time for one frame per env:   "
-                            f" {np.mean(np.array(frame_times_physics)/env.num_envs):8.4f}ms \n"
+                            f" {np.mean(np.array(frame_times_physics) / env.num_envs):8.4f}ms \n"
                         )
                         f.write(
                             "Avg tactile_sim time for one frame per env:   "
-                            f" {np.mean(np.array(frame_times_tactile)/env.num_envs):8.4f}ms \n"
+                            f" {np.mean(np.array(frame_times_tactile) / env.num_envs):8.4f}ms \n"
                         )
                         f.write("\n")
                         f.write(
@@ -715,14 +686,14 @@ def run_simulator(env: BallRollingEnv):
         # update isaac buffers() -> also updates sensors, if lazy_sensor_update is false
         env.scene.update(dt=env.physics_dt)
         physics_end = time.time()
-        ###
+        #
 
-        ### update sensors
+        # update sensors
         tactile_sim_start = time.time()
         env.gsmini.update(dt=env.physics_dt, force_recompute=True)
         # tactile_rgb = env.gsmini.data.output["tactile_rgb"]
         tactile_sim_end = time.time()
-        ###
+        #
 
         # - add frame times, if sensor was in contact
         # todo currently assumed that every env was in contact. Need to filter out the envs where no contact
@@ -730,21 +701,6 @@ def run_simulator(env: BallRollingEnv):
         if contact_idx.shape[0] != 0:
             frame_times_physics.append(1000 * (physics_end - physics_start))
             frame_times_tactile.append(1000 * (tactile_sim_end - tactile_sim_start))
-
-        # print("Current total amount of 'in-contact' frames per env: ", len(frame_times_physics))
-        # print("Total sim time currently: {:8.4f}ms".format(time.time()-total_sim_time))
-        # print("Avg physics_sim time per env:    {:8.4f}ms".format(np.mean(np.array(frame_times_physics)/env.num_envs)))
-        # print("Avg tactile_sim time per env:    {:8.4f}ms".format(np.mean(np.array(frame_times_tactile)/env.num_envs)))
-
-        # system_utilization_analytics = _get_utilization_percentages(reset=False)
-        # print(
-        #     f"| CPU:{system_utilization_analytics[0]}% | "
-        #     f"RAM:{system_utilization_analytics[1]}% | "
-        #     f"GPU Compute:{system_utilization_analytics[2]}% | "
-        #     f"GPU Memory: {system_utilization_analytics[3]:.2f}% |"
-        # )
-        # print("")
-
     env.close()
 
     pynvml.nvmlShutdown()
@@ -776,5 +732,5 @@ if __name__ == "__main__":
         carb.log_error(traceback.format_exc())
         raise
     finally:
-        # close sim appy
+        # close sim apply
         simulation_app.close()

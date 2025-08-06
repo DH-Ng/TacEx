@@ -5,18 +5,12 @@
 
 from __future__ import annotations
 
-import math
 import torch
 
-from isaacsim.core.utils.stage import get_current_stage
-from isaacsim.core.utils.torch.transformations import tf_combine, tf_inverse, tf_vector
-from pxr import UsdGeom
-
 import isaaclab.sim as sim_utils
-import isaaclab.utils.math as lab_math
 import isaaclab.utils.math as math_utils
 from isaaclab.actuators.actuator_cfg import ImplicitActuatorCfg
-from isaaclab.assets import Articulation, ArticulationCfg, AssetBase, AssetBaseCfg, RigidObject, RigidObjectCfg
+from isaaclab.assets import Articulation, ArticulationCfg, AssetBaseCfg, RigidObject, RigidObjectCfg
 from isaaclab.controllers.differential_ik import DifferentialIKController
 from isaaclab.controllers.differential_ik_cfg import DifferentialIKControllerCfg
 from isaaclab.envs import DirectRLEnv, DirectRLEnvCfg, ViewerCfg
@@ -29,20 +23,15 @@ from isaaclab.sensors.frame_transformer.frame_transformer_cfg import OffsetCfg
 from isaaclab.sim import PhysxCfg, SimulationCfg
 from isaaclab.sim.schemas.schemas_cfg import RigidBodyPropertiesCfg
 from isaaclab.utils import configclass
-from isaaclab.utils.assets import ISAAC_NUCLEUS_DIR
 from isaaclab.utils.math import (
-    combine_frame_transforms,
-    euler_xyz_from_quat,
     sample_uniform,
     subtract_frame_transforms,
-    wrap_to_pi,
 )
 
 #  from isaaclab.controllers.differential_ik_cfg import DifferentialIKControllerCfg
 # from isaaclab.envs.mdp.actions.actions_cfg import DifferentialInverseKinematicsActionCfg
 
 
-from isaaclab.markers import POSITION_GOAL_MARKER_CFG  # isort: skip
 from isaaclab.markers import CUBOID_MARKER_CFG  # isort: skip
 
 
@@ -68,7 +57,6 @@ class CustomEnvWindow(BaseEnvWindow):
 
 @configclass
 class BallRollingEnvCfg(DirectRLEnvCfg):
-
     # viewer settings
     viewer: ViewerCfg = ViewerCfg()
     viewer.eye = (1.5, 1, 0.5)
@@ -185,7 +173,7 @@ class BallRollingEnvCfg(DirectRLEnvCfg):
     success_reward = {
         "weight": 10,
         "threshold": 0.0025,
-    }  # we count it as a sucess when dist obj <-> goal is less than the threshold
+    }  # we count it as a success when dist obj <-> goal is less than the threshold
     height_penalty = {
         "weight": -1,
         "min_height": 0.0085,
@@ -243,7 +231,7 @@ class BallRollingNoRotEnv(DirectRLEnv):
         # make height of goal pos fixed
         self._desired_pos_w[:, 2] = 0.00125
 
-        #### Stuff for IK ##################################################
+        # --- for IK ---
         # create the differential IK controller
         self._ik_controller = DifferentialIKController(
             cfg=self.cfg.ik_controller_cfg, num_envs=self.num_envs, device=self.device
@@ -262,7 +250,7 @@ class BallRollingNoRotEnv(DirectRLEnv):
         # ee offset w.r.t panda hand -> based on the asset
         self._offset_pos = torch.tensor([0.0, 0.0, 0.131], device=self.device).repeat(self.num_envs, 1)
         self._offset_rot = torch.tensor([1.0, 0.0, 0.0, 0.0], device=self.device).repeat(self.num_envs, 1)
-        ####################################################################
+        # ---
 
         # create auxiliary variables for computing applied action, observations and rewards
         self.processed_actions = torch.zeros((self.num_envs, self._ik_controller.action_dim), device=self.device)
@@ -331,7 +319,7 @@ class BallRollingNoRotEnv(DirectRLEnv):
         # plate
         plate = RigidObjectCfg(
             prim_path="/World/envs/env_.*/plate",
-            init_state=RigidObjectCfg.InitialStateCfg(pos=[0.5, 0, 0]),
+            init_state=RigidObjectCfg.InitialStateCfg(pos=(0.5, 0, 0)),
             spawn=sim_utils.UsdFileCfg(
                 usd_path="/workspace/isaaclab/data_storage/TacEx/examples/assets/plate.usd",
                 rigid_props=RigidBodyPropertiesCfg(
@@ -357,7 +345,7 @@ class BallRollingNoRotEnv(DirectRLEnv):
     def _pre_physics_step(self, actions: torch.Tensor):
         self.prev_actions[:] = self.actions
         self.actions[:] = actions.clamp(-1, 1)
-        #! preprocess the action and turn it into IK action
+        # preprocess the action and turn it into IK action
         self.processed_actions[:, :] = self.actions
 
         # obtain ee positions and orientation w.r.t root (=base) frame
@@ -432,7 +420,7 @@ class BallRollingNoRotEnv(DirectRLEnv):
             + self.cfg.tracking_reward["v"] * torch.log(d + self.cfg.tracking_reward["alpha"])
             - 1
         )
-        # only apply when ee is at object (with this our tracking goal always needs to be positive, otherwise reaching part wont work anymore)
+        # only apply when ee is at object (with this our tracking goal always needs to be positive, otherwise reaching part will not work anymore)
         tracking_goal = (object_ee_distance < self.cfg.tracking_reward["minimal_distance"]) * tracking_goal
 
         success_reward = (obj_goal_distance < self.cfg.success_reward["threshold"]) * self.cfg.success_reward["weight"]
@@ -444,7 +432,7 @@ class BallRollingNoRotEnv(DirectRLEnv):
 
         # # penalize when ee orient is to big
         # ee_frame_orient = euler_xyz_from_quat(self._ee_frame.data.target_quat_source[..., 0, :])
-        # x = wrap_to_pi(ee_frame_orient[0]-math.pi) # panda hand asset has rotation from (180,0,-45) -> we substract 180 for defining the rotation limits
+        # x = wrap_to_pi(ee_frame_orient[0]-math.pi) # panda hand asset has rotation from (180,0,-45) -> we subtract 180 for defining the rotation limits
         # y = wrap_to_pi(ee_frame_orient[1])
         # orient_penalty = (
         #     (torch.abs(x) > math.pi/8)
@@ -565,12 +553,10 @@ class BallRollingNoRotEnv(DirectRLEnv):
         # self.gsmini.update_gui_windows()
         return {"policy": obs}
 
-    ####
-    ## Helper Functions
-    ####
+    """
+    Helper Functions for IK control (from task_space_actions.py of IsaacLab).
+    """
 
-    ################################# For IK
-    #  From task_space_actions.py
     @property
     def jacobian_w(self) -> torch.Tensor:
         return self._robot.root_physx_view.get_jacobians()[:, self._jacobi_body_idx, :, :]

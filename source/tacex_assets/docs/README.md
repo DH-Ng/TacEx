@@ -14,7 +14,7 @@ The directories `robots` and `sensors` contain python files with the configurati
 The `data` directory contains the USD models of the assets.
 The directory structure follows the recommended structure (kinda) and is as follows:
 - `Robots/<Company-Name>/<Robot-Name>/<Sensor-Type>/<Robot-Type>`: The USD files should be inside `<Robot-Type>` directory with the name of the robot. E.g. `Robots/Franka/GelSight_Mini/Gripper` contains USD files for Franka Panda arms with a gripper as endeffector and GelSight Mini's attached to it (here we omitted the robot name for now).
->I know, thats a lot of subdir's, but I hope this makes stuff structured. Ofc happy for improvement suggestion :D
+>I know, that are a lot of subdir's, but I hope this makes stuff structured. Ofc happy to take improvement suggestions!
 
 - `Props/<Prop-Type>/<Prop-Name>`: The USD files should be inside `<Prop-Name>` directory with the name of the prop. This includes mounts, objects and markers.
 

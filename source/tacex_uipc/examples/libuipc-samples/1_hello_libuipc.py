@@ -26,13 +26,14 @@ import numpy as np
 import omni.usd
 import uipc
 from pxr import UsdGeom
-from tacex_uipc import UipcSim, UipcSimCfg
 from uipc.constitution import AffineBodyConstitution
 from uipc.geometry import flip_inward_triangles, label_surface, label_triangle_orient, tetmesh
 from uipc.unit import GPa, MPa
 
 import isaaclab.sim as sim_utils
 from isaaclab.utils.timer import Timer
+
+from tacex_uipc import UipcSim, UipcSimCfg
 
 
 def setup_base_scene(sim: sim_utils.SimulationContext):
@@ -59,7 +60,6 @@ def setup_base_scene(sim: sim_utils.SimulationContext):
 
 
 def setup_libuipc_scene(scene):
-
     # create constitution and contact model
     abd = AffineBodyConstitution()
 
@@ -144,7 +144,6 @@ def main():
 
     # Simulate physics
     while simulation_app.is_running():
-
         # perform Isaac rendering
         sim.render()
 

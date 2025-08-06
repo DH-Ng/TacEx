@@ -13,20 +13,18 @@
 # https://github.com/chuanyune/ManiSkill-ViTac2025/blob/a3d7df54bca9a2e57f34b37be3a3df36dc218915/Track_1/envs/tactile_sensor_sapienipc.py
 ##
 
-import copy
 import math
 import numpy as np
 import torch
-from typing import Tuple
 
-import cv2
 import usdrt
 import usdrt.UsdGeom
 from sklearn.neighbors import NearestNeighbors
-from tacex_uipc.objects import UipcObject
-from tacex_uipc.sim import UipcSim
 
 import isaaclab.utils.math as math_utils
+
+from tacex_uipc.objects import UipcObject
+from tacex_uipc.sim import UipcSim
 
 from .utils.geometry import in_hull
 
@@ -34,7 +32,10 @@ try:
     from isaacsim.util.debug_draw import _debug_draw
 
     draw = _debug_draw.acquire_debug_draw_interface()
-except:
+except ImportError:
+    import warnings
+
+    warnings.warn("_debug_draw failed to import", ImportWarning)
     draw = None
 
 
@@ -45,15 +46,15 @@ class VisionTactileSensorUIPC:
         camera,
         tactile_img_width=320,
         tactile_img_height=240,
-        marker_interval_range: Tuple[float, float] = (2.0625, 2.0625),
+        marker_interval_range: tuple[float, float] = (2.0625, 2.0625),
         marker_rotation_range: float = 0.0,
-        marker_translation_range: Tuple[float, float] = (0.0, 0.0),
-        marker_pos_shift_range: Tuple[float, float] = (0.0, 0.0),
+        marker_translation_range: tuple[float, float] = (0.0, 0.0),
+        marker_pos_shift_range: tuple[float, float] = (0.0, 0.0),
         marker_random_noise: float = 0.0,
         marker_lose_tracking_probability: float = 0.0,
         normalize: bool = False,
         num_markers: int = 128,
-        camera_params: Tuple[float, float, float, float, float] = (
+        camera_params: tuple[float, float, float, float, float] = (
             340,
             325,
             160,
@@ -122,7 +123,7 @@ class VisionTactileSensorUIPC:
         surf_v = self.gelpad_obj._data.surf_nodal_pos_w
         return surf_v
 
-    # todo find out whats wrong with this method -> frame coor. sys. seems to be wrong
+    # todo find out what's wrong with this method -> frame coor. sys. seems to be wrong
     def transform_camera_to_world_frame(self, input_vertices):
         self.camera._update_poses(self.camera._ALL_INDICES)
         # math_utils.convert_camera_frame_orientation_convention
@@ -236,12 +237,10 @@ class VisionTactileSensorUIPC:
         marker_xy[:, 0] += marker_pos_shift_x
         marker_xy[:, 1] += marker_pos_shift_y
 
-        rot_mat = np.array(
-            [
-                [math.cos(marker_rotation_angle), -math.sin(marker_rotation_angle)],
-                [math.sin(marker_rotation_angle), math.cos(marker_rotation_angle)],
-            ]
-        )
+        rot_mat = np.array([
+            [math.cos(marker_rotation_angle), -math.sin(marker_rotation_angle)],
+            [math.sin(marker_rotation_angle), math.cos(marker_rotation_angle)],
+        ])
 
         marker_rotated_xy = marker_xy @ rot_mat.T
 
@@ -380,14 +379,12 @@ class VisionTactileSensorUIPC:
 
         init_marker_uv = self.gen_marker_uv(init_marker_pts)
         curr_marker_uv = self.gen_marker_uv(curr_marker_pts)
-        marker_mask = np.logical_and.reduce(
-            [
-                init_marker_uv[:, 0] > 5,
-                init_marker_uv[:, 0] < self.tactile_img_height,
-                init_marker_uv[:, 1] > 5,
-                init_marker_uv[:, 1] < self.tactile_img_width,
-            ]
-        )
+        marker_mask = np.logical_and.reduce([
+            init_marker_uv[:, 0] > 5,
+            init_marker_uv[:, 0] < self.tactile_img_height,
+            init_marker_uv[:, 1] > 5,
+            init_marker_uv[:, 1] < self.tactile_img_width,
+        ])
         marker_flow = np.stack([init_marker_uv, curr_marker_uv], axis=0)
         marker_flow = marker_flow[:, marker_mask]
 

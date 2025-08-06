@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import contextlib
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal, overload
 
@@ -69,7 +70,7 @@ def Taxim(
     calib_folder: Path = ...,
     params: dict[str, dict[str, Any]] | None = ...,
     backend: Literal["auto"] = ...,
-) -> Union[TaximTorch, TaximJax]: ...
+) -> TaximTorch | TaximJax: ...
 
 
 def Taxim(
@@ -77,7 +78,7 @@ def Taxim(
     params: dict[str, dict[str, Any]] | None = None,
     backend: Literal["torch", "jax", "auto"] = "auto",
     device: str | None = None,
-) -> Union[TaximTorch, TaximJax]:
+) -> TaximTorch | TaximJax:
     """
     Create a Taxim simulator.
 
@@ -94,10 +95,8 @@ def Taxim(
     elif backend == "jax":
         return _mk_taxim_jax(calib_folder, params, device)
     elif backend == "auto":
-        try:
+        with contextlib.suppress(ImportError):
             return _mk_taxim_jax(calib_folder, params, device)
-        except ImportError:
-            pass
         try:
             return _mk_taxim_torch(calib_folder, params, device)
         except ImportError:

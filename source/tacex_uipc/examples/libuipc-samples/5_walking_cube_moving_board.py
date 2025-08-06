@@ -31,16 +31,16 @@ import numpy as np
 import pathlib
 
 import omni.usd
-import usdrt
-from pxr import Gf, Sdf, Usd, UsdGeom
-from tacex_uipc import UipcSim, UipcSimCfg
-from uipc import Logger, Matrix4x4, Transform, Vector2, Vector3, builtin, view
+from pxr import UsdGeom
+from uipc import Matrix4x4, Transform, Vector2, Vector3, builtin, view
 from uipc.constitution import AffineBodyConstitution, RotatingMotor, SoftTransformConstraint
-from uipc.core import Animation, Engine, Scene, World
-from uipc.geometry import SimplicialComplex, SimplicialComplexIO, SimplicialComplexSlot, ground, label_surface
+from uipc.core import Animation
+from uipc.geometry import SimplicialComplex, SimplicialComplexIO, SimplicialComplexSlot, label_surface
 
 import isaaclab.sim as sim_utils
 from isaaclab.utils.timer import Timer
+
+from tacex_uipc import UipcSim, UipcSimCfg
 
 
 def setup_base_scene(sim: sim_utils.SimulationContext):
@@ -203,7 +203,6 @@ def main():
 
     # Simulate physics
     while simulation_app.is_running():
-
         # perform Isaac rendering
         sim.render()
 

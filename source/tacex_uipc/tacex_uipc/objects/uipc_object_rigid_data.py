@@ -4,19 +4,17 @@ import torch
 import weakref
 from typing import TYPE_CHECKING
 
-import omni.physics.tensors.impl.api as physx
-
-import isaaclab.utils.math as math_utils
 from isaaclab.utils.buffers import TimestampedBuffer
 
 try:
     from isaacsim.util.debug_draw import _debug_draw
 
     draw = _debug_draw.acquire_debug_draw_interface()
-except:
-    draw = None
+except ImportError:
+    import warnings
 
-from uipc import builtin
+    warnings.warn("_debug_draw failed to import", ImportWarning)
+    draw = None
 
 if TYPE_CHECKING:
     from tacex_uipc.sim import UipcSim
@@ -165,13 +163,13 @@ class UipcObjectRigidData:
             self._uipc_object.obj_id
         )  # todo instead of finding obj, lets just save ref to geo_slot in uipc_object
 
-        # transformation is w.r.t. to inital pose
+        # transformation is w.r.t. to initial pose
         # trans = geo_slot.geometry().instances().find(builtin.transform).view()
         # trans = torch.tensor(trans, device=self.device).reshape(1, 4, 4)
         # root_pos_w, root_orient_w = math_utils.unmake_pose(trans)
         # print("trans ", trans)
 
-        mean_pos = torch.tensor(geo_slot.geometry().positions().view().copy().reshape(-1, 3), device=self.device)
+        # mean_pos = torch.tensor(geo_slot.geometry().positions().view().copy().reshape(-1, 3), device=self.device)
 
         root_pos_w = self.surf_nodal_pos_w.mean(dim=0)
         return root_pos_w.reshape(1, 3)  # todo need to adjust once we go multi env

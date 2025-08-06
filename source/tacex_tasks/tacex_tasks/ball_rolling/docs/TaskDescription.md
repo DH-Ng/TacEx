@@ -2,7 +2,7 @@
 **Task**: The robot should move/roll a ball to a goal position.
 
 As a robot we use a Franka panda arm with the Single Adapter and a GelSight Mini as endeffector.
-The environemnts do not use tactile readings, therefore tactile simulation is omitted. This increases the simulation performance by a lot.
+The environments do not use tactile readings, therefore tactile simulation is omitted. This increases the simulation performance by a lot.
 Instead of tactile readings, privileged simulation data is used such as the current ball position.
 
 ## base_env
@@ -41,7 +41,7 @@ If we just use the same reward function (i.e. also with the reaching part) as th
 then **not using the IK solver is a lot better**.
 Here are some training metrics with 1024 robots:
 
-**Task Peformance**:
+**Task Performance**:
 ![task_perf](image-1.png)
 > - green = base_env after about 1.5h
 > - orange = reset_with_IK_solver after about 1.8h
@@ -59,7 +59,7 @@ and easier to tune
 A big problem with the reaching part in the reward function, is that it becomes quite difficult to tune the reward function.
 
 Some of our experiences we got while trying to make the ball rolling work:
-We found that our reward function is quite sensitve w.r.t. to its weights.
+We found that our reward function is quite sensitive w.r.t. to its weights.
 We need to find an appropriate balance between the rewards terms, which turned out be quite difficult.
 If the reaching rew is too big, the robot does not try to move the ball towards the goal. Instead it is happy enough to just be at the ball.
 If the goal-tracking rew is too big, then the reaching will not work anymore.
@@ -70,4 +70,4 @@ Otherwise it could be that the robot learns to move the ee close to the ball whi
 Imagine the scenario: robot moves around randomly -> hits the ball far away from the goal -> big negative reward -> robot: "lets not move the ball".
 > The base_env is designed in such a way where the goal-tracking rew is never negative.
 
-This environment omits the reaching term of the reward function completetly and also uses parameters for the other reward terms (especially the goal-tracking part, which can get negative now).
+This environment omits the reaching term of the reward function completely and also uses parameters for the other reward terms (especially the goal-tracking part, which can get negative now).

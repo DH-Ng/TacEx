@@ -4,7 +4,7 @@
 # SPDX-License-Identifier: BSD-3-Clause
 
 #
-# Modified version of the orignial FRANKA_PANDA_CFG of orbit
+# Modified version of the original FRANKA_PANDA_CFG of orbit
 #
 """Configuration for the Franka Emika robots.
 
@@ -15,17 +15,17 @@ The following configurations are available:
 Reference: https://github.com/frankaemika/franka_ros
 """
 
-from tacex_assets import TACEX_ASSETS_DATA_DIR
-
 import isaaclab.sim as sim_utils
 from isaaclab.actuators import ImplicitActuatorCfg
 from isaaclab.assets import ArticulationCfg
+
+from tacex_assets import TACEX_ASSETS_DATA_DIR
 
 ##
 # Configuration
 ##
 
-FRANKA_PANDA_ARM_WITH_ONE_GSMINI_CFG = ArticulationCfg(
+FRANKA_PANDA_ARM_SINGLE_GSMINI_SOFT_CFG = ArticulationCfg(
     spawn=sim_utils.UsdFileCfg(
         usd_path=f"{TACEX_ASSETS_DATA_DIR}/Robots/Franka/GelSight_Mini/Single_Adapter/physx_soft_gelpad.usd",
         activate_contact_sensors=False,
@@ -82,7 +82,7 @@ Gelpad prim name: `gelsight_mini_gelpad`
 """
 
 
-FRANKA_PANDA_ARM_GSMINI_SINGLE_ADAPTER_HIGH_PD_CFG = FRANKA_PANDA_ARM_WITH_ONE_GSMINI_CFG.copy()
+FRANKA_PANDA_ARM_SINGLE_GSMINI_HIGH_PD_SOFT_CFG = FRANKA_PANDA_ARM_SINGLE_GSMINI_SOFT_CFG.copy()
 """Configuration of Franka Emika Panda robot with stiffer PD control.
 
 This configuration is useful for task-space control using differential IK.
@@ -91,8 +91,8 @@ Sensor case prim name: `gelsight_mini_case`
 Gelpad prim name: `gelsight_mini_gelpad`
 """
 
-FRANKA_PANDA_ARM_GSMINI_SINGLE_ADAPTER_HIGH_PD_CFG.spawn.rigid_props.disable_gravity = True
-FRANKA_PANDA_ARM_GSMINI_SINGLE_ADAPTER_HIGH_PD_CFG.actuators["panda_shoulder"].stiffness = 400.0
-FRANKA_PANDA_ARM_GSMINI_SINGLE_ADAPTER_HIGH_PD_CFG.actuators["panda_shoulder"].damping = 80.0
-FRANKA_PANDA_ARM_GSMINI_SINGLE_ADAPTER_HIGH_PD_CFG.actuators["panda_forearm"].stiffness = 400.0
-FRANKA_PANDA_ARM_GSMINI_SINGLE_ADAPTER_HIGH_PD_CFG.actuators["panda_forearm"].damping = 80.0
+FRANKA_PANDA_ARM_SINGLE_GSMINI_HIGH_PD_SOFT_CFG.spawn.rigid_props.disable_gravity = True
+FRANKA_PANDA_ARM_SINGLE_GSMINI_HIGH_PD_SOFT_CFG.actuators["panda_shoulder"].stiffness = 400.0
+FRANKA_PANDA_ARM_SINGLE_GSMINI_HIGH_PD_SOFT_CFG.actuators["panda_shoulder"].damping = 80.0
+FRANKA_PANDA_ARM_SINGLE_GSMINI_HIGH_PD_SOFT_CFG.actuators["panda_forearm"].stiffness = 400.0
+FRANKA_PANDA_ARM_SINGLE_GSMINI_HIGH_PD_SOFT_CFG.actuators["panda_forearm"].damping = 80.0

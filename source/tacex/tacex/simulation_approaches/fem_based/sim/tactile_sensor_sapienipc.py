@@ -6,7 +6,6 @@ import json
 import math
 import os
 import sys
-from typing import Tuple
 
 script_path = os.path.dirname(os.path.realpath(__file__))
 track_path = os.path.abspath(os.path.join(script_path, ".."))
@@ -30,7 +29,7 @@ from sapienipc.ipc_utils.ipc_mesh import IPCTetMesh
 from sapienipc.ipc_utils.user_utils import ipc_update_render_all
 from sklearn.neighbors import NearestNeighbors
 from utils.common import generate_patch_array
-from utils.geometry import estimate_rigid_transform, in_hull, quat_product, transform_pts
+from utils.geometry import in_hull, transform_pts
 from utils.sapienipc_utils import cv2ex2pose
 
 patch_array_dict_global = generate_patch_array()
@@ -152,15 +151,15 @@ class TactileSensorSapienIPC:
 class VisionTactileSensorSapienIPC(TactileSensorSapienIPC):
     def __init__(
         self,
-        marker_interval_range: Tuple[float, float] = (2.0625, 2.0625),
+        marker_interval_range: tuple[float, float] = (2.0625, 2.0625),
         marker_rotation_range: float = 0.0,
-        marker_translation_range: Tuple[float, float] = (0.0, 0.0),
-        marker_pos_shift_range: Tuple[float, float] = (0.0, 0.0),
+        marker_translation_range: tuple[float, float] = (0.0, 0.0),
+        marker_pos_shift_range: tuple[float, float] = (0.0, 0.0),
         marker_random_noise: float = 0.0,
         marker_lose_tracking_probability: float = 0.0,
         normalize: bool = False,
         marker_flow_size: int = 128,
-        camera_params: Tuple[float, float, float, float, float] = (
+        camera_params: tuple[float, float, float, float, float] = (
             340,
             325,
             160,
@@ -306,12 +305,10 @@ class VisionTactileSensorSapienIPC(TactileSensorSapienIPC):
         marker_xy[:, 0] += marker_pos_shift_x
         marker_xy[:, 1] += marker_pos_shift_y
 
-        rot_mat = np.array(
-            [
-                [math.cos(marker_rotation_angle), -math.sin(marker_rotation_angle)],
-                [math.sin(marker_rotation_angle), math.cos(marker_rotation_angle)],
-            ]
-        )
+        rot_mat = np.array([
+            [math.cos(marker_rotation_angle), -math.sin(marker_rotation_angle)],
+            [math.sin(marker_rotation_angle), math.cos(marker_rotation_angle)],
+        ])
 
         marker_rotated_xy = marker_xy @ rot_mat.T
         return marker_rotated_xy / 1000.0
@@ -394,14 +391,12 @@ class VisionTactileSensorSapienIPC(TactileSensorSapienIPC):
 
         init_marker_uv = self.gen_marker_uv(init_marker_pts)
         curr_marker_uv = self.gen_marker_uv(curr_marker_pts)
-        marker_mask = np.logical_and.reduce(
-            [
-                init_marker_uv[:, 0] > 5,
-                init_marker_uv[:, 0] < 320,
-                init_marker_uv[:, 1] > 5,
-                init_marker_uv[:, 1] < 240,
-            ]
-        )
+        marker_mask = np.logical_and.reduce([
+            init_marker_uv[:, 0] > 5,
+            init_marker_uv[:, 0] < 320,
+            init_marker_uv[:, 1] > 5,
+            init_marker_uv[:, 1] < 240,
+        ])
         marker_flow = np.stack([init_marker_uv, curr_marker_uv], axis=0)
         marker_flow = marker_flow[:, marker_mask]
 

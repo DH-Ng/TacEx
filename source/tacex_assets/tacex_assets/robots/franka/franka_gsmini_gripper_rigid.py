@@ -4,7 +4,7 @@
 # SPDX-License-Identifier: BSD-3-Clause
 
 #
-# Modified version of the orignial FRANKA_PANDA_CFG of Isaac Lab
+# Modified version of the original FRANKA_PANDA_CFG of Isaac Lab
 #
 """Configuration for the Franka Emika robots.
 
@@ -15,19 +15,15 @@ The following configurations are available:
 Reference: https://github.com/frankaemika/franka_ros
 """
 
-from tacex_assets import TACEX_ASSETS_DATA_DIR
-
 import isaaclab.sim as sim_utils
 from isaaclab.actuators import ImplicitActuatorCfg
 from isaaclab.assets import ArticulationCfg
 
-##
-# Configuration
-##
+from tacex_assets import TACEX_ASSETS_DATA_DIR
 
 # todo find a good way to save the prim path of the sensor for the user?
 # -> currently, we need to look into the asset to figure out the prim name (in this case its /gelsight_mini_case)
-FRANKA_PANDA_ARM_GSMINI_GRIPPER_CFG = ArticulationCfg(
+FRANKA_PANDA_ARM_GSMINI_GRIPPER_RIGID_CFG = ArticulationCfg(
     spawn=sim_utils.UsdFileCfg(
         usd_path=f"{TACEX_ASSETS_DATA_DIR}/Robots/Franka/GelSight_Mini/Gripper/physx_rigid_gelpads.usd",
         activate_contact_sensors=False,
@@ -91,7 +87,7 @@ Gelpad prim names:
 """
 
 
-FRANKA_PANDA_ARM_GSMINI_GRIPPER_HIGH_PD_CFG = FRANKA_PANDA_ARM_GSMINI_GRIPPER_CFG.copy()
+FRANKA_PANDA_ARM_GSMINI_GRIPPER_HIGH_PD_RIGID_CFG = FRANKA_PANDA_ARM_GSMINI_GRIPPER_RIGID_CFG.copy()
 """Configuration of Franka Emika Panda robot with stiffer PD control.
 
 This configuration is useful for task-space control using differential IK.
@@ -104,8 +100,8 @@ Gelpad prim names:
 - `gelpad_left`
 - `gelpad_right`
 """
-FRANKA_PANDA_ARM_GSMINI_GRIPPER_HIGH_PD_CFG.spawn.rigid_props.disable_gravity = True
-FRANKA_PANDA_ARM_GSMINI_GRIPPER_HIGH_PD_CFG.actuators["panda_shoulder"].stiffness = 400.0
-FRANKA_PANDA_ARM_GSMINI_GRIPPER_HIGH_PD_CFG.actuators["panda_shoulder"].damping = 80.0
-FRANKA_PANDA_ARM_GSMINI_GRIPPER_HIGH_PD_CFG.actuators["panda_forearm"].stiffness = 400.0
-FRANKA_PANDA_ARM_GSMINI_GRIPPER_HIGH_PD_CFG.actuators["panda_forearm"].damping = 80.0
+FRANKA_PANDA_ARM_GSMINI_GRIPPER_HIGH_PD_RIGID_CFG.spawn.rigid_props.disable_gravity = True
+FRANKA_PANDA_ARM_GSMINI_GRIPPER_HIGH_PD_RIGID_CFG.actuators["panda_shoulder"].stiffness = 400.0
+FRANKA_PANDA_ARM_GSMINI_GRIPPER_HIGH_PD_RIGID_CFG.actuators["panda_shoulder"].damping = 80.0
+FRANKA_PANDA_ARM_GSMINI_GRIPPER_HIGH_PD_RIGID_CFG.actuators["panda_forearm"].stiffness = 400.0
+FRANKA_PANDA_ARM_GSMINI_GRIPPER_HIGH_PD_RIGID_CFG.actuators["panda_forearm"].damping = 80.0

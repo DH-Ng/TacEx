@@ -30,27 +30,22 @@ simulation_app = app_launcher.app
 import pathlib
 
 import isaacsim.core.utils.prims as prims_utils
-import omni
-from isaacsim.core.prims import XFormPrim
 from isaacsim.util.debug_draw import _debug_draw
 
 draw = _debug_draw.acquire_debug_draw_interface()
 
-import numpy as np
 import random
 
-import warp as wp
-from pxr import Gf, PhysxSchema, Sdf, Usd, UsdGeom, UsdPhysics, UsdShade, Vt
+from pxr import Sdf
+
+import isaaclab.sim as sim_utils
+from isaaclab.assets import AssetBaseCfg
+from isaaclab.utils.timer import Timer
+
 from tacex_uipc import UipcObject, UipcObjectCfg, UipcSim, UipcSimCfg
 from tacex_uipc.utils import TetMeshCfg
 
 # import vtk
-from uipc.core import Engine, Scene, SceneIO, World
-
-import isaaclab.sim as sim_utils
-from isaaclab.assets import AssetBaseCfg
-from isaaclab.utils.assets import ISAAC_NUCLEUS_DIR
-from isaaclab.utils.timer import Timer
 
 
 def design_scene():
@@ -164,7 +159,7 @@ def main():
             random.uniform(-1.0, 1.0),
         )
         cube_cfg = UipcObjectCfg(
-            prim_path=f"/World/Objects/Cube{i+1}",
+            prim_path=f"/World/Objects/Cube{i + 1}",
             init_state=AssetBaseCfg.InitialStateCfg(pos=pos, rot=rot),  # rot=(0.72,-0.3,0.42,-0.45)
             spawn=sim_utils.UsdFileCfg(usd_path=str(tet_cube_asset_path), scale=(0.15, 0.15, 0.15)),
             constitution_cfg=constitution_type,
@@ -185,7 +180,7 @@ def main():
     # Play the simulator
     sim.reset()
 
-    # only after Isaac Sim got resetted (= objects init), otherwise wold init is false
+    # only after Isaac Sim got reset (= objects init), otherwise wold init is false
     # because _initialize_impl() of the object is called in the sim.reset() method
     # and setup_scene() relies on objects being _intialized_impl()
     uipc_sim.setup_sim()

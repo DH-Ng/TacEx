@@ -15,15 +15,12 @@ import weakref
 from abc import abstractmethod
 from collections.abc import Sequence
 from dataclasses import MISSING
-from typing import Any, ClassVar
+from typing import Any
 
 import isaacsim.core.utils.torch as torch_utils
 import omni.kit.app
 import omni.log
 from isaacsim.core.simulation_manager import SimulationManager
-from isaacsim.core.version import get_version
-from tacex_uipc.objects import UipcObject, UipcObjectCfg
-from tacex_uipc.sim import UipcSim, UipcSimCfg
 
 from isaaclab.envs import DirectRLEnv, DirectRLEnvCfg
 from isaaclab.envs.common import VecEnvObs, VecEnvStepReturn
@@ -35,6 +32,8 @@ from isaaclab.managers import EventManager
 from isaaclab.sim import SimulationContext
 from isaaclab.utils.noise import NoiseModel
 from isaaclab.utils.timer import Timer
+
+from tacex_uipc.sim import UipcSim
 
 from .uipc_interactive_scene import UipcInteractiveScene
 
@@ -329,7 +328,7 @@ class UipcRLEnv(DirectRLEnv):
             # simulate
             self.sim.step(render=False)
 
-            # #!test
+            # Todo remove test code here
             # self.scene.update(dt=self.physics_dt) # so that our uipc_sim has the newest data
             # self.uipc_sim.step()
 

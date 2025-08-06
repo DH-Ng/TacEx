@@ -1,4 +1,12 @@
 repos:
+  # - repo: https://github.com/astral-sh/ruff-pre-commit
+  #   rev: v0.8.3
+  #   hooks:
+  #     - id: ruff
+  #       args:
+  #       - "--fix"
+  #       - "--show-fixes"
+  #     - id: ruff-format
   - repo: https://github.com/python/black
     rev: 25.1.0
     hooks:
@@ -48,31 +56,31 @@ repos:
         exclude: "CONTRIBUTORS.md|docs/source/setup/walkthrough/concepts_env_design.rst"
   # FIXME: Figure out why this is getting stuck under VPN.
   # - repo: https://github.com/RobertCraigie/pyright-python
-  #   rev: v1.1.315
+  #   rev: v1.1.403
   #   hooks:
-  #   - id: pyright
-  - repo: https://github.com/Lucas-C/pre-commit-hooks
-    rev: v1.5.5
-    hooks:
-      - id: insert-license
-        files: \.py$
-        args:
-          # - --remove-header    # Remove existing license headers. Useful when updating license.
-          - --license-filepath
-          - .github/LICENSE_HEADER.txt
-          - --use-current-year
-        exclude: "source/isaaclab_mimic/|scripts/imitation_learning/isaaclab_mimic/"
-  # Apache 2.0 license for mimic files
-  - repo: https://github.com/Lucas-C/pre-commit-hooks
-    rev: v1.5.5
-    hooks:
-      - id: insert-license
-        files: ^(source/isaaclab_mimic|scripts/imitation_learning/isaaclab_mimic)/.*\.py$
-        args:
-          # - --remove-header    # Remove existing license headers. Useful when updating license.
-          - --license-filepath
-          - .github/LICENSE_HEADER_MIMIC.txt
-          - --use-current-year
+  #     - id: pyright
+  # - repo: https://github.com/Lucas-C/pre-commit-hooks
+  #   rev: v1.5.5
+  #   hooks:
+  #     - id: insert-license
+  #       files: \.py$
+  #       args:
+  #         # - --remove-header    # Remove existing license headers. Useful when updating license.
+  #         - --license-filepath
+  #         - .github/LICENSE_HEADER.txt
+  #         - --use-current-year
+  #       exclude: "source/isaaclab_mimic/|scripts/imitation_learning/isaaclab_mimic/"
+  # # Apache 2.0 license for mimic files
+  # - repo: https://github.com/Lucas-C/pre-commit-hooks
+  #   rev: v1.5.5
+  #   hooks:
+  #     - id: insert-license
+  #       files: ^(source/isaaclab_mimic|scripts/imitation_learning/isaaclab_mimic)/.*\.py$
+  #       args:
+  #         # - --remove-header    # Remove existing license headers. Useful when updating license.
+  #         - --license-filepath
+  #         - .github/LICENSE_HEADER_MIMIC.txt
+  #         - --use-current-year
   - repo: https://github.com/pre-commit/pygrep-hooks
     rev: v1.10.0
     hooks:

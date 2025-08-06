@@ -21,22 +21,19 @@ args_cli = parser.parse_args()
 app_launcher = AppLauncher(args_cli)
 simulation_app = app_launcher.app
 
-import numpy as np
 import pathlib
 
 import omni.usd
-import uipc
-import usdrt
-from pxr import Gf, Sdf, Usd, UsdGeom
-from tacex_uipc.sim import UipcSim, UipcSimCfg
-from uipc import Logger, Quaternion, Transform, Vector2, Vector3, builtin, view
+from pxr import UsdGeom
+from uipc import Transform, Vector3, builtin, view
 from uipc.constitution import AffineBodyConstitution, DiscreteShellBending, ElasticModuli, NeoHookeanShell
-from uipc.core import Engine, Scene, World
-from uipc.geometry import SimplicialComplexIO, flip_inward_triangles, label_surface, label_triangle_orient, tetmesh
-from uipc.unit import GPa, MPa, kPa
+from uipc.geometry import SimplicialComplexIO, flip_inward_triangles, label_surface, label_triangle_orient
+from uipc.unit import MPa, kPa
 
 import isaaclab.sim as sim_utils
 from isaaclab.utils.timer import Timer
+
+from tacex_uipc.sim import UipcSim, UipcSimCfg
 
 
 def setup_base_scene(sim: sim_utils.SimulationContext):
@@ -134,7 +131,6 @@ def main():
 
     # Simulate physics
     while simulation_app.is_running():
-
         # perform Isaac rendering
         sim.render()
 

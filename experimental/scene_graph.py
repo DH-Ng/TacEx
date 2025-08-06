@@ -2,7 +2,7 @@ import numpy as np
 
 import omni.usd
 import warp as wp
-from usdrt import Gf, Rt, Sdf, Usd, Vt
+from usdrt import Sdf, Usd, Vt
 
 wp.init()
 

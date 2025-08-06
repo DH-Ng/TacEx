@@ -1,6 +1,2 @@
-"""
-Python module serving as a project/extension template.
-"""
-
-from .direct_uipc_rl_env import *
+from .direct_uipc_rl_env import UipcRLEnv
 from .uipc_interactive_scene import UipcInteractiveScene

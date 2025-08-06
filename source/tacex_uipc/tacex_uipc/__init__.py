@@ -1,10 +1,6 @@
-"""
-Python module serving as a project/extension template.
-"""
-
-from .envs import *
-from .objects import *
-from .sim import *
+from .envs import UipcInteractiveScene, UipcRLEnv
+from .objects import UipcObject, UipcObjectCfg, UipcObjectDeformableData, UipcObjectRigidData
+from .sim import UipcIsaacAttachments, UipcSim, UipcSimCfg
 
 # Register UI extensions.
-from .ui_extension import *
+from .ui_extension import *  # noqa: F403

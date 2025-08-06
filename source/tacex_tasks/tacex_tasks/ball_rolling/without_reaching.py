@@ -9,55 +9,39 @@ import math
 import torch
 
 import pytorch_kinematics as pk
-from isaacsim.core.utils.stage import get_current_stage
-from isaacsim.core.utils.torch.transformations import tf_combine, tf_inverse, tf_vector
-from pxr import UsdGeom
-
-# from tactile_sim import GsMiniSensorCfg, GsMiniSensor
-from tacex_assets import TACEX_ASSETS_DATA_DIR
-from tacex_assets.robots.franka.franka_gsmini_single_adapter_rigid import (
-    FRANKA_PANDA_ARM_GSMINI_SINGLE_ADAPTER_HIGH_PD_CFG,
-)
 
 import isaaclab.sim as sim_utils
-import isaaclab.utils.math as lab_math
 import isaaclab.utils.math as math_utils
-from isaaclab.actuators.actuator_cfg import ImplicitActuatorCfg
-from isaaclab.assets import Articulation, ArticulationCfg, AssetBase, AssetBaseCfg, RigidObject, RigidObjectCfg
+from isaaclab.assets import Articulation, AssetBaseCfg, RigidObject, RigidObjectCfg
 from isaaclab.controllers.differential_ik import DifferentialIKController
-from isaaclab.controllers.differential_ik_cfg import DifferentialIKControllerCfg
-from isaaclab.envs import DirectRLEnv, DirectRLEnvCfg, ViewerCfg
-from isaaclab.envs.ui import BaseEnvWindow
+from isaaclab.envs import DirectRLEnv
 from isaaclab.markers import VisualizationMarkers
 from isaaclab.markers.config import FRAME_MARKER_CFG
-from isaaclab.scene import InteractiveSceneCfg
 from isaaclab.sensors import FrameTransformer, FrameTransformerCfg
 from isaaclab.sensors.frame_transformer.frame_transformer_cfg import OffsetCfg
-from isaaclab.sim import PhysxCfg, SimulationCfg
 from isaaclab.sim.schemas.schemas_cfg import RigidBodyPropertiesCfg
 from isaaclab.utils import configclass
-from isaaclab.utils.assets import ISAAC_NUCLEUS_DIR
 from isaaclab.utils.math import (
-    combine_frame_transforms,
     euler_xyz_from_quat,
     sample_uniform,
     subtract_frame_transforms,
     wrap_to_pi,
 )
 
-from .reset_with_IK_solver import BallRollingIKResetEnv, BallRollingIKResetEnvCfg
+# from tactile_sim import GsMiniSensorCfg, GsMiniSensor
+from tacex_assets import TACEX_ASSETS_DATA_DIR
+
+from .reset_with_IK_solver import BallRollingIKResetEnvCfg
 
 #  from isaaclab.controllers.differential_ik_cfg import DifferentialIKControllerCfg
 # from isaaclab.envs.mdp.actions.actions_cfg import DifferentialInverseKinematicsActionCfg
 
 
-from isaaclab.markers import POSITION_GOAL_MARKER_CFG  # isort: skip
 from isaaclab.markers import CUBOID_MARKER_CFG  # isort: skip
 
 
 @configclass
 class BallRollingWithoutReachingEnvCfg(BallRollingIKResetEnvCfg):
-
     # MARK: reward configuration
     reaching_penalty = {"weight": -0.2}
     reaching_reward_tanh = {"std": 0.2, "weight": 0.4}
@@ -67,7 +51,7 @@ class BallRollingWithoutReachingEnvCfg(BallRollingIKResetEnvCfg):
     success_reward = {
         "weight": 10,
         "threshold": 0.005,
-    }  # 0.0025 we count it as a sucess when dist obj <-> goal is less than the threshold
+    }  # 0.0025 we count it as a success when dist obj <-> goal is less than the threshold
     height_penalty = {
         "weight": -0.1,
         "min_height": 0.008,
@@ -87,7 +71,7 @@ class BallRollingWithoutReachingEnvCfg(BallRollingIKResetEnvCfg):
 
     # env
     episode_length_s = 8.3333  # 500 timesteps
-    action_space = 5  # we use relative task_space actions: (dx, dy, dz, droll, dpitch) -> dyaw is ommitted
+    action_space = 5  # we use relative task_space actions: (dx, dy, dz, droll, dpitch) -> dyaw is omitted
     observation_space = (
         14  # 3 for rel ee pos, 2 for orient (roll, pitch), 2 for goal (x,y) and 2 for obj-pos (x,y), 5 for actions
     )
@@ -136,8 +120,9 @@ class BallRollingWithoutReachingEnv(DirectRLEnv):
         # make height of goal pos fixed
         self._desired_pos_w[:, 2] = 0.00125
 
-        #### IK Solver ##########################
-        ik_chain = pk.build_chain_from_urdf(open(self.cfg.ik_solver_cfg["urdf_path"], mode="rb").read())
+        # --- IK Solver ---
+        with open(self.cfg.ik_solver_cfg["urdf_path"], mode="rb") as urdf_file:
+            ik_chain = pk.build_chain_from_urdf(urdf_file)
         # ik_chain.print_tree()
         # extract a specific serial chain such for inverse kinematics
         ik_chain = pk.SerialChain(ik_chain, self.cfg.ik_solver_cfg["ee_link_name"])
@@ -167,7 +152,7 @@ class BallRollingWithoutReachingEnv(DirectRLEnv):
             .repeat(self.num_envs, 1, 1)
         )
 
-        #### Stuff for IK Controller ##################################################
+        # --- For IK Controller ---
         # create the differential IK controller
         self._ik_controller = DifferentialIKController(
             cfg=self.cfg.ik_controller_cfg, num_envs=self.num_envs, device=self.device
@@ -186,7 +171,7 @@ class BallRollingWithoutReachingEnv(DirectRLEnv):
         # ee offset w.r.t panda hand -> based on the asset
         self._offset_pos = torch.tensor([0.0, 0.0, 0.131], device=self.device).repeat(self.num_envs, 1)
         self._offset_rot = torch.tensor([1.0, 0.0, 0.0, 0.0], device=self.device).repeat(self.num_envs, 1)
-        ####################################################################
+        # ---
 
         # create auxiliary variables for computing applied action, observations and rewards
         self.processed_actions = torch.zeros((self.num_envs, self._ik_controller.action_dim), device=self.device)
@@ -251,7 +236,7 @@ class BallRollingWithoutReachingEnv(DirectRLEnv):
         # plate
         plate = RigidObjectCfg(
             prim_path="/World/envs/env_.*/plate",
-            init_state=RigidObjectCfg.InitialStateCfg(pos=[0.5, 0, 0]),
+            init_state=RigidObjectCfg.InitialStateCfg(pos=(0.5, 0, 0)),
             spawn=sim_utils.UsdFileCfg(
                 usd_path=f"{TACEX_ASSETS_DATA_DIR}/Props/plate.usd",
                 rigid_props=RigidBodyPropertiesCfg(
@@ -277,7 +262,7 @@ class BallRollingWithoutReachingEnv(DirectRLEnv):
     def _pre_physics_step(self, actions: torch.Tensor):
         self.prev_actions[:] = self.actions
         self.actions[:] = actions.clamp(-1, 1)
-        #! preprocess the action and turn it into IK action
+        # preprocess the action and turn it into IK action
         self.processed_actions[:, :5] = self.actions
         # fixed z rotation
         self.processed_actions[:, 5] = 0  # dont change the z rotation
@@ -350,7 +335,7 @@ class BallRollingWithoutReachingEnv(DirectRLEnv):
             self.cfg.tracking_reward["w"] * obj_goal_distance
             + self.cfg.tracking_reward["v"] * torch.log(obj_goal_distance + self.cfg.tracking_reward["alpha"])
         )
-        # only apply when ee is at object (with this our tracking goal always needs to be positive, otherwise reaching part wont work anymore)
+        # only apply when ee is at object (with this our tracking goal always needs to be positive, otherwise reaching part will not work anymore)
         tracking_goal = (object_ee_distance < self.cfg.tracking_reward["minimal_distance"]) * tracking_goal
         tracking_goal *= self.cfg.tracking_reward["weight"]
 
@@ -368,7 +353,7 @@ class BallRollingWithoutReachingEnv(DirectRLEnv):
         ee_frame_orient = euler_xyz_from_quat(self._ee_frame.data.target_quat_source[..., 0, :])
         x = wrap_to_pi(
             ee_frame_orient[0] - math.pi
-        )  # our panda hand asset has rotation from (180,0,-45) -> we substract 180 for defining the rotation limits
+        )  # our panda hand asset has rotation from (180,0,-45) -> we subtract 180 for defining the rotation limits
         y = wrap_to_pi(ee_frame_orient[1])
         orient_penalty = ((torch.abs(x) > math.pi / 8) | (torch.abs(y) > math.pi / 8)) * self.cfg.orient_penalty[
             "weight"
@@ -410,11 +395,11 @@ class BallRollingWithoutReachingEnv(DirectRLEnv):
             "orientation_penalty": orient_penalty.float().mean(),
             "height_penalty": height_penalty.mean(),
             "action_rate_penalty": (
-                self.cfg.action_rate_penalty_scale[self.curriculum_phase_id] * action_rate_penalty
-            ).mean(),
+                (self.cfg.action_rate_penalty_scale[self.curriculum_phase_id] * action_rate_penalty).mean()
+            ),
             "joint_vel_penalty": (
-                self.cfg.joint_vel_penalty_scale[self.curriculum_phase_id] * joint_vel_penalty
-            ).mean(),
+                (self.cfg.joint_vel_penalty_scale[self.curriculum_phase_id] * joint_vel_penalty).mean()
+            ),
             # task metrics
             "Metric/num_ee_at_obj": torch.sum(object_ee_distance < self.cfg.tracking_reward["minimal_distance"]),
             "Metric/ee_obj_error": object_ee_distance.mean(),
@@ -511,12 +496,10 @@ class BallRollingWithoutReachingEnv(DirectRLEnv):
         # self.gsmini.update_gui_windows()
         return {"policy": obs}
 
-    ####
-    ## Helper Functions
-    ####
+    """
+    Helper Functions for IK control (from task_space_actions.py of IsaacLab).
+    """
 
-    ################################# For IK
-    #  From task_space_actions.py
     @property
     def jacobian_w(self) -> torch.Tensor:
         return self._robot.root_physx_view.get_jacobians()[:, self._jacobi_body_idx, :, :]

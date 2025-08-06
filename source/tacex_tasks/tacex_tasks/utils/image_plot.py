@@ -5,11 +5,10 @@
 
 from __future__ import annotations
 
-import colorsys
 import numpy as np
 from contextlib import suppress
 from matplotlib import cm
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 import carb
 import omni
@@ -159,7 +158,6 @@ class ImagePlot(UIWidgetWrapper):
         )
 
     def _build_widget(self):
-
         with omni.ui.VStack(spacing=3):
             with omni.ui.HStack():
                 # Write the leftmost label for what this plot is

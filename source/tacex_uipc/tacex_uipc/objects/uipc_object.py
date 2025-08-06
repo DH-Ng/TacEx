@@ -5,7 +5,6 @@
 
 from __future__ import annotations
 
-import re
 import torch
 from collections.abc import Sequence
 from typing import TYPE_CHECKING
@@ -16,30 +15,26 @@ import omni.usd
 import usdrt
 import usdrt.UsdGeom
 from isaacsim.core.prims import XFormPrim
-from pxr import Gf, Usd, UsdGeom, UsdPhysics
+from pxr import UsdGeom
 
-# from isaacsim.core.utils.extensions import enable_extension
-# enable_extension("isaacsim.util.debug_draw")
 try:
     from isaacsim.util.debug_draw import _debug_draw
 
     draw = _debug_draw.acquire_debug_draw_interface()
-except:
+except ImportError:
+    import warnings
+
+    warnings.warn("_debug_draw failed to import", ImportWarning)
     draw = None
 
 import numpy as np
-import random
 
-import uipc
 import warp as wp
-from uipc import AngleAxis, Logger, Quaternion, Transform, Vector2, Vector3, builtin, view
+from uipc import builtin, view
 from uipc.constitution import AffineBodyConstitution, ElasticModuli, StableNeoHookean
-from uipc.core import Engine, Scene, SceneIO, World
 from uipc.geometry import extract_surface, flip_inward_triangles, label_surface, label_triangle_orient, tetmesh
-from uipc.unit import GPa, MPa
+from uipc.unit import MPa
 
-import isaaclab.sim as sim_utils
-import isaaclab.utils.math as math_utils
 import isaaclab.utils.string as string_utils
 from isaaclab.assets import AssetBase, AssetBaseCfg
 from isaaclab.utils import configclass
@@ -65,7 +60,7 @@ class UipcObjectCfg(AssetBaseCfg):
 
     @configclass
     class AffineBodyConstitutionCfg:
-        # class_type = AffineBodyConstitution # doesnt work, cause no builtin signature found for AffineBodyConstitution class
+        # class_type = AffineBodyConstitution # doesn't work, cause no builtin signature found for AffineBodyConstitution class
         m_kappa: float = 100.0
         """Stiffness (hardness) of the object
         in [MPa]
@@ -165,7 +160,7 @@ class UipcObject(AssetBase):
                     raise Exception(f"No precomputed tet mesh data found for prim at {usd_mesh_path}")
             else:
                 mesh_gen = MeshGenerator(config=self.cfg.mesh_cfg)
-                if type(self.cfg.mesh_cfg) == TetMeshCfg:
+                if type(self.cfg.mesh_cfg) is TetMeshCfg:
                     tet_points, tet_indices, surf_points, tet_surf_indices = mesh_gen.generate_tet_mesh_for_prim(
                         usd_mesh
                     )
@@ -244,6 +239,8 @@ class UipcObject(AssetBase):
 
             # will be updated once _uipc_sim.setup_sim() is called
             self.global_system_id = 0
+
+            self._data = None
 
     """
     Properties
@@ -326,10 +323,10 @@ class UipcObject(AssetBase):
             env_ids: Environment indices. If None, then all indices are used.
         """
         # resolve all indices
-        physx_env_ids = env_ids
-        if env_ids is None:
-            env_ids = slice(None)
-            physx_env_ids = self._ALL_INDICES
+        # physx_env_ids = env_ids
+        # if env_ids is None:
+        #     env_ids = slice(None)
+        #     physx_env_ids = self._ALL_INDICES
 
         # # note: we need to do this here since tensors are not set into simulation until step.
         # # set into internal buffers
@@ -377,7 +374,6 @@ class UipcObject(AssetBase):
     """
 
     def _initialize_impl(self):
-
         # create objects in the uipc scene for the meshes
         mesh = self.uipc_meshes[0]
 
@@ -403,10 +399,10 @@ class UipcObject(AssetBase):
         # create buffers
 
         # container for data access
-        if type(self.constitution) == StableNeoHookean:
-            self._data: UipcObjectDeformableData = UipcObjectDeformableData(self._uipc_sim, self, self.device)
-        elif type(self.constitution) == AffineBodyConstitution:
-            self._data: UipcObjectRigidData = UipcObjectRigidData(self._uipc_sim, self, self.device)
+        if type(self.constitution) is StableNeoHookean:
+            self._data = UipcObjectDeformableData(self._uipc_sim, self, self.device)
+        elif type(self.constitution) is AffineBodyConstitution:
+            self._data = UipcObjectRigidData(self._uipc_sim, self, self.device)
 
         self._create_buffers()
         # process configuration
@@ -451,7 +447,7 @@ class UipcObject(AssetBase):
         }
         self.constitution = constitution_types[type(self.cfg.constitution_cfg)]()
 
-        if type(self.constitution) == StableNeoHookean:
+        if type(self.constitution) is StableNeoHookean:
             youngs = self.cfg.constitution_cfg.youngs_modulus
             poisson = self.cfg.constitution_cfg.poisson_rate
             moduli = ElasticModuli.youngs_poisson(youngs * MPa, poisson)
@@ -459,7 +455,7 @@ class UipcObject(AssetBase):
             self.constitution.apply_to(mesh, moduli, mass_density=self.cfg.mass_density)
             # needed for writing vertex position to sim
             self._system_name = "uipc::backend::cuda::FiniteElementMethod"
-        elif type(self.constitution) == AffineBodyConstitution:
+        elif type(self.constitution) is AffineBodyConstitution:
             stiffness = self.cfg.constitution_cfg.m_kappa
             self.constitution.apply_to(mesh, stiffness * MPa, mass_density=self.cfg.mass_density)
             self._system_name = "uipc::backend::cuda::AffineBodyDynamics"

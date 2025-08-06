@@ -23,28 +23,21 @@ simulation_app = app_launcher.app
 import pathlib
 
 import isaacsim.core.utils.prims as prims_utils
-import omni
-from isaacsim.core.prims import XFormPrim
 from isaacsim.util.debug_draw import _debug_draw
 
 draw = _debug_draw.acquire_debug_draw_interface()
 
 import numpy as np
-import random
 
-import warp as wp
-from pxr import Gf, PhysxSchema, Sdf, Usd, UsdGeom, UsdPhysics, UsdShade, Vt
-from tacex_uipc import UipcObject, UipcObjectCfg, UipcSim, UipcSimCfg
-from tacex_uipc.utils import TetMeshCfg
 from uipc import Animation, Vector3, builtin, view
 from uipc.constitution import SoftPositionConstraint
-from uipc.core import Engine, Scene, SceneIO, World
-from uipc.geometry import GeometrySlot, SimplicialComplex, SimplicialComplexIO
+from uipc.geometry import GeometrySlot, SimplicialComplex
 
 import isaaclab.sim as sim_utils
 from isaaclab.assets import AssetBaseCfg
-from isaaclab.utils.assets import ISAAC_NUCLEUS_DIR
 from isaaclab.utils.timer import Timer
+
+from tacex_uipc import UipcObject, UipcObjectCfg, UipcSim, UipcSimCfg
 
 
 def main():
@@ -78,12 +71,12 @@ def main():
     )
     uipc_sim = UipcSim(uipc_cfg)
 
-    mesh_cfg = TetMeshCfg(
-        stop_quality=8,
-        max_its=100,
-        edge_length_r=0.1,
-        # epsilon_r=0.01
-    )
+    # mesh_cfg = TetMeshCfg(
+    #     stop_quality=8,
+    #     max_its=100,
+    #     edge_length_r=0.1,
+    #     # epsilon_r=0.01
+    # )
 
     # spawn uipc cube
     tet_cube_asset_path = pathlib.Path(__file__).parent.resolve() / "assets" / "cube.usd"
@@ -149,7 +142,7 @@ def main():
 
     animator.insert(cube.uipc_scene_objects[0], animate_tet)
 
-    # only after Isaac Sim got resetted (= objects init), otherwise world init is false
+    # only after Isaac Sim got reset (= objects init), otherwise world init is false
     # because _initialize_impl() of the object is called in the sim.reset() method
     # and setup_scene() relies on objects being _initialize_impl()
     uipc_sim.setup_sim()

@@ -1,5 +1,5 @@
 """
-Ball Rolling Enviornments:
+Ball Rolling Environments:
 Goal is to roll a ball to a random target position.
 """
 

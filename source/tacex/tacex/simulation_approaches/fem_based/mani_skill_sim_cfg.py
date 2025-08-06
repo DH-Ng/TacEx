@@ -1,9 +1,4 @@
-import torch
-from dataclasses import MISSING, dataclass
-from typing import TYPE_CHECKING, Any, Dict, List, Sequence, Tuple, Union
-
-from isaaclab.sensors import FrameTransformerCfg, OffsetCfg
-from isaaclab.utils import class_to_dict, configclass, to_camel_case
+from isaaclab.utils import configclass
 
 from ..gelsight_simulator_cfg import GelSightSimulatorCfg
 from .mani_skill_sim import ManiSkillSimulator
@@ -19,13 +14,13 @@ class ManiSkillSimulatorCfg(GelSightSimulatorCfg):
 
     device: str = "cpu"
 
-    marker_interval_range: Tuple[float, float] = (2.0625, 2.0625)
+    marker_interval_range: tuple[float, float] = (2.0625, 2.0625)
 
     marker_rotation_range: float = 0.0
 
-    marker_translation_range: Tuple[float, float] = (0.0, 0.0)
+    marker_translation_range: tuple[float, float] = (0.0, 0.0)
 
-    marker_pos_shift_range: Tuple[float, float] = (0.0, 0.0)
+    marker_pos_shift_range: tuple[float, float] = (0.0, 0.0)
 
     marker_random_noise: float = 0.0
 
@@ -35,7 +30,7 @@ class ManiSkillSimulatorCfg(GelSightSimulatorCfg):
 
     marker_flow_size: int = 128
 
-    camera_params: Tuple[float, float, float, float, float] = (
+    camera_params: tuple[float, float, float, float, float] = (
         340,
         325,
         160,
@@ -65,11 +60,11 @@ class ManiSkillSimulatorCfg(GelSightSimulatorCfg):
     marker_params: MarkerParams = MarkerParams()
 
     init_marker_pos: tuple = ([[]], [[]])
-    """Intial Marker positions.
+    """Initial Marker positions.
 
     Tuple (xx_init pos, yy_init pos):
-    - xx_init = inital position of each marker along the "height" of the tactile img (top-down)
+    - xx_init = initial position of each marker along the "height" of the tactile img (top-down)
         -> for each marker the initial x pos. Shape: (num_markers_row, num_marker_column)
-    - yy_init = inital position of each marker along the "width" of the tactile img (left-right)
+    - yy_init = initial position of each marker along the "width" of the tactile img (left-right)
         -> for each marker the initial y pos. Shape: (num_markers_row, num_marker_column)
     """

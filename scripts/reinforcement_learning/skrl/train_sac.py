@@ -20,13 +20,26 @@ from omni.isaac.lab.app import AppLauncher
 # add argparse arguments
 parser = argparse.ArgumentParser(description="Train an RL agent with skrl.")
 parser.add_argument("--video", action="store_true", default=False, help="Record videos during training.")
-parser.add_argument("--video_length", type=int, default=200, help="Length of the recorded video (in steps).")
-parser.add_argument("--video_interval", type=int, default=2000, help="Interval between video recordings (in steps).")
+parser.add_argument(
+    "--video_length",
+    type=int,
+    default=200,
+    help="Length of the recorded video (in steps).",
+)
+parser.add_argument(
+    "--video_interval",
+    type=int,
+    default=2000,
+    help="Interval between video recordings (in steps).",
+)
 parser.add_argument("--num_envs", type=int, default=None, help="Number of environments to simulate.")
 parser.add_argument("--task", type=str, default=None, help="Name of the task.")
 parser.add_argument("--seed", type=int, default=None, help="Seed used for the environment")
 parser.add_argument(
-    "--distributed", action="store_true", default=False, help="Run training with multiple GPUs or nodes."
+    "--distributed",
+    action="store_true",
+    default=False,
+    help="Run training with multiple GPUs or nodes.",
 )
 parser.add_argument("--max_iterations", type=int, default=None, help="RL Policy training iterations.")
 parser.add_argument(
@@ -81,13 +94,9 @@ from packaging import version
 
 # import the skrl components to build the RL system
 from skrl.agents.torch.sac import SAC, SAC_DEFAULT_CONFIG
-from skrl.envs.loaders.torch import load_isaaclab_env
-from skrl.envs.wrappers.torch import wrap_env
 from skrl.memories.torch import RandomMemory
 from skrl.models.torch import DeterministicMixin, GaussianMixin, Model
-from skrl.resources.preprocessors.torch import RunningStandardScaler
 from skrl.trainers.torch import SequentialTrainer
-from skrl.utils import set_seed
 
 # check for minimum supported skrl version
 SKRL_VERSION = "1.3.0"
@@ -98,23 +107,17 @@ if version.parse(skrl.__version__) < version.parse(SKRL_VERSION):
     )
     exit()
 
-if args_cli.ml_framework.startswith("torch"):
-    from skrl.utils.runner.torch import Runner
-elif args_cli.ml_framework.startswith("jax"):
-    from skrl.utils.runner.jax import Runner
+if args_cli.ml_framework.startswith("torch") or args_cli.ml_framework.startswith("jax"):
+    pass
 
 import omni.isaac.lab_tasks  # noqa: F401
-import tacex_rl.tasks
 from omni.isaac.lab.envs import (
-    DirectMARLEnv,
     DirectMARLEnvCfg,
     DirectRLEnvCfg,
     ManagerBasedRLEnvCfg,
-    multi_agent_to_single_agent,
 )
 from omni.isaac.lab.utils.dict import print_dict
 from omni.isaac.lab.utils.io import dump_pickle, dump_yaml
-from omni.isaac.lab_tasks.utils import get_checkpoint_path
 from omni.isaac.lab_tasks.utils.hydra import hydra_task_config
 from omni.isaac.lab_tasks.utils.wrappers.skrl import SkrlVecEnvWrapper
 
@@ -141,7 +144,10 @@ class StochasticActor(GaussianMixin, Model):
         #                          nn.Linear(256, self.num_actions),
         #                          nn.Tanh())
         self.net = nn.Sequential(
-            nn.Linear(self.num_observations, 64), nn.ReLU(), nn.Linear(64, self.num_actions), nn.Tanh()
+            nn.Linear(self.num_observations, 64),
+            nn.ReLU(),
+            nn.Linear(64, self.num_actions),
+            nn.Tanh(),
         )
         self.log_std_parameter = nn.Parameter(torch.zeros(self.num_actions))
 
@@ -159,7 +165,11 @@ class Critic(DeterministicMixin, Model):
         #                          nn.Linear(512, 256),
         #                          nn.ReLU(),
         #                          nn.Linear(256, 1))
-        self.net = nn.Sequential(nn.Linear(self.num_observations + self.num_actions, 64), nn.ReLU(), nn.Linear(64, 1))
+        self.net = nn.Sequential(
+            nn.Linear(self.num_observations + self.num_actions, 64),
+            nn.ReLU(),
+            nn.Linear(64, 1),
+        )
 
     def compute(self, inputs, role):
         return self.net(torch.cat([inputs["states"], inputs["taken_actions"]], dim=1)), {}
@@ -239,7 +249,7 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
     # specify directory for logging runs: {time-stamp}_{run_name}
     log_dir = datetime.now().strftime("%Y-%m-%d_%H-%M-%S") + f"_{algorithm}_{args_cli.ml_framework}"
     if agent_cfg["agent"]["experiment"]["experiment_name"]:
-        log_dir += f'_{agent_cfg["agent"]["experiment"]["experiment_name"]}'
+        log_dir += f"_{agent_cfg['agent']['experiment']['experiment_name']}"
     # set directory into agent config
     agent_cfg["agent"]["experiment"]["directory"] = log_root_path
     agent_cfg["agent"]["experiment"]["experiment_name"] = log_dir
@@ -286,12 +296,13 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
     # instantiate the agent's models (function approximators).
     # SAC requires 5 models, visit its documentation for more details
     # https://skrl.readthedocs.io/en/latest/api/agents/sac.html#models
-    models = {}
-    models["policy"] = StochasticActor(env.observation_space, env.action_space, device)
-    models["critic_1"] = Critic(env.observation_space, env.action_space, device)
-    models["critic_2"] = Critic(env.observation_space, env.action_space, device)
-    models["target_critic_1"] = Critic(env.observation_space, env.action_space, device)
-    models["target_critic_2"] = Critic(env.observation_space, env.action_space, device)
+    models = {
+        "policy": StochasticActor(env.observation_space, env.action_space, device),
+        "critic_1": Critic(env.observation_space, env.action_space, device),
+        "critic_2": Critic(env.observation_space, env.action_space, device),
+        "target_critic_1": Critic(env.observation_space, env.action_space, device),
+        "target_critic_2": Critic(env.observation_space, env.action_space, device),
+    }
 
     cfg = SAC_DEFAULT_CONFIG.copy()
     cfg.update(_process_cfg(agent_cfg["agent"]))
@@ -312,7 +323,7 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
     cfg_trainer = {
         "timesteps": agent_cfg["trainer"]["timesteps"],
         "headless": True,
-    }  # headless command gets overriden by IsaacLab argument
+    }  # headless command gets overridden by IsaacLab argument
     trainer = SequentialTrainer(cfg=cfg_trainer, env=env, agents=agent)
     # # start training
     # trainer.train()
@@ -324,7 +335,9 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
     # reset env
     states, infos = trainer.env.reset()
     for timestep in tqdm.tqdm(
-        range(trainer.initial_timestep, trainer.timesteps), disable=trainer.disable_progressbar, file=sys.stdout
+        range(trainer.initial_timestep, trainer.timesteps),
+        disable=trainer.disable_progressbar,
+        file=sys.stdout,
     ):
         # pre-interaction
         trainer.agents.pre_interaction(timestep=timestep, timesteps=trainer.timesteps)
@@ -352,7 +365,7 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
                 timestep=timestep,
                 timesteps=trainer.timesteps,
             )
-            #! log extra info from IsaacLab env
+            # log extra info from IsaacLab env
             if "log" in infos:
                 for k, v in infos["log"].items():
                     if isinstance(v, torch.Tensor) and v.numel() == 1:

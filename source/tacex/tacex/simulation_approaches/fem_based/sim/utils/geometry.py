@@ -66,13 +66,11 @@ def quat2R_np(q):
     x = q[1]
     y = q[2]
     z = q[3]
-    R = np.array(
-        [
-            [2 * (w * w + x * x) - 1, 2 * (x * y - w * z), 2 * (x * z + w * y)],
-            [2 * (x * y + w * z), 2 * (w * w + y * y) - 1, 2 * (y * z - w * x)],
-            [2 * (x * z - w * y), 2 * (y * z + w * x), 2 * (w * w + z * z) - 1],
-        ]
-    )
+    R = np.array([
+        [2 * (w * w + x * x) - 1, 2 * (x * y - w * z), 2 * (x * z + w * y)],
+        [2 * (x * y + w * z), 2 * (w * w + y * y) - 1, 2 * (y * z - w * x)],
+        [2 * (x * z - w * y), 2 * (y * z + w * x), 2 * (w * w + z * z) - 1],
+    ])
     return R
 
 
@@ -111,10 +109,7 @@ def vertical_ray_intersects_segment(ray_point, segment_start, segment_end):
     intersect_point = (ray_point[0], ray_point[0] * segment_slope + segment_b)
     if intersect_point[1] >= ray_point[1]:
         intersect_ratio = (ray_point[0] - segment_start[0]) / (segment_end[0] - segment_start[0])
-        if 0 <= intersect_ratio < 1:
-            return True
-        else:
-            return False
+        return 0 <= intersect_ratio < 1
     else:
         return False
 
@@ -128,10 +123,7 @@ def point_in_polygon(point, polygon_points):
         if vertical_ray_intersects_segment(point, seg_start, seg_end):
             intersect_num += 1
 
-    if intersect_num % 2 == 0:
-        return False
-    else:
-        return True
+    return intersect_num % 2 != 0
 
 
 def generate_rectangle(center, size, theta, rotation_first=False):

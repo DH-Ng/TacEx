@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 import numpy as np
-import torch
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from pathlib import Path

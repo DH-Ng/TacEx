@@ -6,9 +6,6 @@ Each simulation method class should inherit from this class and implement the ab
 
 from __future__ import annotations
 
-import inspect
-import torch
-import weakref
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING
 

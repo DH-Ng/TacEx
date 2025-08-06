@@ -24,28 +24,23 @@ simulation_app = app_launcher.app
 import numpy as np
 
 import omni.usd
-import uipc
-import usdrt
-from pxr import Gf, Sdf, Usd, UsdGeom
-from tacex_uipc import UipcObject, UipcObjectCfg, UipcSim, UipcSimCfg
-from tacex_uipc.utils import MeshGenerator, TetMeshCfg, create_prim_for_uipc_scene_object
+from pxr import UsdGeom
 from uipc import Animation, Vector3, builtin, view
-from uipc.constitution import AffineBodyConstitution, ElasticModuli, SoftPositionConstraint, StableNeoHookean
-from uipc.core import Engine, Scene, SceneIO, World
+from uipc.constitution import ElasticModuli, SoftPositionConstraint, StableNeoHookean
 from uipc.geometry import (
     GeometrySlot,
     SimplicialComplex,
-    SimplicialComplexIO,
-    extract_surface,
     flip_inward_triangles,
     label_surface,
     label_triangle_orient,
     tetmesh,
 )
-from uipc.unit import GPa, MPa
+from uipc.unit import MPa
 
 import isaaclab.sim as sim_utils
 from isaaclab.utils.timer import Timer
+
+from tacex_uipc import UipcSim, UipcSimCfg
 
 
 def setup_base_scene(sim: sim_utils.SimulationContext):
@@ -151,7 +146,6 @@ def main():
 
     # Simulate physics
     while simulation_app.is_running():
-
         # perform Isaac rendering
         sim.render()
 

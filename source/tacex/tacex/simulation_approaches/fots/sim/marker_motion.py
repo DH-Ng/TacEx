@@ -208,7 +208,7 @@ class MarkerMotion:
         return new_x_pos, new_y_pos
 
     def marker_sim(self, depth_map, contact_mask, traj):
-        #! update marker positions
+        # update marker positions
         new_marker_x_pos, new_marker_y_pos = self._motion_callback(
             self.init_marker_x_pos, self.init_marker_y_pos, depth_map, contact_mask, traj
         )

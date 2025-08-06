@@ -59,18 +59,13 @@ import pathlib
 
 import omni.usd
 import uipc
-import usdrt
-from pxr import Gf, Sdf, Usd, UsdGeom
-from tacex_uipc import UipcSim, UipcSimCfg
-from uipc import AngleAxis, Logger, Quaternion, Transform, Vector2, Vector3, builtin, view
+from pxr import UsdGeom
+from uipc import AngleAxis, Quaternion, Transform, Vector3, view
 from uipc.constitution import AffineBodyConstitution
-from uipc.core import Engine, Scene, World
 from uipc.geometry import (
-    GeometrySlot,
     SimplicialComplex,
     SimplicialComplexIO,
     flip_inward_triangles,
-    ground,
     label_surface,
     label_triangle_orient,
 )
@@ -78,6 +73,8 @@ from uipc.unit import GPa, MPa
 
 import isaaclab.sim as sim_utils
 from isaaclab.utils.timer import Timer
+
+from tacex_uipc import UipcSim, UipcSimCfg
 
 
 def setup_base_scene(sim: sim_utils.SimulationContext):
@@ -118,8 +115,8 @@ def setup_libuipc_scene(scene):
 
     io = SimplicialComplexIO()
 
-    f = open(f"{str(pathlib.Path(__file__).parent.resolve())}/6_wrecking_ball.json")
-    wrecking_ball_scene = json.load(f)
+    with open(f"{str(pathlib.Path(__file__).parent.resolve())}/6_wrecking_ball.json") as json_file:
+        wrecking_ball_scene = json.load(json_file)
 
     cube = io.read(f"{tetmesh_dir}/cube.msh")
     cube = process_surface(cube)
@@ -164,9 +161,7 @@ def setup_libuipc_scene(scene):
             )
             t.rotate(Q)
 
-        is_fixed = 0
-        if "is_dof_fixed" in json:
-            is_fixed = json["is_dof_fixed"]
+        is_fixed = json.get("is_dof_fixed")
 
         this_mesh = mesh.copy()
         view(this_mesh.transforms())[0] = t.matrix()
@@ -229,7 +224,6 @@ def main():
 
     # Simulate physics
     while simulation_app.is_running():
-
         # perform Isaac rendering
         sim.render()
 

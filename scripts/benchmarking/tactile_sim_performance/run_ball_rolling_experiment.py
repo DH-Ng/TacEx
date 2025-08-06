@@ -101,7 +101,7 @@ def run_simulator(env):
         for data_type in env.cfg.gsmini.data_types:
             env.gsmini._prim_view.prims[0].GetAttribute(f"debug_{data_type}").Set(True)
 
-    #! For time measurements
+    # For time measurements
     timestamp = f"{datetime.datetime.now():%Y-%m-%d-%H_%M_%S}"
     output_dir = Path(__file__).parent.resolve() / "logs" / type(env).__name__
     output_dir = str(output_dir)
@@ -127,7 +127,6 @@ def run_simulator(env):
     total_sim_time = time.time()
     # Simulation loop
     while simulation_app.is_running():
-
         # reset at the beginning of the simulation and after doing pattern 2 times
         if (
             env.step_count % (len(env.pattern_offsets) * env.num_step_goal_change) == 0
@@ -140,14 +139,14 @@ def run_simulator(env):
                 f"Total amount of 'in-contact' frames per env (ran pattern {current_num_resets} times):"
                 f" {total_num_in_contact_frames}"
             )
-            print(f"Total time: {time.time()-total_sim_time:8.4f}s")
+            print(f"Total time: {time.time() - total_sim_time:8.4f}s")
             print(
                 "Avg physics_sim time for one frame:   "
-                f" {np.sum(np.array(frame_times_physics))/total_num_in_contact_frames:8.4f}ms"
+                f" {np.sum(np.array(frame_times_physics)) / total_num_in_contact_frames:8.4f}ms"
             )
             print(
                 "Avg tactile_sim time for one frame:   "
-                f" {np.sum(np.array(frame_times_tactile))/total_num_in_contact_frames:8.4f}ms"
+                f" {np.sum(np.array(frame_times_tactile)) / total_num_in_contact_frames:8.4f}ms"
             )
             print(
                 f"| CPU:{system_utilization_analytics[0]}% | "
@@ -182,14 +181,14 @@ def run_simulator(env):
                         f"Total amount of 'in-contact' frames per env (ran pattern {current_num_resets} times):"
                         f" {total_num_in_contact_frames}\n"
                     )
-                    f.write(f"Total time: {time.time()-total_sim_time:8.4f}s \n")
+                    f.write(f"Total time: {time.time() - total_sim_time:8.4f}s \n")
                     f.write(
                         "Avg physics_sim time for one frame:   "
-                        f" {np.sum(np.array(frame_times_physics))/total_num_in_contact_frames:8.4f}ms \n"
+                        f" {np.sum(np.array(frame_times_physics)) / total_num_in_contact_frames:8.4f}ms \n"
                     )
                     f.write(
                         "Avg tactile_sim time for one frame:   "
-                        f" {np.sum(np.array(frame_times_tactile))/total_num_in_contact_frames:8.4f}ms \n"
+                        f" {np.sum(np.array(frame_times_tactile)) / total_num_in_contact_frames:8.4f}ms \n"
                     )
                     f.write("\n")
                     f.write(
@@ -233,8 +232,8 @@ def run_simulator(env):
         env.gsmini.update(dt=env.physics_dt, force_recompute=True)
         tactile_sim_end = time.time()
 
-        print(f"Total time: {time.time()-total_sim_time:8.4f}s")
-        print(f"Current env episode step: {env.step_count}/{(len(env.pattern_offsets)*env.num_step_goal_change)}")
+        print(f"Total time: {time.time() - total_sim_time:8.4f}s")
+        print(f"Current env episode step: {env.step_count}/{(len(env.pattern_offsets) * env.num_step_goal_change)}")
 
         (contact_idx,) = torch.where(env.gsmini._indentation_depth > 0)
         print(f"Current number of 'in-contact' frames across all env (num={env.num_envs}): {contact_idx.shape[0]}")
@@ -245,11 +244,11 @@ def run_simulator(env):
             total_num_in_contact_frames += contact_idx.shape[0]
             print(
                 "Avg physics_sim time for current step per env:   "
-                f" {frame_times_physics[-1]/contact_idx.shape[0]:8.4f}ms"
+                f" {frame_times_physics[-1] / contact_idx.shape[0]:8.4f}ms"
             )
             print(
                 "Avg tactile_sim time for current step per env:   "
-                f" {frame_times_tactile[-1]/contact_idx.shape[0]:8.4f}ms"
+                f" {frame_times_tactile[-1] / contact_idx.shape[0]:8.4f}ms"
             )
         else:
             # no sensor in contact

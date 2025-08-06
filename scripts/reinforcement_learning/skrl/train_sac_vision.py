@@ -81,14 +81,9 @@ from packaging import version
 
 # import the skrl components to build the RL system
 from skrl.agents.torch.sac import SAC, SAC_DEFAULT_CONFIG
-from skrl.envs.loaders.torch import load_isaaclab_env
-from skrl.envs.wrappers.torch import wrap_env
 from skrl.memories.torch import RandomMemory
 from skrl.models.torch import DeterministicMixin, GaussianMixin, Model
-from skrl.resources.preprocessors.torch import RunningStandardScaler
 from skrl.trainers.torch import SequentialTrainer
-from skrl.utils import set_seed
-from skrl.utils.spaces.torch import unflatten_tensorized_space
 
 # check for minimum supported skrl version
 SKRL_VERSION = "1.3.0"
@@ -99,23 +94,17 @@ if version.parse(skrl.__version__) < version.parse(SKRL_VERSION):
     )
     exit()
 
-if args_cli.ml_framework.startswith("torch"):
-    from skrl.utils.runner.torch import Runner
-elif args_cli.ml_framework.startswith("jax"):
-    from skrl.utils.runner.jax import Runner
+if args_cli.ml_framework.startswith("torch") or args_cli.ml_framework.startswith("jax"):
+    pass
 
 import omni.isaac.lab_tasks  # noqa: F401
-import tacex_rl.tasks
 from omni.isaac.lab.envs import (
-    DirectMARLEnv,
     DirectMARLEnvCfg,
     DirectRLEnvCfg,
     ManagerBasedRLEnvCfg,
-    multi_agent_to_single_agent,
 )
 from omni.isaac.lab.utils.dict import print_dict
 from omni.isaac.lab.utils.io import dump_pickle, dump_yaml
-from omni.isaac.lab_tasks.utils import get_checkpoint_path
 from omni.isaac.lab_tasks.utils.hydra import hydra_task_config
 from omni.isaac.lab_tasks.utils.wrappers.skrl import SkrlVecEnvWrapper
 
@@ -219,7 +208,7 @@ class StochasticActor(GaussianMixin, Model):
         #  'jaco_arm/joints_vel': torch.Tensor(shape=[batch_size, 1, 6], dtype=torch.float32)}
 
         # permute and normalize the images (samples, width, height, channels) -> (samples, channels, width, height)
-        # ? our space['vision_obs'] (images) here are just (widht, height, channels)? -> why no samples?
+        # ? our space['vision_obs'] (images) here are just (width, height, channels)? -> why no samples?
         # print("vision_obs shape ", space['vision_obs'].shape)
         # print("vision_obs shape after ", space['vision_obs'].permute(0, 3, 1, 2).shape)
         features = self.features_extractor(space["vision_obs"].permute(0, 3, 1, 2) / 255.0)
@@ -361,7 +350,7 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
     # specify directory for logging runs: {time-stamp}_{run_name}
     log_dir = datetime.now().strftime("%Y-%m-%d_%H-%M-%S") + f"_{algorithm}_{args_cli.ml_framework}"
     if agent_cfg["agent"]["experiment"]["experiment_name"]:
-        log_dir += f'_{agent_cfg["agent"]["experiment"]["experiment_name"]}'
+        log_dir += f"_{agent_cfg['agent']['experiment']['experiment_name']}"
     # set directory into agent config
     agent_cfg["agent"]["experiment"]["directory"] = log_root_path
     agent_cfg["agent"]["experiment"]["experiment_name"] = log_dir
@@ -407,12 +396,13 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
     # instantiate the agent's models (function approximators).
     # SAC requires 5 models, visit its documentation for more details
     # https://skrl.readthedocs.io/en/latest/api/agents/sac.html#models
-    models = {}
-    models["policy"] = StochasticActor(env.observation_space, env.action_space, device)
-    models["critic_1"] = Critic(env.observation_space, env.action_space, device)
-    models["critic_2"] = Critic(env.observation_space, env.action_space, device)
-    models["target_critic_1"] = Critic(env.observation_space, env.action_space, device)
-    models["target_critic_2"] = Critic(env.observation_space, env.action_space, device)
+    models = {
+        "policy": StochasticActor(env.observation_space, env.action_space, device),
+        "critic_1": Critic(env.observation_space, env.action_space, device),
+        "critic_2": Critic(env.observation_space, env.action_space, device),
+        "target_critic_1": Critic(env.observation_space, env.action_space, device),
+        "target_critic_2": Critic(env.observation_space, env.action_space, device),
+    }
 
     cfg = SAC_DEFAULT_CONFIG.copy()
     cfg.update(_process_cfg(agent_cfg["agent"]))
@@ -433,7 +423,7 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
     cfg_trainer = {
         "timesteps": agent_cfg["trainer"]["timesteps"],
         "headless": True,
-    }  # headless command gets overriden by IsaacLab argument
+    }  # headless command gets overridden by IsaacLab argument
     trainer = SequentialTrainer(cfg=cfg_trainer, env=env, agents=agent)
     # # start training
     # trainer.train()
@@ -473,7 +463,7 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
                 timestep=timestep,
                 timesteps=trainer.timesteps,
             )
-            #! log extra info from IsaacLab env
+            # log extra info from IsaacLab env
             if "log" in infos:
                 for k, v in infos["log"].items():
                     if isinstance(v, torch.Tensor) and v.numel() == 1:

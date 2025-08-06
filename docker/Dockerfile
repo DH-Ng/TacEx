@@ -25,7 +25,7 @@ COPY ../ ${ISAACLAB_EXTENSION_TEMPLATE_PATH}
 
 # Set up a symbolic link between the Isaac Lab root folder and the TacEx directory
 # RUN ln -sf ${ISAACLAB_PATH} ${ISAACLAB_EXTENSION_TEMPLATE_PATH}/_isaac_lab
-#-> doesnt do anything, because we mount the complete TacEx directory as volume -> need to add symlink manually after container is build
+#-> doesn't do anything, because we mount the complete TacEx directory as volume -> need to add symlink manually after container is build
 
 # # Install whatever you need as additional dependencies.
 

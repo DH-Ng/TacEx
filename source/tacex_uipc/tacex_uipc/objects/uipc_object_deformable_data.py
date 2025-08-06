@@ -4,16 +4,16 @@ import torch
 import weakref
 from typing import TYPE_CHECKING
 
-import omni.physics.tensors.impl.api as physx
-
-import isaaclab.utils.math as math_utils
 from isaaclab.utils.buffers import TimestampedBuffer
 
 try:
     from isaacsim.util.debug_draw import _debug_draw
 
     draw = _debug_draw.acquire_debug_draw_interface()
-except:
+except ImportError:
+    import warnings
+
+    warnings.warn("_debug_draw failed to import", ImportWarning)
     draw = None
 
 if TYPE_CHECKING:

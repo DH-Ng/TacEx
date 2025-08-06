@@ -1,8 +1,6 @@
-import torch
-from dataclasses import MISSING, dataclass
-from typing import TYPE_CHECKING, Any, Dict, List, Sequence, Tuple, Union
+from dataclasses import MISSING
 
-from isaaclab.utils import class_to_dict, configclass, to_camel_case
+from isaaclab.utils import configclass
 
 from ..gelsight_simulator_cfg import GelSightSimulatorCfg
 from .taxim_sim import TaximSimulator
@@ -30,7 +28,7 @@ class TaximSimulatorCfg(GelSightSimulatorCfg):
     gelpad_height: float = MISSING
     """Used for computing indentation depth from height map"""
 
-    #### Camera Data
+    # Asset Data
     gelpad_to_camera_min_distance: float = MISSING
     """Min distance of camera to the gelpad.
     Used for computing the indentation depth out of the

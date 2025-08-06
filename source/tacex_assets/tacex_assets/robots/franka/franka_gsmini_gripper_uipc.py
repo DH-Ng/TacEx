@@ -4,7 +4,7 @@
 # SPDX-License-Identifier: BSD-3-Clause
 
 #
-# Modified version of the orignial FRANKA_PANDA_CFG of Isaac Lab
+# Modified version of the original FRANKA_PANDA_CFG of Isaac Lab
 #
 """Configuration for the Franka Emika robots.
 
@@ -15,11 +15,11 @@ The following configurations are available:
 Reference: https://github.com/frankaemika/franka_ros
 """
 
-from tacex_assets import TACEX_ASSETS_DATA_DIR
-
 import isaaclab.sim as sim_utils
 from isaaclab.actuators import ImplicitActuatorCfg
 from isaaclab.assets import ArticulationCfg
+
+from tacex_assets import TACEX_ASSETS_DATA_DIR
 
 ##
 # Configuration

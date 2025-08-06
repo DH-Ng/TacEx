@@ -1,9 +1,7 @@
-import torch
-from dataclasses import MISSING, dataclass
-from typing import TYPE_CHECKING, Any, Dict, List, Sequence, Tuple, Union
+from dataclasses import MISSING
 
-from isaaclab.sensors import FrameTransformerCfg, OffsetCfg
-from isaaclab.utils import class_to_dict, configclass, to_camel_case
+from isaaclab.sensors import FrameTransformerCfg
+from isaaclab.utils import configclass
 
 from ..gelsight_simulator_cfg import GelSightSimulatorCfg
 from .fots_marker_sim_with_frame_transformer import FOTSMarkerSimulator
@@ -54,12 +52,12 @@ class FOTSMarkerSimulatorCfg(GelSightSimulatorCfg):
     marker_params: MarkerParams = MarkerParams()
 
     init_marker_pos: tuple = ([[]], [[]])
-    """Intial Marker positions.
+    """Initial Marker positions.
 
     Tuple (xx_init pos, yy_init pos):
-    - xx_init = inital position of each marker along the "height" of the tactile img (top-down)
+    - xx_init = initial position of each marker along the "height" of the tactile img (top-down)
         -> for each marker the initial x pos. Shape: (num_markers_row, num_marker_column)
-    - yy_init = inital position of each marker along the "width" of the tactile img (left-right)
+    - yy_init = initial position of each marker along the "width" of the tactile img (left-right)
         -> for each marker the initial y pos. Shape: (num_markers_row, num_marker_column)
     """
     # gelpad_height: float = MISSING

@@ -4,16 +4,12 @@ import copy
 import math
 import numpy as np
 import torch
-from pathlib import Path
 from typing import TYPE_CHECKING
 
 import cv2
 import omni.usd
-import torchvision.transforms.functional as F
-from tacex_uipc import UipcObject
 
-from isaaclab.sensors import FrameTransformer, FrameTransformerCfg
-from isaaclab.utils.math import euler_xyz_from_quat
+from tacex_uipc import UipcObject
 
 from ...gelsight_sensor import GelSightSensor
 from ..gelsight_simulator import GelSightSimulator
@@ -50,7 +46,7 @@ class ManiSkillSimulator(GelSightSimulator):
 
         self._num_envs = self.sensor._num_envs
 
-        # todo make size adaptable? I mean with env_ids. This way we would always simulate everythings
+        # todo make size adaptable? I mean with env_ids. This way we would always simulate everything
         self._indentation_depth = torch.zeros((self.sensor._num_envs), device=self.sensor._device)
         """Indentation depth, i.e. how deep the object is pressed into the gelpad.
         Values are in mm.
@@ -104,7 +100,7 @@ class ManiSkillSimulator(GelSightSimulator):
 
         If only optical simulation is used, then only an optical img is displayed.
         If only the marker simulatios is used, then only an image displaying the marker positions is displayed.
-        If both, optical and marker simulation, are used, then the images are overlayed.
+        If both, optical and marker simulation, are used, then the images are overlaid.
         """
         # note: parent only deals with callbacks. not their visibility
         if debug_vis:
@@ -127,8 +123,8 @@ class ManiSkillSimulator(GelSightSimulator):
         for i, prim in enumerate(self.sensor._prim_view.prims):
             if "marker_motion" in self.sensor.cfg.data_types:
                 show_img = prim.GetAttribute("debug_marker_motion").Get()
-                if show_img == True:
-                    if not (str(i) in self._debug_windows):
+                if show_img:
+                    if str(i) not in self._debug_windows:
                         # create a window
                         window = omni.ui.Window(
                             self.sensor._prim_view.prim_paths[i] + "/fem_marker",
@@ -144,7 +140,7 @@ class ManiSkillSimulator(GelSightSimulator):
                     marker_flow_i = self.sensor.data.output["marker_motion"][i]
 
                     # frame = self._create_marker_img(marker_flow_i)
-                    ## draw current markers like ManiSkill-ViTac
+                    # draw current marker positions like ManiSkill-ViTac does
                     frame = self.draw_markers(
                         marker_flow_i[1].cpu().numpy(),
                         img_w=self.cfg.tactile_img_res[0],
@@ -170,7 +166,7 @@ class ManiSkillSimulator(GelSightSimulator):
                         self._debug_img_providers[str(i)].set_bytes_data(
                             frame.flatten().data, [width, height]
                         )  # method signature: (numpy.ndarray[numpy.uint8], (width, height))
-                        image = omni.ui.ImageWithProvider(
+                        omni.ui.ImageWithProvider(
                             self._debug_img_providers[str(i)]
                         )  # , fill_policy=omni.ui.IwpFillPolicy.IWP_PRESERVE_ASPECT_FIT -> fill_policy by default: specifying the width and height of the item causes the image to be scaled to that size
                 elif str(i) in self._debug_windows:
@@ -179,7 +175,7 @@ class ManiSkillSimulator(GelSightSimulator):
                     self._debug_img_providers.pop(str(i)).destroy()
 
     def _create_marker_img(self, marker_data):
-        """Visualization of marker flow like in the orignal FOTS simulation.
+        """Visualization of marker flow like in the original FOTS simulation.
 
         Marker data needs to have the shape [2, num_markers, 2]
         - dim=0: init and current markers
@@ -219,10 +215,21 @@ class ManiSkillSimulator(GelSightSimulator):
 
         return frame
 
-    ####
-    # Visualization from ManiSkill-ViTac https://github.com/chuanyune/ManiSkill-ViTac2025/blob/a3d7df54bca9a2e57f34b37be3a3df36dc218915/Track_1/envs/tactile_sensor_sapienipc.py
-    ####
-    def draw_markers(self, marker_uv, marker_size=3, img_w=320, img_h=240):
+    def draw_markers(self, marker_uv: np.array, marker_size: int = 3, img_w: int = 320, img_h: int = 240) -> np.array:
+        """Visualize the marker flow like the ManiSkill-ViTac Simulator does.
+
+        Reference:
+        https://github.com/chuanyune/ManiSkill-ViTac2025/blob/a3d7df54bca9a2e57f34b37be3a3df36dc218915/Track_1/envs/tactile_sensor_sapienipc.py
+
+        Args:
+            marker_uv: Marker flow of a sensor. Shape is (2, num_markers, 2).
+            marker_size: The size of the markers in the image. Defaults to 3.
+            img_w: Width of the tactile image. Defaults to 320.
+            img_h: Height of the tactile image. Defaults to 240.
+
+        Returns:
+            Image with the markers visualized as dots.
+        """
         marker_uv_compensated = marker_uv + np.array([0.5, 0.5])
 
         marker_image = np.ones((img_h + 24, img_w + 24), dtype=np.uint8) * 255

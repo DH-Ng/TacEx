@@ -1,22 +1,15 @@
 from __future__ import annotations
 
-from collections.abc import Callable
-from dataclasses import MISSING
-
-import isaacsim.core.utils.prims as prim_utils
-import isaacsim.core.utils.stage as stage_utils
 import omni.usd
 import usdrt
-from pxr import Gf, Sdf, Usd, UsdGeom
-from tacex_uipc.utils import MeshGenerator, TetMeshCfg
+from pxr import UsdGeom
 from uipc.geometry import extract_surface, tetmesh
 
-from isaaclab.sim import converters, schemas
 from isaaclab.sim.spawners import materials
-from isaaclab.sim.spawners.spawner_cfg import DeformableObjectSpawnerCfg, RigidObjectSpawnerCfg, SpawnerCfg
-from isaaclab.sim.utils import bind_physics_material, bind_visual_material, clone
+from isaaclab.sim.spawners.spawner_cfg import DeformableObjectSpawnerCfg, RigidObjectSpawnerCfg
 from isaaclab.utils import configclass
-from isaaclab.utils.assets import ISAAC_NUCLEUS_DIR
+
+from tacex_uipc.utils import MeshGenerator
 
 
 @configclass

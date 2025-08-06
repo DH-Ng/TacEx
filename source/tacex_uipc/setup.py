@@ -13,14 +13,11 @@ Workaround: use ENV variables (see https://github.com/pypa/setuptools/discussion
 
 import os
 import platform
-import re
 import subprocess
 import sys
-import sysconfig
 import toml
-from pathlib import Path
 
-from setuptools import Extension, find_packages, setup
+from setuptools import Extension, setup
 from setuptools.command.build_ext import build_ext
 
 # Obtain the extension data from the extension.toml file
@@ -44,9 +41,8 @@ class CMakeExtension(Extension):
 
 
 class CMakeBuild(build_ext):
-
-    # hypens are automatically converted to underscores for attribute values
-    # -> underscore directly isnt allowed for user options string
+    # hyphens are automatically converted to underscores for attribute values
+    # -> underscore directly is not allowed for user options string
     user_options = (
         build_ext.user_options
         + [("DCMAKE-CUDA-ARCHITECTURES=", None, "Specify CUDA architecture,e.g. 89.")]
@@ -70,7 +66,7 @@ class CMakeBuild(build_ext):
         extdir = os.path.abspath(os.path.dirname(self.get_ext_fullpath(ext.name)))
 
         # use ENV variable as workaround
-        self.DCMAKE_CUDA_ARCHITECTURES = os.environ.get("CMAKE_CUDA_ARCHITECTURES", None)
+        self.DCMAKE_CUDA_ARCHITECTURES = os.environ.get("CMAKE_CUDA_ARCHITECTURES")
         print("cuda_architectures", self.DCMAKE_CUDA_ARCHITECTURES)
 
         cmake_args = [
@@ -104,9 +100,6 @@ class CMakeBuild(build_ext):
         subprocess.check_call(["cmake", ext.sourcedir] + cmake_args, cwd=self.build_dir, env=env)
         subprocess.check_call(["cmake", "--build", "."] + build_args, cwd=self.build_dir)
 
-
-# with (Path(__file__).resolve().parent / "README.md").open("r", encoding="utf-8") as f:
-#     long_description = f.read()
 
 # Installation operation
 setup(

@@ -2,14 +2,13 @@ from __future__ import annotations
 
 import torch
 import weakref
-from dataclasses import MISSING
 from typing import TYPE_CHECKING
 
 import carb
 import omni.kit.app
 from isaacsim.core.api.simulation_context import SimulationContext
 
-from isaaclab.ui.widgets import ManagerLiveVisualizer, UiVisualizerBase
+from isaaclab.ui.widgets import ManagerLiveVisualizer
 
 from .image_plot import ImagePlot
 from .line_plot import LiveLinePlot

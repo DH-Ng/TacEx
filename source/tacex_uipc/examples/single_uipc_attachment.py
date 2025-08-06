@@ -26,51 +26,22 @@ args_cli.enable_cameras = True
 app_launcher = AppLauncher(args_cli)
 simulation_app = app_launcher.app
 
-import datetime
-import json
 import numpy as np
-import platform
-import psutil
-import time
 import torch
 import traceback
-from pathlib import Path
 
 import carb
-import omni.usd
-import pxr
 import pynvml
 from isaacsim.core.api.objects import VisualCuboid
 from isaacsim.core.prims import XFormPrim
-from isaacsim.core.utils.stage import get_current_stage
-from isaacsim.core.utils.torch.transformations import tf_combine, tf_inverse, tf_vector
-from pxr import Usd, UsdGeom
-from tacex_assets import TACEX_ASSETS_DATA_DIR
-from tacex_assets.robots.franka.franka_gsmini_single_adapter_uipc import (
-    FRANKA_PANDA_ARM_GSMINI_SINGLE_ADAPTER_HIGH_PD_CFG,
-)
-from tacex_assets.sensors.gelsight_mini.gelsight_mini_cfg import GelSightMiniCfg
-from tacex_uipc import (
-    UipcIsaacAttachments,
-    UipcIsaacAttachmentsCfg,
-    UipcObject,
-    UipcObjectCfg,
-    UipcRLEnv,
-    UipcSim,
-    UipcSimCfg,
-)
-from tacex_uipc.utils import TetMeshCfg
 
 import isaaclab.sim as sim_utils
-import isaaclab.utils.math as lab_math
 import isaaclab.utils.math as math_utils
-from isaaclab.actuators.actuator_cfg import ImplicitActuatorCfg
-from isaaclab.assets import Articulation, ArticulationCfg, AssetBase, AssetBaseCfg, RigidObject, RigidObjectCfg
+from isaaclab.assets import Articulation, ArticulationCfg, AssetBaseCfg, RigidObject, RigidObjectCfg
 from isaaclab.controllers.differential_ik import DifferentialIKController
 from isaaclab.controllers.differential_ik_cfg import DifferentialIKControllerCfg
-from isaaclab.envs import DirectRLEnv, DirectRLEnvCfg, ViewerCfg
+from isaaclab.envs import DirectRLEnvCfg, ViewerCfg
 from isaaclab.envs.ui import BaseEnvWindow
-from isaaclab.markers import VisualizationMarkers
 from isaaclab.markers.config import FRAME_MARKER_CFG
 from isaaclab.scene import InteractiveSceneCfg
 from isaaclab.sensors import FrameTransformer, FrameTransformerCfg
@@ -78,24 +49,27 @@ from isaaclab.sensors.frame_transformer.frame_transformer_cfg import OffsetCfg
 from isaaclab.sim import PhysxCfg, SimulationCfg
 from isaaclab.sim.schemas.schemas_cfg import RigidBodyPropertiesCfg
 from isaaclab.utils import configclass
-from isaaclab.utils.assets import ISAAC_NUCLEUS_DIR
-from isaaclab.utils.math import (
-    combine_frame_transforms,
-    euler_xyz_from_quat,
-    sample_uniform,
-    subtract_frame_transforms,
-    wrap_to_pi,
-)
 
-from tacex import GelSightSensor, GelSightSensorCfg
-from tacex.simulation_approaches.gpu_taxim import TaximSimulatorCfg
+from tacex import GelSightSensor
+
+from tacex_assets import TACEX_ASSETS_DATA_DIR
+from tacex_assets.robots.franka.franka_gsmini_single_uipc import (
+    FRANKA_PANDA_ARM_SINGLE_GSMINI_HIGH_PD_UIPC_CFG,
+)
+from tacex_assets.sensors.gelsight_mini.gelsight_mini_cfg import GelSightMiniCfg
+
+from tacex_uipc import (
+    UipcIsaacAttachments,
+    UipcIsaacAttachmentsCfg,
+    UipcObject,
+    UipcObjectCfg,
+    UipcRLEnv,
+    UipcSimCfg,
+)
+from tacex_uipc.utils import TetMeshCfg
 
 #  from isaaclab.controllers.differential_ik_cfg import DifferentialIKControllerCfg
 # from isaaclab.envs.mdp.actions.actions_cfg import DifferentialInverseKinematicsActionCfg
-
-
-from isaaclab.markers import POSITION_GOAL_MARKER_CFG  # isort: skip
-from isaaclab.markers import CUBOID_MARKER_CFG  # isort: skip
 
 
 class CustomEnvWindow(BaseEnvWindow):
@@ -120,7 +94,6 @@ class CustomEnvWindow(BaseEnvWindow):
 
 @configclass
 class BallRollingEnvCfg(DirectRLEnvCfg):
-
     # viewer settings
     viewer: ViewerCfg = ViewerCfg()
     viewer.eye = (1.9, 1.4, 0.3)
@@ -189,7 +162,7 @@ class BallRollingEnvCfg(DirectRLEnvCfg):
     # plate
     plate = RigidObjectCfg(
         prim_path="/World/envs/env_.*/ground_plate",
-        init_state=RigidObjectCfg.InitialStateCfg(pos=[0.5, 0, 0]),
+        init_state=RigidObjectCfg.InitialStateCfg(pos=(0.5, 0, 0)),
         spawn=sim_utils.UsdFileCfg(
             usd_path=f"{TACEX_ASSETS_DATA_DIR}/Props/plate.usd",
             rigid_props=RigidBodyPropertiesCfg(
@@ -220,7 +193,7 @@ class BallRollingEnvCfg(DirectRLEnvCfg):
         constitution_cfg=UipcObjectCfg.StableNeoHookeanCfg(),
     )
 
-    robot: ArticulationCfg = FRANKA_PANDA_ARM_GSMINI_SINGLE_ADAPTER_HIGH_PD_CFG.replace(
+    robot: ArticulationCfg = FRANKA_PANDA_ARM_SINGLE_GSMINI_HIGH_PD_UIPC_CFG.replace(
         prim_path="/World/envs/env_.*/Robot",
     )
     # simulate the gelpad as uipc mesh
@@ -289,7 +262,7 @@ class BallRollingEnv(UipcRLEnv):
     def __init__(self, cfg: BallRollingEnvCfg, render_mode: str | None = None, **kwargs):
         super().__init__(cfg, render_mode, **kwargs)
 
-        #### Stuff for IK ##################################################
+        # --- for IK ---
         # create the differential IK controller
         self._ik_controller = DifferentialIKController(
             cfg=self.cfg.ik_controller_cfg, num_envs=self.num_envs, device=self.device
@@ -308,8 +281,8 @@ class BallRollingEnv(UipcRLEnv):
         # ee offset w.r.t panda hand -> based on the asset
         self._offset_pos = torch.tensor([0.0, 0.0, 0.131], device=self.device).repeat(self.num_envs, 1)
         self._offset_rot = torch.tensor([1.0, 0.0, 0.0, 0.0], device=self.device).repeat(self.num_envs, 1)
-        # self._offset_rot = torch.tensor([0.0, 0.0, 1.0, 0.0], device=self.device).repeat(self.num_envs, 1)  -> tried to set this, but IK didnt work properly then, not sure what the problem here is (might be due to bad panda_hand placement?)
-        ####################################################################
+        # self._offset_rot = torch.tensor([0.0, 0.0, 1.0, 0.0], device=self.device).repeat(self.num_envs, 1)  -> tried to set this, but IK did not work properly then, not sure what the problem here is (might be due to bad panda_hand placement?)
+        # ---
 
         # create buffer to store actions (= ik_commands)
         self.ik_commands = torch.zeros((self.num_envs, self._ik_controller.action_dim), device=self.device)
@@ -357,7 +330,7 @@ class BallRollingEnv(UipcRLEnv):
         self.gsmini = GelSightSensor(self.cfg.gsmini)
         self.scene.sensors["gsmini"] = self.gsmini
 
-        plate = RigidObject(self.cfg.plate)
+        RigidObject(self.cfg.plate)
 
         # Spawn AssetBase objects manually
         ground = self.cfg.ground
@@ -385,7 +358,7 @@ class BallRollingEnv(UipcRLEnv):
         light_cfg = sim_utils.DomeLightCfg(intensity=2000.0, color=(0.75, 0.75, 0.75))
         light_cfg.func("/World/Light", light_cfg)
 
-        ### UIPC simulation setup
+        # --- UIPC simulation setup ---
 
         # gelpad simulated via uipc
         self._uipc_gelpad = UipcObject(self.cfg.gelpad_cfg, self.uipc_sim)
@@ -448,12 +421,10 @@ class BallRollingEnv(UipcRLEnv):
     def _get_observations(self) -> dict:
         pass
 
-    ####
-    ## Helper Functions
-    ####
+    """
+    Helper Functions for IK control (from task_space_actions.py of IsaacLab).
+    """
 
-    ################################# For IK
-    #  From task_space_actions.py
     @property
     def jacobian_w(self) -> torch.Tensor:
         return self._robot.root_physx_view.get_jacobians()[:, self._jacobi_body_idx, :, :]
@@ -512,90 +483,21 @@ class BallRollingEnv(UipcRLEnv):
         return jacobian
 
 
-"""
-System diagnosis
--> adapted from benchmark_cameras.py script of IsaacLab
-"""
-
-
-def _get_utilization_percentages(reset: bool = False, max_values: list[float] = [0.0, 0.0, 0.0, 0.0]) -> list[float]:
-    """Get the maximum CPU, RAM, GPU utilization (processing), and
-    GPU memory usage percentages since the last time reset was true."""
-    if reset:
-        max_values[:] = [0, 0, 0, 0]  # Reset the max values
-
-    # # CPU utilization
-    # cpu_usage = psutil.cpu_percent(interval=0.1) # blocking slows down Isaac Sim a lot
-    cpu_usage = psutil.cpu_percent(interval=None)
-    max_values[0] = max(max_values[0], cpu_usage)
-
-    # # RAM utilization
-    memory_info = psutil.virtual_memory()
-    ram_usage = memory_info.percent
-    max_values[1] = max(max_values[1], ram_usage)
-
-    # GPU utilization using pynvml
-    if torch.cuda.is_available():
-        for i in range(torch.cuda.device_count()):
-            handle = pynvml.nvmlDeviceGetHandleByIndex(i)
-
-            # GPU Utilization
-            gpu_utilization = pynvml.nvmlDeviceGetUtilizationRates(handle)
-            gpu_processing_utilization_percent = gpu_utilization.gpu  # GPU core utilization
-            max_values[2] = max(max_values[2], gpu_processing_utilization_percent)
-
-            # GPU Memory Usage
-            memory_info = pynvml.nvmlDeviceGetMemoryInfo(handle)
-            gpu_memory_total = memory_info.total
-            gpu_memory_used = memory_info.used
-            gpu_memory_utilization_percent = (gpu_memory_used / gpu_memory_total) * 100
-            max_values[3] = max(max_values[3], gpu_memory_utilization_percent)
-    else:
-        gpu_processing_utilization_percent = None
-        gpu_memory_utilization_percent = None
-
-    return max_values
-
-
 def run_simulator(env: BallRollingEnv):
     """Runs the simulation loop."""
 
-    #! for time measurements
-    timestamp = f"{datetime.datetime.now():%Y-%m-%d-%H_%M_%S}"
-    output_dir = Path(__file__).parent.resolve()
-    file_name = str(output_dir) + f"/envs_{env.num_envs}_{timestamp}.txt"
-
-    frame_times_physics = []
-    frame_times_tactile = []
-
-    save_after_num_resets = 3
-    current_num_resets = 0
-    # GPU utilization using pynvml
-    if torch.cuda.is_available():
-        pynvml.nvmlInit()
-    system_utilization_analytics = _get_utilization_percentages(reset=False)
-
     print(f"Starting simulation with {env.num_envs} envs")
-
-    total_sim_time = time.time()
-
     env.reset()
 
     env.goal_prim_view = XFormPrim(prim_paths_expr="/World/envs/env_.*/goal", name="goals", usd=True)
 
     # Simulation loop
     while simulation_app.is_running():
-
         # perform physics step
-        physics_start = time.time()
-
         env._pre_physics_step(None)
         env._apply_action()
         env.scene.write_data_to_sim()
         env.sim.step(render=False)
-
-        physics_end = time.time()
-        ###
 
         env.uipc_sim.update_render_meshes()
 
@@ -606,32 +508,6 @@ def run_simulator(env: BallRollingEnv):
         env.ik_commands[:, :3] = positions - env.scene.env_origins
         env.ik_commands[:, 3:] = orientations
 
-        ### update sensors again to measure tactile sim time separately
-        tactile_sim_start = time.time()
-        env.gsmini.update(dt=env.physics_dt, force_recompute=True)
-        # tactile_rgb = env.gsmini.data.output["tactile_rgb"]
-        tactile_sim_end = time.time()
-        ###
-
-        # - add frame times, if sensor was in contact
-        # #todo currently assumed that every env was in contact. Need to filter out the envs where no contact
-        # contact_idx, = torch.where(env.gsmini._indentation_depth > 0)
-        # if contact_idx.shape[0] != 0:
-        #     frame_times_physics.append(1000 * (physics_end - physics_start))
-        #     frame_times_tactile.append(1000 * (tactile_sim_end - tactile_sim_start))
-
-        # print("Current total amount of 'in-contact' frames per env: ", len(frame_times_physics))
-        # print("Total sim time currently: {:8.4f}ms".format(time.time()-total_sim_time))
-        # print("Avg physics_sim time per env:    {:8.4f}ms".format(np.mean(np.array(frame_times_physics)/env.num_envs)))
-        # print("Avg tactile_sim time per env:    {:8.4f}ms".format(np.mean(np.array(frame_times_tactile)/env.num_envs)))
-        # system_utilization_analytics = _get_utilization_percentages(reset=False)
-        # print(
-        #     f"| CPU:{system_utilization_analytics[0]}% | "
-        #     f"RAM:{system_utilization_analytics[1]}% | "
-        #     f"GPU Compute:{system_utilization_analytics[2]}% | "
-        #     f"GPU Memory: {system_utilization_analytics[3]:.2f}% |"
-        # )
-        # print("")
         env.scene.update(dt=env.physics_dt)
 
     env.close()
@@ -665,5 +541,5 @@ if __name__ == "__main__":
         carb.log_error(traceback.format_exc())
         raise
     finally:
-        # close sim appy
+        # close sim apply
         simulation_app.close()

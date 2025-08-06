@@ -1,30 +1,18 @@
 from __future__ import annotations
 
 import numpy as np
-import scipy.spatial.transform as tf
-import time
 import torch
 from collections.abc import Sequence
-from dataclasses import MISSING, dataclass
 from matplotlib import pyplot as plt
-from pathlib import Path
-from typing import TYPE_CHECKING, Any, Dict, List, Tuple, Union
+from typing import TYPE_CHECKING
 
 import cv2
-import isaacsim.core.utils.prims as prim_utils
-import isaacsim.core.utils.stage as stage_utils
 import omni.kit.commands
 import omni.usd
-import torchvision.transforms.functional as F
 from isaacsim.core.prims import XFormPrim
-from omni import physx
-from omni.physx.scripts import deformableUtils, physicsUtils, utils
-from pxr import Gf, PhysxSchema, Sdf, Usd, UsdGeom, UsdPhysics, UsdShade
+from pxr import Sdf
 
-import isaaclab.sim as sim_utils
-from isaaclab.sensors import Camera, CameraCfg, SensorBase, SensorBaseCfg, TiledCamera, TiledCameraCfg
-from isaaclab.utils import class_to_dict, configclass, to_camel_case
-from isaaclab.utils.math import convert_quat
+from isaaclab.sensors import SensorBase, TiledCamera, TiledCameraCfg
 
 from .gelsight_sensor_data import GelSightSensorData
 from .simulation_approaches.gelsight_simulator import GelSightSimulator
@@ -209,7 +197,7 @@ class GelSightSensor(SensorBase):
         self._frame[env_ids] = 0
 
     ####
-    # Implemenation of abstract methods of base sensor class
+    # Implementation of abstract methods of base sensor class
     ####
     # MARK: _init_impl
     def _initialize_impl(self):
@@ -247,11 +235,11 @@ class GelSightSensor(SensorBase):
                 data_types=self.cfg.sensor_camera_cfg.data_types,
                 update_latest_camera_pose=True,  # needed for FEM based marker sim
                 spawn=None,  # use camera which is part of the GelSight Mini Asset
-                #! issue: clipping range doesnt matter for camera prim, if we dont spawn it
+                # note: clipping range doesn't matter for existing camera prim -> only applied when camera is spawned # TODO fix?
                 # spawn=sim_utils.PinholeCameraCfg(
                 #    focal_length=24.0, focus_distance=400.0, horizontal_aperture=20.955, clipping_range=(0.1, 1.0e5)
                 # ),
-                # depth_clipping_behavior="max", # doesnt work, cause "max" value is taking from spawn config, which we dont have
+                # depth_clipping_behavior="max", # doesn't work, cause "max" value is taking from spawn config, which we dont have
             )
             self.camera = TiledCamera(cfg=self.camera_cfg)
 
@@ -266,7 +254,7 @@ class GelSightSensor(SensorBase):
             #         # spawn=sim_utils.PinholeCameraCfg(
             #         #    focal_length=24.0, focus_distance=400.0, horizontal_aperture=20.955, clipping_range=(0.1, 1.0e5)
             #         # ),
-            #         #depth_clipping_behavior="max", # doesnt work, cause "max" value is taking from spawn config, which we dont have
+            #         #depth_clipping_behavior="max", # doesn't work, cause "max" value is taking from spawn config, which we dont have
             # )
             # self.camera = Camera(cfg=self.camera_cfg)
 
@@ -398,13 +386,13 @@ class GelSightSensor(SensorBase):
 
         If only optical simulation is used, then only an optical img is displayed.
         If only the marker simulatios is used, then only an image displaying the marker positions is displayed.
-        If both, optical and marker simulation, are used, then the images are overlayed.
+        If both, optical and marker simulation, are used, then the images are overlaid.
         """
         # note: parent only deals with callbacks. not their visibility
         if debug_vis:
             # need to create the attribute for the debug_vis here since it depends on self._prim_view
             for prim in self._prim_view.prims:
-                # creates USD attribut for each data type, which can be found in the Isaac GUI under "Raw Usd Properties -> "Extra Properties"
+                # creates USD attributes for each data type, which can be found in the Isaac GUI under "Raw Usd Properties -> "Extra Properties"
                 if "camera_depth" in self.cfg.data_types:
                     attr = prim.CreateAttribute("debug_camera_depth", Sdf.ValueTypeNames.Bool)
                     attr.Set(False)
@@ -443,12 +431,11 @@ class GelSightSensor(SensorBase):
         # Update the GUI windows
         for i, prim in enumerate(
             self._prim_view.prims
-        ):  #! bad that we iterate through all prims multiple times (once per sim data type)
-
+        ):  # note: bad that we iterate through all prims multiple times (once per sim data type)
             if "camera_rgb" in self.cfg.data_types:
                 show_img = prim.GetAttribute("debug_camera_rgb").Get()
-                if show_img == True:
-                    if not (str(i) in self._windows["camera_rgb"]):
+                if show_img:
+                    if str(i) not in self._windows["camera_rgb"]:
                         # create a window
                         window = omni.ui.Window(
                             self._prim_view.prim_paths[i] + "/camera_rgb",
@@ -472,7 +459,7 @@ class GelSightSensor(SensorBase):
                         self._img_providers["camera_rgb"][str(i)].set_bytes_data(
                             frame.flatten().data, [width, height]
                         )  # method signature: (numpy.ndarray[numpy.uint8], (width, height))
-                        image = omni.ui.ImageWithProvider(
+                        omni.ui.ImageWithProvider(
                             self._img_providers["camera_rgb"][str(i)]
                         )  # , fill_policy=omni.ui.IwpFillPolicy.IWP_PRESERVE_ASPECT_FIT -> fill_policy by default: specifying the width and height of the item causes the image to be scaled to that size
                 elif str(i) in self._windows["camera_rgb"]:
@@ -482,8 +469,8 @@ class GelSightSensor(SensorBase):
 
             if "camera_depth" in self.cfg.data_types:
                 show_img = prim.GetAttribute("debug_camera_depth").Get()
-                if show_img == True:
-                    if not (str(i) in self._windows["camera_depth"]):
+                if show_img:
+                    if str(i) not in self._windows["camera_depth"]:
                         # create a window
                         window = omni.ui.Window(
                             self._prim_view.prim_paths[i] + "/camera_depth",
@@ -512,7 +499,7 @@ class GelSightSensor(SensorBase):
                         self._img_providers["camera_depth"][str(i)].set_bytes_data(
                             frame.flatten().data, [width, height]
                         )  # method signature: (numpy.ndarray[numpy.uint8], (width, height))
-                        image = omni.ui.ImageWithProvider(
+                        omni.ui.ImageWithProvider(
                             self._img_providers["camera_depth"][str(i)]
                         )  # , fill_policy=omni.ui.IwpFillPolicy.IWP_PRESERVE_ASPECT_FIT -> fill_policy by default: specifying the width and height of the item causes the image to be scaled to that size
                 elif str(i) in self._windows["camera_depth"]:
@@ -587,7 +574,7 @@ class GelSightSensor(SensorBase):
                 (self._num_envs, self.camera_resolution[1], self.camera_resolution[0], 1)
             )  # add a channel to the depth image for debug_vis
 
-            return self._data.output["camera_depth"]
+        return self._data.output["camera_depth"]
 
     def _get_height_map(self):
         if self.camera is not None:

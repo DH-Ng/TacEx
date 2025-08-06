@@ -56,8 +56,8 @@ class ContainerInterface:
 
         # self.container_name = f"isaac-lab-{self.profile}"
         # self.image_name = f"isaac-lab-{self.profile}:latest"
-        self.container_name = f"isaac-lab-tacex"
-        self.image_name = f"isaac-lab-tacex:latest"
+        self.container_name = "isaac-lab-tacex"
+        self.image_name = "isaac-lab-tacex:latest"
 
         # keep the environment variables from the current environment
         self.environ = os.environ
@@ -118,8 +118,9 @@ class ContainerInterface:
             env=self.environ,
         )
 
-        ## We don't support multiple profiles for the extension, to keep it simple
-        ## -> use profiles when building IsaacLab image
+        # We currently do not support multiple profiles for the extension to keep it simple
+        # -> use profiles when building IsaacLab image
+
         # build the image for the profile
         # subprocess.run(
         #    ["docker", "compose"]
@@ -131,6 +132,7 @@ class ContainerInterface:
         #    cwd=self.context_dir,
         #    env=self.environ,
         # )
+
         # start the container
         self.start()
 
@@ -165,17 +167,15 @@ class ContainerInterface:
         """
         if self.is_container_running():
             print(f"[INFO] Entering the existing '{self.container_name}' container in a bash session...\n")
-            subprocess.run(
-                [
-                    "docker",
-                    "exec",
-                    "--interactive",
-                    "--tty",
-                    *(["-e", f"DISPLAY={os.environ['DISPLAY']}"] if "DISPLAY" in os.environ else []),
-                    f"{self.container_name}",
-                    "bash",
-                ]
-            )
+            subprocess.run([
+                "docker",
+                "exec",
+                "--interactive",
+                "--tty",
+                *(["-e", f"DISPLAY={os.environ['DISPLAY']}"] if "DISPLAY" in os.environ else []),
+                f"{self.container_name}",
+                "bash",
+            ])
         else:
             raise RuntimeError(f"The container '{self.container_name}' is not running.")
 

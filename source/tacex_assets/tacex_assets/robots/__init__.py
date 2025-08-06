@@ -1,4 +1,4 @@
-"""Package containing task implementations for various robotic environments."""
+"""Package containing robot configurations."""
 
 import os
 import toml

@@ -1,15 +1,14 @@
-## Copyright (c) 2023, NVIDIA CORPORATION.  All rights reserved.
-##
-## NVIDIA CORPORATION and its licensors retain all intellectual property
-## and proprietary rights in and to this software, related documentation
-## and any modifications thereto.  Any use, reproduction, disclosure or
-## distribution of this software and related documentation without an express
-## license agreement from NVIDIA CORPORATION is strictly prohibited.
-##
+# Copyright (c) 2023, NVIDIA CORPORATION.  All rights reserved.
+#
+# NVIDIA CORPORATION and its licensors retain all intellectual property
+# and proprietary rights in and to this software, related documentation
+# and any modifications thereto.  Any use, reproduction, disclosure or
+# distribution of this software and related documentation without an express
+# license agreement from NVIDIA CORPORATION is strictly prohibited.
+#
 import math
 import numpy as np
 import random
-from ctypes import alignment
 
 import carb
 import carb.events
@@ -19,7 +18,6 @@ import omni.usd
 from usdrt import Gf, Rt, Sdf, Usd, Vt
 
 try:
-    wp = None
     import warp as wp
 
     wp.init()
@@ -225,8 +223,8 @@ class UsdrtExamplePythonExtension(omni.ext.IExt):
             try:
                 deform_mesh_with_warp(get_stage_id(), get_selected_prim_path(), self._t)
                 self._t += self._dt
-            except Exception as e:
-                carb.log_error(e)
+            except Exception as error:
+                carb.log_error(error)
             return
 
         update_stream = omni.kit.app.get_app().get_update_event_stream()

@@ -1,13 +1,11 @@
 from __future__ import annotations
 
 import pathlib
-import weakref
-from typing import TYPE_CHECKING, Any, Dict, List, Tuple, Union
 
 import omni.usd
 import usdrt
 import usdrt.Usd
-from pxr import Gf, Sdf, Usd, UsdGeom
+from pxr import UsdGeom
 
 import isaaclab.sim as sim_utils
 from isaaclab.utils import configclass
@@ -16,19 +14,19 @@ try:
     from isaacsim.util.debug_draw import _debug_draw
 
     draw = _debug_draw.acquire_debug_draw_interface()
-except:
+except ImportError:
+    import warnings
+
+    warnings.warn("_debug_draw failed to import", ImportWarning)
     draw = None
 
-import numpy as np
+from uipc import Logger, Timer, builtin
+from uipc.core import Engine, Scene, SceneIO, World
+from uipc.geometry import extract_surface, ground
+from uipc.unit import GPa
 
-import uipc
-import warp as wp
 from tacex_uipc.objects import UipcObject
 from tacex_uipc.utils import MeshGenerator
-from uipc import AngleAxis, Logger, Quaternion, Timer, Transform, Vector3, builtin, view
-from uipc.core import Engine, Scene, SceneIO, World
-from uipc.geometry import extract_surface, flip_inward_triangles, ground, label_surface, label_triangle_orient, tetmesh
-from uipc.unit import GPa, MPa
 
 
 @configclass
@@ -275,8 +273,8 @@ class UipcSim:
 
             fabric_mesh_points = fabric_prim.GetAttribute("points")
             fabric_mesh_points.Set(usdrt.Vt.Vec3fArray(trimesh_points))
-        #! Currently there is a 1 frame delay between the points we set and whats rendered in Isaac
-        #! if you draw the points and let it render, you see that the mesh is lagging behind the points
+        # NOTE: Currently there is a 1 frame delay between the points we set and what's rendered in Isaac
+        # NOTE: if you draw the points and let it render, you see that the mesh is lagging behind the points
         # draw.clear_points()
         # points = np.array(all_trimesh_points)
         # draw.draw_points(points, [(255,0,255,0.5)]*points.shape[0], [30]*points.shape[0])
@@ -287,10 +285,12 @@ class UipcSim:
 
     @staticmethod
     def get_sim_time_report(as_json: bool = False):
+        report = None
         if as_json:
             report = Timer.report_as_json()
         else:
             Timer.report()
+        return report
 
     def save_frame(self):
         """Saves the current frame into multiple files, which can be retrieved to replay the animation later.
@@ -317,7 +317,7 @@ class UipcSim:
             # print("obj id ", obj_id)
             obj = self.scene.objects().find(obj_id)
             obj_geometry_ids = obj.geometries().ids()
-            # obj_name = obj.name() #-- doesnt work, get error message (otherwise use this to set prim_path)
+            # obj_name = obj.name() #-- doesn't work, get error message (otherwise use this to set prim_path)
 
             # create prim for each geometry
             for id in obj_geometry_ids:

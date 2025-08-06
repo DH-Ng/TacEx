@@ -1,7 +1,7 @@
 # Example Commands
 Some example commands for training etc.
 
-To list all TacEx environemnts:
+To list all TacEx environments:
 ```bash
 # Assuming you are in the TacEx root directory
 isaaclab -p scripts/reinforcement_learning/list_envs.py

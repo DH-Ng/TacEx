@@ -9,50 +9,25 @@ import math
 import torch
 
 import pytorch_kinematics as pk
-from isaacsim.core.utils.stage import get_current_stage
-from isaacsim.core.utils.torch.transformations import tf_combine, tf_inverse, tf_vector
-from pxr import UsdGeom
 
-# from tactile_sim import GsMiniSensorCfg, GsMiniSensor
-from tacex_assets import TACEX_ASSETS_DATA_DIR
-from tacex_assets.robots.franka.franka_gsmini_single_adapter_rigid import (
-    FRANKA_PANDA_ARM_GSMINI_SINGLE_ADAPTER_HIGH_PD_CFG,
-)
-
-import isaaclab.sim as sim_utils
-import isaaclab.utils.math as lab_math
-import isaaclab.utils.math as math_utils
-from isaaclab.actuators.actuator_cfg import ImplicitActuatorCfg
-from isaaclab.assets import Articulation, ArticulationCfg, AssetBase, AssetBaseCfg, RigidObject, RigidObjectCfg
-from isaaclab.controllers.differential_ik import DifferentialIKController
 from isaaclab.controllers.differential_ik_cfg import DifferentialIKControllerCfg
-from isaaclab.envs import DirectRLEnv, DirectRLEnvCfg, ViewerCfg
-from isaaclab.envs.ui import BaseEnvWindow
 from isaaclab.markers import VisualizationMarkers
-from isaaclab.markers.config import FRAME_MARKER_CFG
-from isaaclab.scene import InteractiveSceneCfg
-from isaaclab.sensors import FrameTransformer, FrameTransformerCfg
-from isaaclab.sensors.frame_transformer.frame_transformer_cfg import OffsetCfg
-from isaaclab.sim import PhysxCfg, SimulationCfg
-from isaaclab.sim.schemas.schemas_cfg import RigidBodyPropertiesCfg
 from isaaclab.utils import configclass
-from isaaclab.utils.assets import ISAAC_NUCLEUS_DIR
 from isaaclab.utils.math import (
-    combine_frame_transforms,
     euler_xyz_from_quat,
     sample_uniform,
-    subtract_frame_transforms,
     wrap_to_pi,
 )
 
-from .base_env import BallRollingEnv, BallRollingEnvCfg
+# from tactile_sim import GsMiniSensorCfg, GsMiniSensor
+from tacex_assets import TACEX_ASSETS_DATA_DIR
+
 from .height_map_env import BallRollingHeightMapEnv, BallRollingHeightMapEnvCfg
 
 #  from isaaclab.controllers.differential_ik_cfg import DifferentialIKControllerCfg
 # from isaaclab.envs.mdp.actions.actions_cfg import DifferentialInverseKinematicsActionCfg
 
 
-from isaaclab.markers import POSITION_GOAL_MARKER_CFG  # isort: skip
 from isaaclab.markers import CUBOID_MARKER_CFG  # isort: skip
 
 
@@ -79,7 +54,7 @@ class BallRollingIKResetEnvCfg(BallRollingHeightMapEnvCfg):
     success_reward = {
         "weight": 10,
         "threshold": 0.005,
-    }  # 0.0025 we count it as a sucess when dist obj <-> goal is less than the threshold
+    }  # 0.0025 we count it as a success when dist obj <-> goal is less than the threshold
     height_penalty = {
         "weight": -0.1,
         "min_height": 0.008,
@@ -112,8 +87,9 @@ class BallRollingIKResetEnv(BallRollingHeightMapEnv):
     def __init__(self, cfg: BallRollingIKResetEnvCfg, render_mode: str | None = None, **kwargs):
         super().__init__(cfg, render_mode, **kwargs)
 
-        #### IK Solver ##########################
-        ik_chain = pk.build_chain_from_urdf(open(self.cfg.ik_solver_cfg["urdf_path"], mode="rb").read())
+        # --- IK Solver ---
+        with open(self.cfg.ik_solver_cfg["urdf_path"], mode="rb") as urdf_file:
+            ik_chain = pk.build_chain_from_urdf(urdf_file)
         # ik_chain.print_tree()
         # extract a specific serial chain such for inverse kinematics
         ik_chain = pk.SerialChain(ik_chain, self.cfg.ik_solver_cfg["ee_link_name"])
@@ -188,7 +164,7 @@ class BallRollingIKResetEnv(BallRollingHeightMapEnv):
             self.cfg.tracking_reward["w"] * obj_goal_distance
             + self.cfg.tracking_reward["v"] * torch.log(obj_goal_distance + self.cfg.tracking_reward["alpha"])
         )
-        # only apply when ee is at object (with this our tracking goal always needs to be positive, otherwise reaching part wont work anymore)
+        # only apply when ee is at object (with this our tracking goal always needs to be positive, otherwise reaching part will not work anymore)
         tracking_goal = (object_ee_distance < self.cfg.tracking_reward["minimal_distance"]) * tracking_goal
         tracking_goal *= self.cfg.tracking_reward["weight"]
 
@@ -206,7 +182,7 @@ class BallRollingIKResetEnv(BallRollingHeightMapEnv):
         ee_frame_orient = euler_xyz_from_quat(self._ee_frame.data.target_quat_source[..., 0, :])
         x = wrap_to_pi(
             ee_frame_orient[0] - math.pi
-        )  # our panda hand asset has rotation from (180,0,-45) -> we substract 180 for defining the rotation limits
+        )  # our panda hand asset has rotation from (180,0,-45) -> we subtract 180 for defining the rotation limits
         y = wrap_to_pi(ee_frame_orient[1])
         orient_penalty = ((torch.abs(x) > math.pi / 8) | (torch.abs(y) > math.pi / 8)) * self.cfg.orient_penalty[
             "weight"
@@ -250,11 +226,11 @@ class BallRollingIKResetEnv(BallRollingHeightMapEnv):
             "orientation_penalty": orient_penalty.float().mean(),
             "height_penalty": height_penalty.mean(),
             "action_rate_penalty": (
-                self.cfg.action_rate_penalty_scale[self.curriculum_phase_id] * action_rate_penalty
-            ).mean(),
+                (self.cfg.action_rate_penalty_scale[self.curriculum_phase_id] * action_rate_penalty).mean()
+            ),
             "joint_vel_penalty": (
-                self.cfg.joint_vel_penalty_scale[self.curriculum_phase_id] * joint_vel_penalty
-            ).mean(),
+                (self.cfg.joint_vel_penalty_scale[self.curriculum_phase_id] * joint_vel_penalty).mean()
+            ),
             # task metrics
             "Metric/num_ee_at_obj": torch.sum(object_ee_distance < self.cfg.tracking_reward["minimal_distance"]),
             "Metric/ee_obj_error": object_ee_distance.mean(),
@@ -284,7 +260,7 @@ class BallRollingIKResetEnv(BallRollingHeightMapEnv):
         # add offset between gelsight mini case frame (which is at the bottom of the sensor) to the gelpad
         self.des_reset_ee_pos[
             env_ids, 2
-        ] += 0.134  # cant set it too close to the ball, otherwise "teleporting" robot there is gonna kick ball away
+        ] += 0.134  # cannot set it too close to the ball, otherwise "teleporting" robot there is gonna kick ball away
         # convert desired pos into transformation matrix
         goal_poses = pk.Transform3d(
             pos=self.des_reset_ee_pos[env_ids], rot=self.des_reset_ee_rot[env_ids], device=self.device
@@ -316,9 +292,10 @@ class BallRollingIKResetEnv(BallRollingHeightMapEnv):
         self.prev_actions[env_ids] = 0.0
         self._ik_controller.reset(env_ids)
 
-    ####
-    ## Helper Functions
-    ####
+    """
+    Helper Functions for debug visualization.
+    """
+
     def _set_debug_vis_impl(self, debug_vis: bool):
         # create markers if necessary for the first tome
         if debug_vis:

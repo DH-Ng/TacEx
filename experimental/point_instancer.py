@@ -82,8 +82,6 @@ class Example:
         self.positions_attr.Set(self.point_list)
 
 
-import asyncio
-
 import omni
 
 example = Example()

@@ -5,45 +5,18 @@
 
 from __future__ import annotations
 
-import math
 import torch
 
 import pytorch_kinematics as pk
-from isaacsim.core.utils.stage import get_current_stage
-from isaacsim.core.utils.torch.transformations import tf_combine, tf_inverse, tf_vector
-from pxr import UsdGeom
+
+from isaaclab.controllers.differential_ik_cfg import DifferentialIKControllerCfg
+from isaaclab.utils import configclass
+from isaaclab.utils.math import (
+    sample_uniform,
+)
 
 # from tactile_sim import GsMiniSensorCfg, GsMiniSensor
 from tacex_assets import TACEX_ASSETS_DATA_DIR
-from tacex_assets.robots.franka.franka_gsmini_single_adapter_rigid import (
-    FRANKA_PANDA_ARM_GSMINI_SINGLE_ADAPTER_HIGH_PD_CFG,
-)
-
-import isaaclab.sim as sim_utils
-import isaaclab.utils.math as lab_math
-import isaaclab.utils.math as math_utils
-from isaaclab.actuators.actuator_cfg import ImplicitActuatorCfg
-from isaaclab.assets import Articulation, ArticulationCfg, AssetBase, AssetBaseCfg, RigidObject, RigidObjectCfg
-from isaaclab.controllers.differential_ik import DifferentialIKController
-from isaaclab.controllers.differential_ik_cfg import DifferentialIKControllerCfg
-from isaaclab.envs import DirectRLEnv, DirectRLEnvCfg, ViewerCfg
-from isaaclab.envs.ui import BaseEnvWindow
-from isaaclab.markers import VisualizationMarkers
-from isaaclab.markers.config import FRAME_MARKER_CFG
-from isaaclab.scene import InteractiveSceneCfg
-from isaaclab.sensors import FrameTransformer, FrameTransformerCfg
-from isaaclab.sensors.frame_transformer.frame_transformer_cfg import OffsetCfg
-from isaaclab.sim import PhysxCfg, SimulationCfg
-from isaaclab.sim.schemas.schemas_cfg import RigidBodyPropertiesCfg
-from isaaclab.utils import configclass
-from isaaclab.utils.assets import ISAAC_NUCLEUS_DIR
-from isaaclab.utils.math import (
-    combine_frame_transforms,
-    euler_xyz_from_quat,
-    sample_uniform,
-    subtract_frame_transforms,
-    wrap_to_pi,
-)
 
 from .base_env import BallRollingEnv, BallRollingEnvCfg
 
@@ -51,13 +24,8 @@ from .base_env import BallRollingEnv, BallRollingEnvCfg
 # from isaaclab.envs.mdp.actions.actions_cfg import DifferentialInverseKinematicsActionCfg
 
 
-from isaaclab.markers import POSITION_GOAL_MARKER_CFG  # isort: skip
-from isaaclab.markers import CUBOID_MARKER_CFG  # isort: skip
-
-
 @configclass
 class BallRollingIKResetEnvCfg(BallRollingEnvCfg):
-
     # use an proper ik solver for computing desired ee pose after resets
     ik_solver_cfg = {
         "urdf_path": f"{TACEX_ASSETS_DATA_DIR}/Robots/Franka/GelSight_Mini/Single_Adapter/physx_rigid_gelpad.urdf",
@@ -90,8 +58,9 @@ class BallRollingIKResetEnv(BallRollingEnv):
     def __init__(self, cfg: BallRollingIKResetEnvCfg, render_mode: str | None = None, **kwargs):
         super().__init__(cfg, render_mode, **kwargs)
 
-        #### IK Solver ##########################
-        ik_chain = pk.build_chain_from_urdf(open(self.cfg.ik_solver_cfg["urdf_path"], mode="rb").read())
+        # --- IK Solver ---
+        with open(self.cfg.ik_solver_cfg["urdf_path"], mode="rb") as urdf_file:
+            ik_chain = pk.build_chain_from_urdf(urdf_file)
         # ik_chain.print_tree()
         # extract a specific serial chain such for inverse kinematics
         ik_chain = pk.SerialChain(ik_chain, self.cfg.ik_solver_cfg["ee_link_name"])
@@ -170,7 +139,7 @@ class BallRollingIKResetEnv(BallRollingEnv):
         # add offset between gelsight mini case frame (which is at the bottom of the sensor) to the gelpad
         self.des_reset_ee_pos[
             env_ids, 2
-        ] += 0.131  # cant set it too close to the ball, otherwise "teleporting" robot there is gonna kick ball away
+        ] += 0.131  # cannot set it too close to the ball, otherwise "teleporting" robot there is gonna kick ball away
 
         # convert desired pos into transformation matrix
         goal_poses = pk.Transform3d(
@@ -209,8 +178,3 @@ class BallRollingIKResetEnv(BallRollingEnv):
         self.actions[env_ids] = 0.0
         self.prev_actions[env_ids] = 0.0
         self._ik_controller.reset(env_ids)
-
-
-####
-## Helper Functions
-####
