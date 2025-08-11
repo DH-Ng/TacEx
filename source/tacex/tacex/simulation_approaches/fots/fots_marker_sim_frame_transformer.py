@@ -322,17 +322,17 @@ class FOTSMarkerSimulator(GelSightSimulator):
             cv2.arrowedLine(frame, pt1, pt2, color, 2, tipLength=0.2)
 
         # draw current contact point
-        if len(self.sensor._data.output["traj"][0]) > 0:
-            # traj = self.sensor._data.output["traj"][0]
-            center_x = int(
-                self.sensor._data.output["traj"][0][-1][0] * self.marker_motion_sim.mm2pix
-                + self.marker_motion_sim.tactile_img_width / 2
-            )
-            center_y = int(
-                self.sensor._data.output["traj"][0][-1][1] * self.marker_motion_sim.mm2pix
-                + self.marker_motion_sim.tactile_img_height / 2
-            )
-            cv2.circle(frame, (center_x, center_y), 6, color, 1, lineType=8)
+        # if len(self.sensor._data.output["traj"][0]) > 0:
+        #     # traj = self.sensor._data.output["traj"][0]
+        #     center_x = int(
+        #         self.sensor._data.output["traj"][0][-1][0] * self.marker_motion_sim.mm2pix
+        #         + self.marker_motion_sim.tactile_img_width / 2
+        #     )
+        #     center_y = int(
+        #         self.sensor._data.output["traj"][0][-1][1] * self.marker_motion_sim.mm2pix
+        #         + self.marker_motion_sim.tactile_img_height / 2
+        #     )
+        #     cv2.circle(frame, (center_x, center_y), 6, color, 1, lineType=8)
 
         frame = cv2.normalize(frame, None, alpha=0, beta=255, norm_type=cv2.NORM_MINMAX, dtype=cv2.CV_32F)
         # frame = frame[:self.cfg.tactile_img_res[1], :self.cfg.tactile_img_res[0]]

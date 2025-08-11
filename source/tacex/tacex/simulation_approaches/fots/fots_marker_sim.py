@@ -256,10 +256,10 @@ class FOTSMarkerSimulator(GelSightSimulator):
                         )  # default format omni.ui.TextureFormat.RGBA8_UNORM
 
                     marker_flow_i = self.sensor.data.output["marker_motion"][i]
-                    frame = self._create_marker_img(marker_flow_i)
+                    # frame = self._create_marker_img(marker_flow_i)
 
                     # draw current marker positions like ManiSkill-ViTac does
-                    # frame = self.draw_markers(marker_flow_i[1].cpu().numpy())
+                    frame = self.draw_markers(marker_flow_i[1].cpu().numpy())
 
                     # create tactile rgb img with markers
                     if "tactile_rgb" in self.sensor.cfg.data_types:
@@ -324,21 +324,20 @@ class FOTSMarkerSimulator(GelSightSimulator):
 
             pt1 = (init_x_pos, init_y_pos)
             pt2 = (x_pos + arrow_scale * int(x_pos - init_x_pos), y_pos + arrow_scale * int(y_pos - init_y_pos))
-            # pt2 = (x_pos, y_pos)
             cv2.arrowedLine(frame, pt1, pt2, color, 2, tipLength=0.2)
 
         # draw current contact point
-        if len(self.sensor._data.output["traj"][0]) > 0:
-            # traj = self.sensor._data.output["traj"][0]
-            center_x = int(
-                self.sensor._data.output["traj"][0][-1][0] * self.marker_motion_sim.mm2pix
-                + self.marker_motion_sim.tactile_img_width / 2
-            )
-            center_y = int(
-                self.sensor._data.output["traj"][0][-1][1] * self.marker_motion_sim.mm2pix
-                + self.marker_motion_sim.tactile_img_height / 2
-            )
-            cv2.circle(frame, (center_x, center_y), 6, color, 1, lineType=8)
+        # if len(self.sensor._data.output["traj"][0]) > 0:
+        #     # traj = self.sensor._data.output["traj"][0]
+        #     center_x = int(
+        #         self.sensor._data.output["traj"][0][-1][0] * self.marker_motion_sim.mm2pix
+        #         + self.marker_motion_sim.tactile_img_width / 2
+        #     )
+        #     center_y = int(
+        #         self.sensor._data.output["traj"][0][-1][1] * self.marker_motion_sim.mm2pix
+        #         + self.marker_motion_sim.tactile_img_height / 2
+        #     )
+        #     cv2.circle(frame, (center_x, center_y), 6, color, 1, lineType=8)
 
         frame = cv2.normalize(frame, None, alpha=0, beta=255, norm_type=cv2.NORM_MINMAX, dtype=cv2.CV_32F)
         frame = frame[: self.cfg.tactile_img_res[1], : self.cfg.tactile_img_res[0]]

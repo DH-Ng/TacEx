@@ -13,7 +13,7 @@ from tacex_assets import TACEX_ASSETS_DATA_DIR
 from tacex_assets.robots.franka.franka_gsmini_single_uipc_textured import (
     FRANKA_PANDA_ARM_SINGLE_GSMINI_TEXTURED_HIGH_PD_UIPC_CFG,
 )
-from tacex_assets.sensors.gelsight_mini.gelsight_mini_cfg import GelSightMiniCfg
+from tacex_assets.sensors.gelsight_mini.gsmini_cfg import GelSightMiniCfg
 
 from tacex_uipc import UipcIsaacAttachments, UipcIsaacAttachmentsCfg, UipcObject, UipcObjectCfg, UipcSimCfg
 from tacex_uipc.utils import TetMeshCfg
@@ -127,7 +127,7 @@ class UipcTexturedEnvCfg(PhysXRigidEnvCfg):
     gsmini.optical_sim_cfg = gsmini.optical_sim_cfg.replace(
         with_shadow=False,
         device="cuda",
-        tactile_img_res=(640, 480),
+        tactile_img_res=(320, 240),
     )
     # update FOTS cfg
     marker_cfg = FRAME_MARKER_CFG.copy()
@@ -136,7 +136,7 @@ class UipcTexturedEnvCfg(PhysXRigidEnvCfg):
 
     gsmini.marker_motion_sim_cfg = gsmini.marker_motion_sim_cfg.replace(
         device="cuda",
-        tactile_img_res=(640, 480),
+        tactile_img_res=(320, 240),
         frame_transformer_cfg=FrameTransformerCfg(
             prim_path="/World/envs/env_.*/Robot/gelsight_mini_case",  # "/World/envs/env_.*/Robot/gelsight_mini_case",
             target_frames=[FrameTransformerCfg.FrameCfg(prim_path="/World/envs/env_.*/ball")],

@@ -13,7 +13,7 @@ from isaaclab.sim.spawners.materials.physics_materials_cfg import RigidBodyMater
 from isaaclab.utils import configclass
 
 from tacex_assets import TACEX_ASSETS_DATA_DIR
-from tacex_assets.sensors.gelsight_mini.gelsight_mini_cfg import GelSightMiniCfg
+from tacex_assets.sensors.gelsight_mini.gsmini_cfg import GelSightMiniCfg
 
 from .factory_tasks_cfg import FactoryTask, GearMesh, NutThread, PegInsert
 

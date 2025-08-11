@@ -67,8 +67,8 @@ class CustomEnvWindow(BaseEnvWindow):
 class BallRollingEnvCfg(DirectRLEnvCfg):
     # viewer settings
     viewer: ViewerCfg = ViewerCfg()
-    viewer.eye = (1.9, 1.4, 0.3)
-    viewer.lookat = (-1.5, -1.9, -1.1)
+    viewer.eye = (0.8, 2.2, 0.3)
+    viewer.lookat = (-0.5, -1.9, -1.1)
 
     # viewer.origin_type = "env"
     # viewer.env_idx = 50

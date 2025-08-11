@@ -49,7 +49,7 @@ from tacex_assets import TACEX_ASSETS_DATA_DIR
 from tacex_assets.robots.franka.franka_gsmini_single_rigid import (
     FRANKA_PANDA_ARM_SINGLE_GSMINI_HIGH_PD_RIGID_CFG,
 )
-from tacex_assets.sensors.gelsight_mini.gelsight_mini_cfg import GelSightMiniCfg
+from tacex_assets.sensors.gelsight_mini.gsmini_cfg import GelSightMiniCfg
 
 from tacex_tasks.utils import DirectLiveVisualizer
 
@@ -312,7 +312,7 @@ class BallRollingTactileRGBCfg(DirectRLEnvCfg):
         debug_vis=True,  # for being able to see sensor output in the gui
         # update Taxim cfg
         optical_sim_cfg=TaximSimulatorCfg(
-            calib_folder_path=f"{TACEX_ASSETS_DATA_DIR}/Sensors/GelSight_Mini/calibs/480x640",
+            calib_folder_path=f"{TACEX_ASSETS_DATA_DIR}/Sensors/GelSight_Mini/calibs/640x480",
             gelpad_height=GelSightMiniCfg().gelpad_dimensions.height,
             gelpad_to_camera_min_distance=0.024,
             with_shadow=False,

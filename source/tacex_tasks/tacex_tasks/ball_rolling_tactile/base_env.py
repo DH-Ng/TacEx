@@ -40,7 +40,7 @@ from tacex_assets import TACEX_ASSETS_DATA_DIR
 from tacex_assets.robots.franka.franka_gsmini_single_rigid import (
     FRANKA_PANDA_ARM_SINGLE_GSMINI_HIGH_PD_RIGID_CFG,
 )
-from tacex_assets.sensors.gelsight_mini.gelsight_mini_cfg import GelSightMiniCfg
+from tacex_assets.sensors.gelsight_mini.gsmini_cfg import GelSightMiniCfg
 
 #  from isaaclab.controllers.differential_ik_cfg import DifferentialIKControllerCfg
 # from isaaclab.envs.mdp.actions.actions_cfg import DifferentialInverseKinematicsActionCfg
@@ -73,8 +73,7 @@ class CustomEnvWindow(BaseEnvWindow):
 class BallRollingEnvCfg(DirectRLEnvCfg):
     # viewer settings
     viewer: ViewerCfg = ViewerCfg()
-    # viewer.eye = (1.9, 1.4, 0.3)
-    # viewer.lookat = (-1.5, -1.9, -1.1)
+
     viewer.eye = (1, -0.5, 0.1)
     viewer.lookat = (-19.4, 18.2, -1.1)
 
@@ -308,7 +307,7 @@ class BallRollingEnv(DirectRLEnv):
         # ---
 
         # --- IK Solver ---
-        with open(self.cfg.ik_solver_cfg["urdf_path"], mode="rb") as urdf_file:
+        with open(self.cfg.ik_solver_cfg["urdf_path"]) as urdf_file:
             ik_chain = pk.build_chain_from_urdf(urdf_file)
         # ik_chain.print_tree()
         # extract a specific serial chain such for inverse kinematics

@@ -319,9 +319,11 @@ class GelSightSensor(SensorBase):
             )
 
         # set how the indentation depth should be computed
-        if self.cfg.compute_indentation_depth_class == "optical_sim":
+        if (self.cfg.compute_indentation_depth_class) == "optical_sim" and (self.optical_simulator is not None):
             self.compute_indentation_depth_func = self.optical_simulator.compute_indentation_depth
-        elif self.cfg.compute_indentation_depth_class == "marker_motion_sim":
+        elif (self.cfg.compute_indentation_depth_class == "marker_motion_sim") and (
+            self.marker_motion_simulator is not None
+        ):
             self.compute_indentation_depth_func = self.marker_motion_simulator.compute_indentation_depth
         else:
             self.compute_indentation_depth_func = None

@@ -60,7 +60,7 @@ class BallRollingIKResetEnv(BallRollingEnv):
 
         # --- IK Solver ---
         with open(self.cfg.ik_solver_cfg["urdf_path"], mode="rb") as urdf_file:
-            ik_chain = pk.build_chain_from_urdf(urdf_file)
+            ik_chain = pk.build_chain_from_urdf(urdf_file.read())
         # ik_chain.print_tree()
         # extract a specific serial chain such for inverse kinematics
         ik_chain = pk.SerialChain(ik_chain, self.cfg.ik_solver_cfg["ee_link_name"])
