@@ -4,7 +4,9 @@ from isaaclab.sensors import FrameTransformerCfg
 from isaaclab.utils import configclass
 
 from ..gelsight_simulator_cfg import GelSightSimulatorCfg
-from .fots_marker_sim_frame_transformer import FOTSMarkerSimulator
+
+# from .fots_marker_sim_frame_transformer import FOTSMarkerFrameTransformerSimulator
+from .fots_marker_sim import FOTSMarkerSimulator
 
 """Configuration for a tactile RGB simulation with Taxim."""
 

@@ -72,9 +72,9 @@ class FOTSMarkerSimulator(GelSightSimulator):
             mm2pix=self.cfg.mm_to_pixel,
             num_markers_col=self.cfg.marker_params.num_markers_col,  # 20, #11
             num_markers_row=self.cfg.marker_params.num_markers_row,  # 15, #9
-            tactile_img_width=self.cfg.tactile_img_res[0],  # default 480
-            tactile_img_height=self.cfg.tactile_img_res[1],  # default 640
-            lamb=[0.00125, 0.0021, 0.0038],  # [0.00125,0.00021,0.00038],
+            tactile_img_width=self.cfg.tactile_img_res[0],  # default 320
+            tactile_img_height=self.cfg.tactile_img_res[1],  # default 240
+            lamb=[0.00125, 0.00021, 0.00038],
             x0=self.cfg.marker_params.x0,
             y0=self.cfg.marker_params.y0,
         )
@@ -136,12 +136,12 @@ class FOTSMarkerSimulator(GelSightSimulator):
                 mean = torch.mean(contact_points.float(), dim=0).cpu().numpy()
                 # print("should be pix ", mean[1], mean[0])
                 # rows = height = y values
-                # mean[0] = (mean[0]-self.marker_motion_sim.tactile_img_height/2)/self.marker_motion_sim.mm2pix
-                # # columns = width = x values
-                # mean[1] = (mean[1]-self.marker_motion_sim.tactile_img_width/2)/self.marker_motion_sim.mm2pix
+                mean[0] = (mean[0] - self.marker_motion_sim.tactile_img_height / 2) / self.marker_motion_sim.mm2pix
+                # columns = width = x values
+                mean[1] = (mean[1] - self.marker_motion_sim.tactile_img_width / 2) / self.marker_motion_sim.mm2pix
 
                 # self.sensor._data.output["traj"][h].append([mean[1], mean[0], self.theta[h].cpu().numpy()])
-                print("should be ", mean[1], mean[0])
+                # print("should be ", mean[1], mean[0])
 
                 # rel position/orientation of obj to sensor
                 self.frame_transformer.update(dt=0.001)
@@ -151,21 +151,21 @@ class FOTSMarkerSimulator(GelSightSimulator):
                 rel_pos *= 1000  # convert to mm
 
                 # print("rel_pos in pix ", self.cfg.mm_to_pixel*rel_pos[0] + self.marker_motion_sim.tactile_img_width/2, self.cfg.mm_to_pixel*rel_pos[1] + self.marker_motion_sim.tactile_img_height/2)
-                print("rel_pos ", rel_pos)
+                # print("rel_pos ", rel_pos)
                 rel_orient = self.frame_transformer.data.target_quat_source[
                     env_id
                 ]  # currently only one target_frame is used
                 roll, pitch, yaw = euler_xyz_from_quat(rel_orient)
-                theta = yaw.cpu().numpy()
-                print("rel yaw in deg ", np.rad2deg(theta))
+                theta = yaw.cpu().numpy()[0]  # TODO -> currently only can use the first target_frame
+                # print("rel yaw in deg ", np.rad2deg(theta))
 
                 # order of traj depends on the source frame. With our definition, we need [y,-x,theta]
                 # self.sensor._data.output["traj"][env_id].append([rel_pos[1], -rel_pos[0], theta])
-                self.sensor._data.output["traj"][env_id].append([rel_pos[1], -rel_pos[0], theta])
-                print("")
+                # self.sensor._data.output["traj"][env_id].append([rel_pos[1], -rel_pos[0], theta])
+                # print("")
 
                 # traj takes [x,y,theta] values
-                # self.sensor._data.output["traj"][env_id].append([mean[1], mean[0], theta])
+                self.sensor._data.output["traj"][env_id].append([mean[1], mean[0], theta])
 
                 # todo vectorize with pytorch
                 marker_x_pos, marker_y_pos = self.marker_motion_sim.marker_sim(

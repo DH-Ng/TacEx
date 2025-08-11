@@ -23,7 +23,7 @@ if TYPE_CHECKING:
     from .fots_marker_sim_cfg import FOTSMarkerSimulatorCfg
 
 
-class FOTSMarkerSimulator(GelSightSimulator):
+class FOTSMarkerFrameTransformerSimulator(GelSightSimulator):
     """Wraps around the FOTS simulation for marker simulation of GelSight sensors inside Isaac Sim.
 
     The class uses an instance of the gpu_taxim simulator for generating the deformed height map.

@@ -176,7 +176,7 @@ class MarkerMotion:
 
         if len(traj) >= 2:
             # under shear load
-            print("traj diff x,y ", (traj[-1][0] - traj[0][0]), (traj[-1][1] - traj[0][1]))
+            # print("traj diff x,y ", (traj[-1][0] - traj[0][0]), (traj[-1][1] - traj[0][1]))
             x_ds, y_ds = self._shear(
                 int(traj[0][0] * self.mm2pix + self.tactile_img_width / 2),
                 int(traj[0][1] * self.mm2pix + self.tactile_img_height / 2),
@@ -193,7 +193,8 @@ class MarkerMotion:
             # print("theta diff ", np.rad2deg(traj[-1][2]-traj[0][2]))
             # theta = max(min(traj[-1][2]-traj[0][2], 50 / 180.0 * math.pi), -50 / 180.0 * math.pi) # -50 = max angle, traj rotation is in rad!
             theta = traj[-1][2] - traj[0][2]
-            print("theta is ", np.rad2deg(theta))
+            # print("theta is ", np.rad2deg(theta))
+
             x_dt, y_dt = self._twist(
                 int(traj[-1][0] * self.mm2pix + self.tactile_img_width / 2),
                 int(traj[-1][1] * self.mm2pix + self.tactile_img_height / 2),

@@ -8,6 +8,8 @@ from __future__ import annotations
 import math
 import torch
 
+import torchvision.transforms.functional as F
+
 # for Domain Randomization
 import isaaclab.envs.mdp as mdp
 import isaaclab.sim as sim_utils
@@ -15,7 +17,7 @@ import isaaclab.utils.math as math_utils
 from isaaclab.assets import Articulation, ArticulationCfg, AssetBaseCfg, RigidObject, RigidObjectCfg
 from isaaclab.controllers.differential_ik import DifferentialIKController
 from isaaclab.controllers.differential_ik_cfg import DifferentialIKControllerCfg
-from isaaclab.envs import DirectRLEnvCfg, ViewerCfg
+from isaaclab.envs import DirectRLEnv, DirectRLEnvCfg, ViewerCfg
 from isaaclab.envs.ui import BaseEnvWindow
 from isaaclab.managers import EventTermCfg as EventTerm
 from isaaclab.managers import SceneEntityCfg
@@ -42,25 +44,17 @@ from isaaclab.utils.noise import (
 )
 
 from tacex import GelSightSensor
+from tacex.simulation_approaches.fots import FOTSMarkerSimulatorCfg
 from tacex.simulation_approaches.gpu_taxim import TaximSimulatorCfg
 
 # from tactile_sim import GsMiniSensorCfg, GsMiniSensor
 from tacex_assets import TACEX_ASSETS_DATA_DIR
-from tacex_assets.robots.franka.franka_gsmini_single_uipc import (
-    FRANKA_PANDA_ARM_SINGLE_GSMINI_HIGH_PD_UIPC_CFG,
+from tacex_assets.robots.franka.franka_gsmini_single_rigid import (
+    FRANKA_PANDA_ARM_SINGLE_GSMINI_HIGH_PD_RIGID_CFG,
 )
 from tacex_assets.sensors.gelsight_mini.gsmini_cfg import GelSightMiniCfg
 
 from tacex_tasks.utils import DirectLiveVisualizer
-from tacex_uipc import (
-    UipcIsaacAttachments,
-    UipcIsaacAttachmentsCfg,
-    UipcObject,
-    UipcObjectCfg,
-    UipcRLEnv,
-    UipcSimCfg,
-)
-from tacex_uipc.utils import TetMeshCfg
 
 #  from isaaclab.controllers.differential_ik_cfg import DifferentialIKControllerCfg
 # from isaaclab.envs.mdp.actions.actions_cfg import DifferentialInverseKinematicsActionCfg
@@ -172,7 +166,7 @@ class EventCfg:
 
 
 @configclass
-class BallRollingTactileRGBUipcCfg(DirectRLEnvCfg):
+class BallRollingTaximFotsCfg(DirectRLEnvCfg):
     # viewer settings
     viewer: ViewerCfg = ViewerCfg()
     viewer.eye = (1, -0.5, 0.1)
@@ -186,7 +180,7 @@ class BallRollingTactileRGBUipcCfg(DirectRLEnvCfg):
 
     ui_window_class_type = CustomEnvWindow
 
-    # events: EventCfg = EventCfg()
+    events: EventCfg = EventCfg()
 
     decimation = 1
     # simulation
@@ -218,17 +212,11 @@ class BallRollingTactileRGBUipcCfg(DirectRLEnvCfg):
         # ),
     )
 
-    uipc_sim = UipcSimCfg(
-        # logger_level="Info"
-        ground_height=0.0025,
-        contact=UipcSimCfg.Contact(default_friction_ratio=0.5, d_hat=0.0005),
-    )
-
     # scene
     scene: InteractiveSceneCfg = InteractiveSceneCfg(num_envs=1024, env_spacing=1, replicate_physics=True)
 
     # use robot with stiff PD control for better IK tracking
-    robot: ArticulationCfg = FRANKA_PANDA_ARM_SINGLE_GSMINI_HIGH_PD_UIPC_CFG.replace(
+    robot: ArticulationCfg = FRANKA_PANDA_ARM_SINGLE_GSMINI_HIGH_PD_RIGID_CFG.replace(
         prim_path="/World/envs/env_.*/Robot",
         init_state=ArticulationCfg.InitialStateCfg(
             # joint_pos={
@@ -293,38 +281,21 @@ class BallRollingTactileRGBUipcCfg(DirectRLEnvCfg):
     )
 
     # rigid body ball
-    object: UipcObjectCfg = UipcObjectCfg(
-        prim_path="/World/envs/env_.*/uipc_ball",
-        init_state=AssetBaseCfg.InitialStateCfg(pos=(0.25, -0.35, 0.0051 + 0.0025)),  # rot=(0.72,-0.3,0.42,-0.45)
+    object: RigidObjectCfg = RigidObjectCfg(
+        prim_path="/World/envs/env_.*/rigid_ball",
+        init_state=RigidObjectCfg.InitialStateCfg(pos=(0.25, -0.35, 0.0051 + 0.0025)),
         spawn=sim_utils.UsdFileCfg(
             usd_path=f"{TACEX_ASSETS_DATA_DIR}/Props/ball_wood.usd",
+            # scale=(2, 1, 0.6),
+            rigid_props=RigidBodyPropertiesCfg(
+                solver_position_iteration_count=16,
+                solver_velocity_iteration_count=1,
+                max_angular_velocity=1000.0,
+                max_linear_velocity=1000.0,
+                max_depenetration_velocity=5.0,
+                disable_gravity=False,
+            ),
         ),
-        mesh_cfg=TetMeshCfg(
-            stop_quality=8,
-            max_its=100,
-            edge_length_r=1 / 5,
-            # epsilon_r=0.01
-        ),
-        constitution_cfg=UipcObjectCfg.StableNeoHookeanCfg(
-            youngs_modulus=100.0,
-        ),  # UipcObjectCfg.AffineBodyConstitutionCfg() #
-    )
-
-    # simulate the gelpad as uipc mesh
-    gelpad_cfg = UipcObjectCfg(
-        prim_path="/World/envs/env_.*/Robot/gelsight_mini_gelpad",
-        mesh_cfg=TetMeshCfg(
-            stop_quality=8,
-            max_its=100,
-            edge_length_r=1 / 5,
-            # epsilon_r=0.01
-        ),
-        constitution_cfg=UipcObjectCfg.StableNeoHookeanCfg(youngs_modulus=10),
-    )
-    gelpad_attachment_cfg = UipcIsaacAttachmentsCfg(
-        constraint_strength_ratio=200000.0,
-        body_name="gelsight_mini_case",
-        debug_vis=False,
     )
 
     # sensors
@@ -333,7 +304,7 @@ class BallRollingTactileRGBUipcCfg(DirectRLEnvCfg):
         sensor_camera_cfg=GelSightMiniCfg.SensorCameraCfg(
             prim_path_appendix="/Camera",
             update_period=0,
-            resolution=(32, 32),  # (48, 64),
+            resolution=(32, 24),  # (48, 64),
             data_types=["depth"],
             clipping_range=(
                 0.015,
@@ -348,35 +319,26 @@ class BallRollingTactileRGBUipcCfg(DirectRLEnvCfg):
             gelpad_height=GelSightMiniCfg().gelpad_dimensions.height,
             gelpad_to_camera_min_distance=0.024,
             with_shadow=False,
-            tactile_img_res=(32, 32),
+            tactile_img_res=(32, 24),
             device="cuda",
         ),
-        # update FOTS cfg
-        marker_motion_sim_cfg=None,
-        # marker_motion_sim_cfg=FOTSMarkerSimulatorCfg(
-        #     lamb = [0.00125,0.00021,0.00038],
-        #     pyramid_kernel_size = [51, 21, 11, 5], #[11, 11, 11, 11, 11, 5],
-        #     kernel_size = 5,
-        #     marker_params = FOTSMarkerSimulatorCfg.MarkerParams(
-        #         num_markers_col=25, #11,
-        #         num_markers_row=20, #9,
-        #         x0=26,
-        #         y0=15,
-        #         dx=29,
-        #         dy=26
-        #     ),
-        #     tactile_img_res = (480, 640),
-        #     device = "cuda",
-        #     frame_transformer_cfg = FrameTransformerCfg(
-        #         prim_path="/World/envs/env_.*/Robot/gelsight_mini_gelpad", #"/World/envs/env_.*/Robot/gelsight_mini_case",
-        #         source_frame_offset=OffsetCfg(),
-        #         target_frames=[
-        #             FrameTransformerCfg.FrameCfg(prim_path="/World/envs/env_.*/rigid_ball")
-        #         ],
-        #         debug_vis=False,
-        #     )
-        # ),
-        data_types=["tactile_rgb"],  # marker_motion
+        marker_motion_sim_cfg=FOTSMarkerSimulatorCfg(
+            lamb=[0.00125, 0.00021, 0.00038],
+            pyramid_kernel_size=[51, 21, 11, 5],  # [11, 11, 11, 11, 11, 5],
+            kernel_size=5,
+            marker_params=FOTSMarkerSimulatorCfg.MarkerParams(
+                num_markers_col=11, num_markers_row=9, num_markers=99, x0=15, y0=26, dx=26, dy=29
+            ),
+            tactile_img_res=(320, 240),
+            device="cuda",
+            frame_transformer_cfg=FrameTransformerCfg(
+                prim_path="/World/envs/env_.*/Robot/gelsight_mini_gelpad",  # "/World/envs/env_.*/Robot/gelsight_mini_case",
+                source_frame_offset=OffsetCfg(),
+                target_frames=[FrameTransformerCfg.FrameCfg(prim_path="/World/envs/env_.*/rigid_ball")],
+                debug_vis=False,
+            ),
+        ),
+        data_types=["tactile_rgb", "marker_motion"],
     )
 
     # noise models
@@ -429,7 +391,7 @@ class BallRollingTactileRGBUipcCfg(DirectRLEnvCfg):
     action_space = 6  # we use relative task_space actions: (dx, dy, dz, droll, dpitch) -> dyaw is omitted
     observation_space = {
         "proprio_obs": 14,  # 16, # 3 for ee pos, 2 for orient (roll, pitch), 2 for init goal-pos (x,y), 5 for actions
-        "vision_obs": [32, 32, 3],  # from tactile sensor
+        "vision_obs": [32, 24, 3],  # from tactile sensor
     }
     state_space = 0
     action_scale = 0.05  # [cm]
@@ -463,7 +425,7 @@ class BallRollingTactileRGBUipcCfg(DirectRLEnvCfg):
     }
 
 
-class BallRollingTactileRGBUipcEnv(UipcRLEnv):
+class BallRollingTaximFotsEnv(DirectRLEnv):
     """RL env in which the robot has to push/roll a ball to a goal position.
 
     This base env uses (absolute) joint positions.
@@ -479,9 +441,9 @@ class BallRollingTactileRGBUipcEnv(UipcRLEnv):
     #   |-- _reset_idx(env_ids)
     #   |-- _get_observations()
 
-    cfg: BallRollingTactileRGBUipcCfg
+    cfg: BallRollingTaximFotsCfg
 
-    def __init__(self, cfg: BallRollingTactileRGBUipcCfg, render_mode: str | None = None, **kwargs):
+    def __init__(self, cfg: BallRollingTaximFotsCfg, render_mode: str | None = None, **kwargs):
         super().__init__(cfg, render_mode, **kwargs)
 
         self.dt = self.cfg.sim.dt * self.cfg.decimation
@@ -620,8 +582,8 @@ class BallRollingTactileRGBUipcEnv(UipcRLEnv):
         self._robot = Articulation(self.cfg.robot)
         self.scene.articulations["robot"] = self._robot
 
-        # self.object = RigidObject(self.cfg.object)
-        # self.scene.rigid_objects["object"] = self.object
+        self.object = RigidObject(self.cfg.object)
+        self.scene.rigid_objects["object"] = self.object
 
         plate = RigidObject(self.cfg.plate)
         self.scene.rigid_objects["plate"] = plate
@@ -672,19 +634,6 @@ class BallRollingTactileRGBUipcEnv(UipcRLEnv):
         # )
         # sim_utils.bind_physics_material("/World/envs/env_.*/Robot/gelsight_mini_gelpad", "/World/Materials/gelpad")
 
-        # --- UIPC simulation setup ---
-
-        # gelpad simulated via uipc
-        self._uipc_gelpad: UipcObject = UipcObject(self.cfg.gelpad_cfg, self.uipc_sim)
-
-        self.object: UipcObject = UipcObject(self.cfg.object, self.uipc_sim)
-        self.scene.uipc_objects["object"] = self.object
-
-        # create attachment
-        self.attachment = UipcIsaacAttachments(
-            self.cfg.gelpad_attachment_cfg, self._uipc_gelpad, self.scene.articulations["robot"]
-        )
-
     # MARK: pre-physics step calls
 
     def _pre_physics_step(self, actions: torch.Tensor):
@@ -716,8 +665,7 @@ class BallRollingTactileRGBUipcEnv(UipcRLEnv):
 
     # MARK: dones
     def _get_dones(self) -> tuple[torch.Tensor, torch.Tensor]:  # which environment is done
-        obj_pos = self.object.data.root_pos_w - self.scene.env_origins
-
+        obj_pos = self.object.data.root_link_pos_w - self.scene.env_origins
         out_of_bounds_x = (obj_pos[:, 0] < self.cfg.x_bounds[0]) | (obj_pos[:, 0] > self.cfg.x_bounds[1])
         out_of_bounds_y = (obj_pos[:, 1] < self.cfg.y_bounds[0]) | (obj_pos[:, 1] > self.cfg.y_bounds[1])
 
@@ -775,16 +723,11 @@ class BallRollingTactileRGBUipcEnv(UipcRLEnv):
         # reset buffers
         super()._reset_idx(env_ids)
 
-        # # spawn obj at initial position
-        # obj_pos = self.object.data.default_root_state[full_reset_env_ids]
-        # obj_pos[:, :2] += sample_uniform(
-        #     -0.00025,
-        #     0.00025,
-        #     (len(full_reset_env_ids), 2),
-        #     self.device
-        # )
-        # obj_pos[:, :3] += self.scene.env_origins[full_reset_env_ids]
-        # self.object.write_root_state_to_sim(obj_pos, env_ids=full_reset_env_ids)
+        # spawn obj at initial position
+        obj_pos = self.object.data.default_root_state[full_reset_env_ids]
+        obj_pos[:, :2] += sample_uniform(-0.00025, 0.00025, (len(full_reset_env_ids), 2), self.device)
+        obj_pos[:, :3] += self.scene.env_origins[full_reset_env_ids]
+        self.object.write_root_state_to_sim(obj_pos, env_ids=full_reset_env_ids)
 
         # reset robot state
         joint_pos = self._robot.data.default_joint_pos[full_reset_env_ids]
@@ -793,9 +736,7 @@ class BallRollingTactileRGBUipcEnv(UipcRLEnv):
         self._robot.write_joint_state_to_sim(joint_pos, joint_vel, env_ids=full_reset_env_ids)
 
         # set commands: random target position
-        # self._goal_pos_b[env_ids, :2] = self.object.data.default_root_state[env_ids, :2] #todo code that properly
-        self._goal_pos_b[env_ids, :2] = self.object.data.root_pos_w[env_ids, :2]
-
+        self._goal_pos_b[env_ids, :2] = self.object.data.default_root_state[env_ids, :2]
         self._goal_pos_b[env_ids, 0] += sample_uniform(
             self.cfg.goal_randomization_range_x[0]
             - self._goal_random_curr[self.curriculum_levels["goal_randomization_range"]],
@@ -820,14 +761,10 @@ class BallRollingTactileRGBUipcEnv(UipcRLEnv):
         # reset buffers used for curriculum learning
         self._total_episode_rew[env_ids] = 0.0
 
-        # reset uipc objects #todo implement that properly
-        self._uipc_gelpad.write_vertex_positions_to_sim(vertex_positions=self._uipc_gelpad.init_vertex_pos)
-        self.object.write_vertex_positions_to_sim(vertex_positions=self.object.init_vertex_pos)
-
     # MARK: rewards
     def _get_rewards(self) -> torch.Tensor:
         # - Reward the agent for reaching the object using tanh-kernel.
-        obj_pos_b = self.object.data.root_pos_w - self.scene.env_origins
+        obj_pos_b = self.object.data.root_link_pos_w - self.scene.env_origins
         ee_frame_pos_b, ee_frame_orient_b = self._compute_frame_pose()
 
         (self.object_ee_distance, self.ee_goal_distance, self.ee_orient_error, self.obj_goal_distance) = (
@@ -980,7 +917,26 @@ class BallRollingTactileRGBUipcEnv(UipcRLEnv):
         # add noise to proprio_obs:
         proprio_obs = gaussian_noise(proprio_obs, cfg=self.cfg.gaussian_noise_cfg)
 
-        vision_obs = self.gsmini.data.output["tactile_rgb"]
+        tactile_rgb = self.gsmini.data.output["tactile_rgb"]
+        marker_data = self.gsmini.data.output["marker_motion"]
+
+        # TODO: vectorize properly
+        for i in range(marker_data.shape[0]):
+            # create marker image
+            frame = self.gsmini.marker_motion_simulator.draw_markers(marker_data[i, 1].cpu().numpy())
+            frame = torch.tensor(frame, device=self.device)
+            frame = frame.unsqueeze(0)
+            frame = F.resize(
+                frame,
+                (
+                    self.cfg.observation_space["vision_obs"][1],
+                    self.cfg.observation_space["vision_obs"][0],
+                ),
+            )
+            frame = frame.movedim(0, 2)
+            frame = tactile_rgb[i] * 255 * torch.dstack([frame.to(torch.float32) / 255] * 3)
+            tactile_rgb[i] = frame / 255
+        vision_obs = tactile_rgb
         # print("indent depth ", self.gsmini._indentation_depth[0])
         obs = {"proprio_obs": proprio_obs, "vision_obs": vision_obs}
 

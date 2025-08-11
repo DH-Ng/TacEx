@@ -890,7 +890,7 @@ class BallRollingEnv(DirectRLEnv):
 
     # MARK: observations
     def _get_observations(self) -> dict:
-        """The position of the object in the robot's root frame."""
+        """The position and rotation of the robot's endeffector, the (x,y) goal position, actions and camera_depth from the sensor."""
 
         ee_pos_curr_b, ee_quat_curr_b = self._compute_frame_pose()
         ee_frame_orient = euler_xyz_from_quat(ee_quat_curr_b)
