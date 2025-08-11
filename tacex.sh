@@ -245,16 +245,16 @@ update_vscode_settings() {
 print_help () {
     echo -e "\nusage: $(basename "$0") [-h] [-i] [-f] [-p] [-s] [-t] [-o] [-v] [-d] [-c] -- Utility to manage Isaac Lab."
     echo -e "\noptional arguments:"
-    echo -e "\t-h, --help           Display the help content."
-    echo -e "\t-i, --install [LIB]  Install the extensions inside Isaac Lab and learning frameworks as extra dependencies. Default is 'all'."
-    echo -e "\t-f, --format         Run pre-commit to format the code and check lints."
-    echo -e "\t-p, --python         Run the python executable provided by Isaac Sim or virtual environment (if active)."
-    echo -e "\t-s, --sim            Run the simulator executable (isaac-sim.sh) provided by Isaac Sim."
-    echo -e "\t-t, --test           Run all python unittest tests."
-    echo -e "\t-o, --docker         Run the docker container helper script (docker/container.sh)."
-    echo -e "\t-v, --vscode         Generate the VSCode settings file from template."
-    echo -e "\t-d, --docs           Build the documentation from source using sphinx."
-    echo -e "\t-c, --conda [NAME]   Create the conda environment for Isaac Lab. Default name is 'env_isaaclab'."
+    echo -e "\t-h, --help             Display the help content."
+    echo -e "\t-i, --install [all]    Install the TacEx core packages. Use 'all' to also install all extra packages [tacex_uipc]."
+    echo -e "\t-f, --format           Run pre-commit to format the code and check lints."
+    echo -e "\t-p, --python           Run the python executable provided by Isaac Sim or virtual environment (if active)."
+    echo -e "\t-s, --sim              Run the simulator executable (isaac-sim.sh) provided by Isaac Sim."
+    echo -e "\t-t, --test             Run all python unittest tests."
+    # echo -e "\t-o, --docker           Run the docker container helper script (docker/container.sh)."
+    echo -e "\t-v, --vscode           Generate the VSCode settings file from template."
+    echo -e "\t-d, --docs             Build the documentation from source using sphinx."
+    # echo -e "\t-c, --conda [NAME]       Create the conda environment for Isaac Lab. Default name is 'env_isaaclab'."
     echo -e "\n" >&2
 }
 
@@ -283,25 +283,27 @@ while [[ $# -gt 0 ]]; do
             export -f extract_python_exe
             export -f install_isaaclab_extension
             # source directory
-            find -L "${TACEX_PATH}/source" -mindepth 1 -maxdepth 1 -type d -exec bash -c 'install_isaaclab_extension "{}"' \;
-            # install the python packages for supported reinforcement learning frameworks
-            #echo "[INFO] Installing extra requirements such as learning frameworks..."
-            # check if specified which rl-framework to install
-            # if [ -z "$2" ]; then
-            #     echo "[INFO] Installing all rl-frameworks..."
-            #     framework_name="all"
-            # elif [ "$2" = "none" ]; then
-            #     echo "[INFO] No rl-framework will be installed."
-            #     framework_name="none"
-            #     shift # past argument
+            # find -L "${TACEX_PATH}/source" -mindepth 1 -maxdepth 1 -type d -exec bash -c 'install_isaaclab_extension "{}"' \;
+            # install core packages
+            echo "[INFO] Installing package [tacex]..."
+            ${python_exe} -m pip install -e ${TACEX_PATH}/source/tacex
+
+            echo "[INFO] Installing package [tacex_assets]..."
+            ${python_exe} -m pip install -e ${TACEX_PATH}/source/tacex_assets
+
+            echo "[INFO] Installing package [tacex_tasks]..."
+            ${python_exe} -m pip install -e ${TACEX_PATH}/source/tacex_tasks
+
+            if [ -z "$2" ]; then
+                echo "[INFO] No extra packages installed."
+            elif [ "$2" = "all" ]; then
+                echo "[INFO] Installing package tacex_uipc..."
+                ${python_exe} -m pip install -e ${TACEX_PATH}/source/tacex_uipc -v
             # else
             #     echo "[INFO] Installing rl-framework: $2"
-            #     framework_name=$2
+            #     extension_name=$2
             #     shift # past argument
-            # fi
-            # install the learning frameworks specified
-            # ${python_exe} -m pip install -e ${TACEX_PATH}/source/isaaclab_rl["${framework_name}"]
-            # ${python_exe} -m pip install -e ${TACEX_PATH}/source/isaaclab_mimic["${framework_name}"]
+            fi
 
             # check if we are inside a docker container or are building a docker image
             # in that case don't setup VSCode since it asks for EULA agreement which triggers user interaction
@@ -346,9 +348,9 @@ while [[ $# -gt 0 ]]; do
                 echo "[INFO] Installing pre-commit..."
                 pip install pre-commit
             fi
-            # always execute inside the Isaac Lab directory
+            # always execute inside the TacEx directory
             echo "[INFO] Formatting the repository..."
-            cd ${ISAACLAB_PATH}
+            cd ${TACEX_PATH}
             pre-commit run --all-files
             cd - > /dev/null
             # set the python path back to the original value
@@ -373,7 +375,7 @@ while [[ $# -gt 0 ]]; do
             isaacsim_exe=$(extract_isaacsim_exe)
             echo "[INFO] Running isaac-sim from: ${isaacsim_exe}"
             shift # past argument
-            ${isaacsim_exe} --ext-folder ${ISAACLAB_PATH}/source $@
+            ${isaacsim_exe} --ext-folder ${TACEX_PATH}/source $@
             # exit neatly
             break
             ;;
@@ -381,13 +383,13 @@ while [[ $# -gt 0 ]]; do
             # run the python provided by isaacsim
             python_exe=$(extract_python_exe)
             shift # past argument
-            ${python_exe} ${ISAACLAB_PATH}/tools/run_all_tests.py $@
+            ${python_exe} -m pytest ${TACEX_PATH}/tools $@
             # exit neatly
             break
             ;;
         -o|--docker)
             # run the docker container helper script
-            docker_script=${ISAACLAB_PATH}/docker/container.sh
+            docker_script=${TACEX_PATH}/docker/container.sh
             echo "[INFO] Running docker utility script from: ${docker_script}"
             shift # past argument
             bash ${docker_script} $@
@@ -407,7 +409,7 @@ while [[ $# -gt 0 ]]; do
             # retrieve the python executable
             python_exe=$(extract_python_exe)
             # install pip packages
-            cd ${ISAACLAB_PATH}/docs
+            cd ${TACEX_PATH}/docs
             ${python_exe} -m pip install -r requirements.txt > /dev/null
             # build the documentation
             ${python_exe} -m sphinx -b html -d _build/doctrees . _build/current

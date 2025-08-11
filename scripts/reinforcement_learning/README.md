@@ -9,7 +9,7 @@ Some of the included environments are:
 You can list all TacEx environments with:
 ```bash
 # Assuming you are in the TacEx root directory
-isaaclab -p scripts/reinforcement_learning/list_envs.py
+isaaclab.sh -p scripts/reinforcement_learning/list_envs.py
 ```
-> `isaaclab` is the `isaaclab.sh` file in the Isaac Lab repository.
-> If you installed Isaac Lab in a conda env then just use `python`.
+> `isaaclab.sh` is the script file in the Isaac Lab repository.
+> If you installed Isaac Lab in a conda env just use `python`.

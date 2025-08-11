@@ -139,13 +139,13 @@ class ManiSkillSimulator(GelSightSimulator):
 
                     marker_flow_i = self.sensor.data.output["marker_motion"][i]
 
-                    # frame = self._create_marker_img(marker_flow_i)
+                    frame = self._create_marker_img(marker_flow_i)
                     # draw current marker positions like ManiSkill-ViTac does
-                    frame = self.draw_markers(
-                        marker_flow_i[1].cpu().numpy(),
-                        img_w=self.cfg.tactile_img_res[0],
-                        img_h=self.cfg.tactile_img_res[1],
-                    )
+                    # frame = self.draw_markers(
+                    #     marker_flow_i[1].cpu().numpy(),
+                    #     img_w=self.cfg.tactile_img_res[0],
+                    #     img_h=self.cfg.tactile_img_res[1],
+                    # )
 
                     # create tactile rgb img with markers
                     if "tactile_rgb" in self.sensor.cfg.data_types:
