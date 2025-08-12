@@ -208,7 +208,7 @@ class PoleBalancingEnvCfg(DirectRLEnvCfg):
         #         debug_vis=False,
         #     )
         # ),
-        data_types=["height_map"],  # marker_motion
+        data_types=["camera_depth"],  # marker_motion
     )
 
     # noise models
@@ -616,14 +616,7 @@ class PoleBalancingEnv(DirectRLEnv):
             (ee_pos_curr_b, x, y, z, goal_pos_b[:, :2], self.actions),
             dim=-1,
         )
-        vision_obs = self.gsmini._data.output["height_map"]
-
-        # normalize depth images
-        normalized = vision_obs.view(vision_obs.size(0), -1)
-        normalized -= 24.0
-        normalized /= 29.0
-        normalized = (normalized * 255).type(dtype=torch.uint8)
-        vision_obs = normalized.reshape((self.num_envs, 32, 32, 1))  # add a channel to the depth image for debug_vis
+        vision_obs = self.gsmini._data.output["camera_depth"]
 
         obs = {"proprio_obs": proprio_obs, "vision_obs": vision_obs}
 
