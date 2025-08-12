@@ -1034,10 +1034,11 @@ class BallRollingEnv(DirectRLEnv):
             #     self.ik_des_pose_visualizer.set_visibility(False)
 
     def _debug_vis_callback(self, event):
-        # update the markers
-        translations = self._goal_pos_b.clone() + self.scene.env_origins
-        translations[:, 2] = self.cfg.ball_radius + 0.0025
-        self.goal_pos_visualizer.visualize(translations=translations)
+        if self.scene is not None:
+            # update the markers
+            translations = self._goal_pos_b.clone() + self.scene.env_origins
+            translations[:, 2] = self.cfg.ball_radius + 0.0025
+            self.goal_pos_visualizer.visualize(translations=translations)
 
         # ee_pos_curr, ee_quat_curr = self._compute_frame_pose()
         # self.ik_des_pose_visualizer.visualize(

@@ -48,8 +48,13 @@ def setup_environment():
     # acquire all TacEx environments names
     registered_tasks = list()
     for task_spec in gym.registry.values():
-        # TODO: Factory environments causes test to fail if run together with other envs
-        if "TacEx" in task_spec.id and not task_spec.id.endswith("Play-v0") and "Factory" not in task_spec.id:
+        # TODO: Factory and UIPC environments causes test to fail if run together with other envs
+        if (
+            "TacEx" in task_spec.id
+            and not task_spec.id.endswith("Play-v0")
+            and "Factory" not in task_spec.id
+            and "Uipc" not in task_spec.id
+        ):
             registered_tasks.append(task_spec.id)
     # sort environments by name
     registered_tasks.sort()
@@ -71,6 +76,7 @@ def test_environments(task_name, num_envs, device):
         "Isaac-Stack-Cube-Instance-Randomize-Franka-IK-Rel-v0",
         "Isaac-Stack-Cube-Instance-Randomize-Franka-v0",
         "Isaac-Stack-Cube-Franka-IK-Rel-Visuomotor-v0",
+        # "TacEx-Ball-Rolling-Tactile-RGB-Uipc-v0",  # skip UIPC, since no multi env yet
     ]:
         return
     # skip automate environments as they require cuda installation

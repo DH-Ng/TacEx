@@ -250,11 +250,7 @@ class PoleBalancingEnvCfg(DirectRLEnvCfg):
 
 
 class PoleBalancingEnv(DirectRLEnv):
-    """RL env in which the robot has to push/roll a ball to a goal position.
-
-    This base env uses (absolute) joint positions.
-    Absolute joint pos and vel are used for the observations.
-    """
+    """RL env in which the robot has to balance a pole towards a goal position."""
 
     # pre-physics step calls
     #   |-- _pre_physics_step(action)
