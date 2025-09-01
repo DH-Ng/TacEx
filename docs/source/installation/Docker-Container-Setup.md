@@ -1,5 +1,5 @@
 For the TacEx container **you need the Isaac Lab docker image with Isaac Sim 4.5**. If you have, go directly to [Build TacEx Image](Docker-Container-Setup#build-tacex-image).\
-Otherwise, you need to build the docker image with **Isaac Lab 2.1**.
+Otherwise, you need to build the docker image with **Isaac Lab 2.1.1**.
 Below is a short summary for this and the full guide can be found [here](https://isaac-sim.github.io/IsaacLab/main/source/deployment/docker.html#docker-guide).
 
 <details><summary> Build Isaac Lab Base Image</summary>
@@ -19,7 +19,7 @@ You need to have the Isaac Lab repo cloned:
 ```bash
 git clone https://github.com/isaac-sim/IsaacLab
 cd IsaacLab
-# use Isaac Lab version 2.1
+# use Isaac Lab version 2.1.1
 git checkout 90b79bb2d44feb8d833f260f2bf37da3487180ba
 ```
 
