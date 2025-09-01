@@ -30,7 +30,7 @@ pip install 'isaacsim[all,extscache]==4.5.0' --extra-index-url https://pypi.nvid
 sudo apt install cmake build-essential
 git clone https://github.com/isaac-sim/IsaacLab
 cd IsaacLab
-# use Isaac Lab version 2.1
+# use Isaac Lab version 2.1.1
 git checkout 90b79bb2d44feb8d833f260f2bf37da3487180ba
 # activate the Isaac Sim python env
 conda activate env_isaaclab
