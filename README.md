@@ -1,7 +1,7 @@
 #
 
 [![IsaacSim](https://img.shields.io/badge/IsaacSim-4.5.0-silver.svg)](https://docs.omniverse.nvidia.com/isaacsim/latest/overview.html)
-[![Isaac Lab](https://img.shields.io/badge/IsaacLab-2.1.0-silver)](https://isaac-sim.github.io/IsaacLab)
+[![Isaac Lab](https://img.shields.io/badge/IsaacLab-2.1.1-silver)](https://isaac-sim.github.io/IsaacLab)
 [![Python](https://img.shields.io/badge/python-3.10-blue.svg)](https://docs.python.org/3/whatsnew/3.10.html)
 [![Linux platform](https://img.shields.io/badge/platform-linux--64-orange.svg)](https://releases.ubuntu.com/22.04/)
 <!-- [![Windows platform](https://img.shields.io/badge/platform-windows--64-orange.svg)](https://www.microsoft.com/en-us/) -->
@@ -37,7 +37,7 @@ Checkout the [website](https://sites.google.com/view/tacex) for showcases and th
 
 ## Installation
 > [!NOTE]
-> TacEx currently works with **Isaac Sim 4.5** and **IsaacLab 2.1.0**.
+> TacEx currently works with **Isaac Sim 4.5** and **IsaacLab 2.1.1**.
 > The installation was tested on Ubuntu 22.04 with a 4090 GPU and Driver Version 550.163.01 + Cuda 12.4.
 
 **0.** Make sure that you have **git-lfs**:
