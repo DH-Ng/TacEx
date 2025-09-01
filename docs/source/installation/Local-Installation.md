@@ -1,5 +1,5 @@
 If you have a working Isaac Lab environment, you can directly [install TacEx](Local-Installation#installing-tacex).\
-Otherwise, **you need to install Isaac Sim 4.5 and Isaac Lab 2.1**.
+Otherwise, **you need to install Isaac Sim 4.5 and Isaac Lab 2.1.1**.
 Below is a quick summary, but here is the [full installation guide](https://isaac-sim.github.io/IsaacLab/main/source/setup/installation/index.html).
 
 <details>
