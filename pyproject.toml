@@ -20,6 +20,11 @@ ignore = [
 fixable = ["ALL"]
 unfixable = []
 
+[tool.pyrefly.errors]
+missing-source = "ignore"
+no-access = "warn"
+missing-import = "ignore"
+
 [tool.ruff.lint.pydocstyle]
 convention = "google"
 
@@ -121,3 +126,15 @@ quiet-level = 0
 
 # the world list should always have words in lower case
 ignore-words-list = "haa,slq,collapsable,buss,abd,THIRDPARTY,TOI"
+
+[tool.pyrefly]
+project-excludes = [
+    "**/__pycache__",
+    "**/docs",
+    "**/logs",
+    ".git",
+    ".vscode",
+]
+python-platform = "linux"
+python-version = "3.10.0"
+infer-with-first-use = false

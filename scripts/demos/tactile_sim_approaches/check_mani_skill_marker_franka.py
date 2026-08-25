@@ -123,7 +123,8 @@ class BallRollingEnvCfg(DirectRLEnvCfg):
     uipc_sim = UipcSimCfg(
         # logger_level="Info"
         ground_height=0.0025,
-        contact=UipcSimCfg.Contact(d_hat=0.0001),
+        contact=UipcSimCfg.Contact(d_hat=0.0001, default_friction_ratio=0.95),
+        debug_vis=False,
     )
 
     # Scene
@@ -180,13 +181,14 @@ class BallRollingEnvCfg(DirectRLEnvCfg):
     )
     ball = UipcRigidObjectCfg(
         prim_path="/World/envs/env_.*/ball",
-        init_state=AssetBaseCfg.InitialStateCfg(pos=[0.5, 0, 0.05]),  # rot=(0.72,-0.3,0.42,-0.45)
+        init_state=AssetBaseCfg.InitialStateCfg(pos=[0.5, 0, 0.0075]),  # rot=(0.72,-0.3,0.42,-0.45)
         spawn=sim_utils.UsdFileCfg(
             # usd_path="/workspace/tacex/source/tacex_assets/tacex_assets/data/Sensors/GelSight_Mini/Gelpad_low_res.usd",
             usd_path=f"{TACEX_ASSETS_DATA_DIR}/Props/ball_wood.usd",
         ),
         mesh_cfg=mesh_cfg,
-        constitution_cfg=UipcRigidObjectCfg.AffineBodyConstitutionCfg(),
+        constitution_cfg=UipcRigidObjectCfg.AffineBodyConstitutionCfg(kinematic=True),
+        debug_vis=True,
     )
 
     robot: ArticulationCfg = FRANKA_PANDA_ARM_SINGLE_GSMINI_HIGH_PD_UIPC_CFG.replace(

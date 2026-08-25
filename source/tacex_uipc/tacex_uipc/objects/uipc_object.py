@@ -103,8 +103,12 @@ class UipcObject(AssetBase):
                 str(self._prim_view.prims[0].GetPath()) + f"/{self.cfg.usd_mesh_prim_name}"
             )
         else:
-            # Take first child prim
-            self._usd_mesh_prim = self._prim_view.prims[0].GetChildren()[0]
+            # Take first child prim that is a USD mesh, i.e. has "points"-Attribute
+            prim_children = self._prim_view.prims[0].GetChildren()
+            for prim in prim_children:
+                if prim.GetAttribute("points").IsValid():
+                    self._usd_mesh_prim = prim
+                    break
 
         print("USD mesh that is used for creating the UIPC Mesh: ", self._usd_mesh_prim.GetPath())
         self._usd_geom_mesh = UsdGeom.Mesh(self._usd_mesh_prim)

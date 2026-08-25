@@ -56,7 +56,7 @@ class TacexIPCExtension(omni.ext.IExt):
                 ui.Spacer(height=6)
 
                 def update_surf_mesh():
-                    _update_surf_mesh(get_selected_prim_path())
+                    self._update_surf_mesh(get_selected_prim_path())
 
                 omni.ui.Button("Update Surface Mesh", clicked_fn=update_surf_mesh, height=0)
 
@@ -169,14 +169,14 @@ class TacexIPCExtension(omni.ext.IExt):
             edge_length_r=self.edge_length_r.as_float,
             skip_simplify=self.skip_simplify.as_bool,
             coarsen=self.coarsen.as_bool,
-            log_level=0,
+            log_level=6,
         )
 
-        mesh_gen = MeshGenerator(tet_cfg)
+        self.mesh_gen = MeshGenerator(tet_cfg)
 
         stage = omni.usd.get_context().get_stage()
         geom_mesh = UsdGeom.Mesh.Get(stage, path)
-        tet_points, tet_indices, surf_points, surf_indices = mesh_gen.generate_tet_mesh_for_prim(geom_mesh)
+        tet_points, tet_indices, surf_points, surf_indices = self.mesh_gen.generate_tet_mesh_for_prim(geom_mesh)
 
         tf_world = np.array(omni.usd.get_world_transform_matrix(geom_mesh))
         world_tet_points = tf_world.T @ np.vstack((tet_points.T, np.ones(tet_points.shape[0])))
@@ -185,29 +185,57 @@ class TacexIPCExtension(omni.ext.IExt):
         world_tet_surf_points = tf_world.T @ np.vstack((surf_points.T, np.ones(surf_points.shape[0])))
         world_tet_surf_points = world_tet_surf_points[:-1].T
 
-        draw.clear_points()
-        draw.clear_lines()
-        _draw_tets(world_tet_points, tet_indices)
-        _draw_surface_trimesh(world_tet_surf_points, surf_indices)
-
-        # create our material that visualizes the tet mesh resolution
-        mat_path = "/Materials/TriangleOutlineMat"
-        mat = create_surf_tri_vis_material(mat_path)
-        # bind material with normal usd api
-        assign_material_to_mesh_with_usd(geom_mesh, mat)
+        # no need for that anymor, because we now have the Triangle_outline material
+        # draw.clear_points()
+        # draw.clear_lines()
+        # _draw_tets(world_tet_points, tet_indices)
+        # _draw_surface_trimesh(world_tet_surf_points, surf_indices)
 
         # Dont save the transformed points ->  we want to save the local points. Transformations happens during scene creation
-        # Otherwise we lose details of the original mesh and when we compute a new mesh out of the triangle mesh we lose even more details
+        # Otherwise, Transformation during scene init becomes messed up.
         _create_tet_data_attributes(
             path,
             tet_points=tet_points,
             tet_indices=tet_indices,
+            tet_surf_points=surf_points,
             tet_surf_indices=surf_indices,
         )
         return (
             f"Amount of tet points {len(tet_points)},\nAmount of tetrahedra: {int(len(tet_indices) / 4)},\nAmount of"
             f" surface points: {int(len(surf_indices) / 3)}"
         )
+
+    def _update_surf_mesh(self, path):
+        stage = omni.usd.get_context().get_stage()
+        prim = stage.GetPrimAtPath(pxr.Sdf.Path(path))
+        print("Update surface mesh of prim: ", prim)
+
+        # extract surface data of tet mesh
+        surf_points = prim.GetAttribute("tet_surf_points").Get()
+        tet_surf_indices = prim.GetAttribute("tet_surf_indices").Get()
+
+        surf_points = np.array(surf_points)
+        triangles = tet_surf_indices
+
+        # MeshGenerator.update_usd_mesh(UsdGeom.Mesh(prim), surf_points=surf_points, triangles=triangles)
+        # print("Updated Surface Mesh of ", path)
+
+        # update surface based on uipc_mesh surface
+        # MeshGenerator.update_usd_mesh_with_uipc_surface(prim)
+
+        geom_mesh = UsdGeom.Mesh(prim)
+        # _update_surf_mesh(path)
+        self.mesh_gen.update_usd_mesh_remap_uv(geom_mesh, surf_points=surf_points, triangles=triangles)
+
+        add_barycentric_primvar(UsdGeom.Mesh.Get(stage, path))
+        print("Update of surface Mesh: ", path)
+
+        # Create material that visualizes the tet mesh resolution
+
+        mat_path = "/Materials/TriangleOutlineMat"
+        mat = create_surf_tri_vis_material(mat_path)
+        # bind material with normal usd api
+        assign_material_to_mesh_with_usd(geom_mesh, mat)
 
 
 """Helper Functions"""
@@ -272,7 +300,7 @@ def _draw_surface_trimesh(all_vertices, tet_surf_indices):
         draw.draw_points(tri_points, [(255, 255, 255, 1)] * len(tri_points), [point_size] * len(tri_points))
 
 
-def _create_tet_data_attributes(path, tet_points, tet_indices, tet_surf_indices):
+def _create_tet_data_attributes(path, tet_points, tet_indices, tet_surf_points, tet_surf_indices):
     """
     Creates an attribute for a prim that holds a boolean.
     See: https://graphics.pixar.com/usd/release/api/class_usd_prim.html.
@@ -293,6 +321,10 @@ def _create_tet_data_attributes(path, tet_points, tet_indices, tet_surf_indices)
     attr_tet_indices.Set(tet_indices)
     attr_tet_indices.SetCustom(True)
 
+    attr_tet_points = prim.CreateAttribute("tet_surf_points", pxr.Sdf.ValueTypeNames.Vector3fArray)
+    attr_tet_points.Set(tet_surf_points)
+    attr_tet_points.SetCustom(True)
+
     attr_tet_surf_indices = prim.CreateAttribute("tet_surf_indices", pxr.Sdf.ValueTypeNames.UIntArray)
     attr_tet_surf_indices.Set(tet_surf_indices)
 
@@ -300,6 +332,7 @@ def _create_tet_data_attributes(path, tet_points, tet_indices, tet_surf_indices)
     print("Created tet data: ")
     print(f"tet_points (num {tet_points.shape[0]})")
     print(f"tet_indices (num {len(tet_indices)})")
+    print(f"tet_surf_points (num {len(tet_surf_points)})")
     print(f"tet_surf_indices (num {len(tet_surf_indices)})")
     print("*" * 40)
 
@@ -309,18 +342,20 @@ def _update_surf_mesh(path):
     prim = stage.GetPrimAtPath(pxr.Sdf.Path(path))
     print("prim ", prim)
     # extract surface data of tet mesh
-    # surf_points = prim.GetAttribute("tet_surf_points").Get()
-    # tet_surf_indices = prim.GetAttribute("tet_surf_indices").Get()
+    surf_points = prim.GetAttribute("tet_surf_points").Get()
+    tet_surf_indices = prim.GetAttribute("tet_surf_indices").Get()
 
-    # surf_points = np.array(surf_points)
-    # triangles = tet_surf_indices
-    # MeshGenerator.update_usd_mesh(UsdGeom.Mesh(prim), surf_points=surf_points, triangles=triangles)
+    surf_points = np.array(surf_points)
+
+    triangles = tet_surf_indices
+    MeshGenerator.update_usd_mesh(UsdGeom.Mesh(prim), surf_points=surf_points, triangles=triangles)
     # print("Updated Surface Mesh of ", path)
 
     # update surface based on uipc_mesh surface
-    MeshGenerator.update_usd_mesh_with_uipc_surface(prim)
-    add_barycentric_primvar(UsdGeom.Mesh.Get(stage, path))
-    print("Update of surface Mesh via UIPC: ", path)
+    # MeshGenerator.update_usd_mesh_with_uipc_surface(prim)
+
+    # add_barycentric_primvar(UsdGeom.Mesh.Get(stage, path))
+    # print("Update of surface Mesh via UIPC: ", path)
 
 
 def _create_attachment(paths):

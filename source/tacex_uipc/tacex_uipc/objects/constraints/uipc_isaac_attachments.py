@@ -12,16 +12,6 @@ from pxr import UsdGeom, UsdPhysics
 
 import isaaclab.sim as sim_utils
 
-try:
-    from isaacsim.util.debug_draw import _debug_draw
-
-    draw = _debug_draw.acquire_debug_draw_interface()
-except ImportError:
-    import warnings
-
-    warnings.warn("_debug_draw failed to import", ImportWarning)
-    draw = None
-
 from uipc import Animation, builtin, view
 from uipc.constitution import SoftPositionConstraint
 from uipc.geometry import GeometrySlot, SimplicialComplex
@@ -509,14 +499,24 @@ class UipcIsaacAttachments(UipcConstraint):
                 print("No debug_vis for attachment. Reason: Cannot import _debug_draw")
 
     def _debug_vis_callback(self, event):
+        """Draws the attachment data (attachment points and lines) in the Isaac GUI.
+
+        The method uses the debug_draw_interface from `from isaacsim.util.debug_draw import _debug_draw` to
+        draw the points and lines.
+
+        Keep in mind that this means significant performance drops when a lot is drawn.
+
+        """
         if self._aim_positions.shape[0] == 0 or not self._is_initialized:
             return
 
         # self._compute_aim_positions()
 
-        # # draw attachment data
-        # self._draw.clear_points()
-        self._draw.clear_lines()
+        # need to clean up drawn shapes here, if the uipc simulation does not do it, which is the case
+        # if no debug_vis is used in uipc_sim
+        if not self.uipc_object.uipc_sim.cfg.debug_vis:
+            self._draw.clear_points()
+            self._draw.clear_lines()
 
         # drawing with the debug method leads to render delay
         self._draw.draw_points(

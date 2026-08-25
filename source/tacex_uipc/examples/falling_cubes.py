@@ -64,22 +64,6 @@ def design_scene():
     prims_utils.define_prim("/World/Objects", "Xform")
 
 
-def change_mat_color(stage, shader_prim_path, color):
-    # source: https://forums.developer.nvidia.com/t/randomize-materials-and-textures-based-on-a-probability-extract-path-to-material-and-texture-from-usd/270188/4
-    shader_prim = stage.GetPrimAtPath(shader_prim_path)
-    if not shader_prim.GetAttribute("inputs:diffuse_color_constant").IsValid():
-        shader_prim.CreateAttribute("inputs:diffuse_color_constant", Sdf.ValueTypeNames.Color3f, custom=True).Set(
-            (0.0, 0.0, 0.0)
-        )
-
-    if not shader_prim.GetAttribute("inputs:diffuse_tint").IsValid():
-        shader_prim.CreateAttribute("inputs:diffuse_tint", Sdf.ValueTypeNames.Color3f, custom=True).Set((0.0, 0.0, 0.0))
-
-    # Set the diffuse color to the input color
-    shader_prim.GetAttribute("inputs:diffuse_color_constant").Set(color)
-    shader_prim.GetAttribute("inputs:diffuse_tint").Set(color)
-
-
 def main():
     """Main function."""
 
@@ -113,7 +97,7 @@ def main():
     print("Mesh cfg ", mesh_cfg)
 
     # spawn uipc cube
-    tet_cube_asset_path = pathlib.Path(__file__).parent.resolve() / "assets" / "cube.usd"
+    tet_cube_asset_path = "/home/dh/Projects/Public_TacEx/TacEx/source/tacex_uipc/examples/assets/ycb_mustard_bottle.usd"  # pathlib.Path(__file__).parent.resolve() / "assets" / "cube.usd"
     soft_cfg = UipcDeformableObjectCfg(
         prim_path="/World/Objects/Cube0",
         init_state=AssetBaseCfg.InitialStateCfg(pos=[0, 0, 2.25]),  # rot=(0.72,-0.3,0.42,-0.45)
@@ -142,7 +126,7 @@ def main():
     # )
     # soft_obj = UipcDeformableObject(soft_cfg, uipc_sim)
 
-    num_cubes = 3
+    num_cubes = 0  # 3
     cubes = []
     for i in range(num_cubes):
         # might lead to intersections due to random pos
@@ -182,7 +166,7 @@ def main():
         prim_path="/World/Objects/CubeTop",
         init_state=AssetBaseCfg.InitialStateCfg(pos=[0, 0, 3.65 + 0.3 * num_cubes], rot=rot),
         spawn=sim_utils.UsdFileCfg(usd_path=str(tet_cube_asset_path), scale=(1.0, 1.0, 1.0)),
-        mesh_cfg=mesh_cfg,
+        # mesh_cfg=mesh_cfg,
         debug_vis=True,
         constitution_cfg=UipcRigidObjectCfg.AffineBodyConstitutionCfg(),
     )

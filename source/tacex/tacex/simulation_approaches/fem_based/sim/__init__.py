@@ -1,3 +1,3 @@
-from .tactile_sensor_sapienipc_modified import VisionTactileSensorUIPC
+from .fem_based_marker_sim import FemBasedMarkerSim
 
-__all__ = ["VisionTactileSensorUIPC"]
+__all__ = ["FemBasedMarkerSim"]

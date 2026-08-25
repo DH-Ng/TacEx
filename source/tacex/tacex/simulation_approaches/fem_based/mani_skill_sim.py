@@ -11,7 +11,7 @@ import omni.usd
 
 from ...gelsight_sensor import GelSightSensor
 from ..gelsight_simulator import GelSightSimulator
-from .sim import VisionTactileSensorUIPC
+from .sim import FemBasedMarkerSim
 
 if TYPE_CHECKING:
     from .mani_skill_sim_cfg import ManiSkillSimulatorCfg
@@ -28,8 +28,6 @@ class ManiSkillSimulator(GelSightSimulator):
     cfg: ManiSkillSimulatorCfg
 
     def __init__(self, sensor: GelSightSensor, cfg: ManiSkillSimulatorCfg):
-        # needed for VisionTactileSensorUIPC class
-        self.camera = None
         self.gelpad_uipc: UipcObject = sensor.gelpad_obj
 
         super().__init__(sensor=sensor, cfg=cfg)
@@ -53,9 +51,9 @@ class ManiSkillSimulator(GelSightSimulator):
         """
 
         self.camera = self.sensor.camera
-        self.marker_motion_sim: VisionTactileSensorUIPC = VisionTactileSensorUIPC(
+        self.marker_motion_sim: FemBasedMarkerSim = FemBasedMarkerSim(
             self.gelpad_uipc,
-            self.camera,
+            self.sensor,
             tactile_img_width=self.cfg.tactile_img_res[0],
             tactile_img_height=self.cfg.tactile_img_res[1],
             marker_interval_range=self.cfg.marker_interval_range,
@@ -113,6 +111,19 @@ class ManiSkillSimulator(GelSightSimulator):
                 if "marker_motion" in self.sensor.cfg.data_types:
                     self._debug_windows = {}
                     self._debug_img_providers = {}
+
+                # for drawing current marker world positions in Isaac GUI
+                try:
+                    from isaacsim.util.debug_draw import _debug_draw
+
+                    self._draw = _debug_draw.acquire_debug_draw_interface()
+                except ImportError:
+                    import warnings
+
+                    warnings.warn("_debug_draw failed to import", ImportWarning)
+                    self._draw = None
+                    print("Cannot import '_debug_draw' module.")
+
         else:
             pass
 
@@ -141,6 +152,7 @@ class ManiSkillSimulator(GelSightSimulator):
                     marker_flow_i = self.sensor.data.output["marker_motion"][i]
 
                     # frame = self._create_marker_img(marker_flow_i)
+
                     # draw current marker positions like ManiSkill-ViTac does
                     frame = self.draw_markers(
                         marker_flow_i[1].cpu().numpy(),
@@ -174,6 +186,24 @@ class ManiSkillSimulator(GelSightSimulator):
                     # remove window/img_provider from dictionary and destroy them
                     self._debug_windows.pop(str(i)).destroy()
                     self._debug_img_providers.pop(str(i)).destroy()
+
+        # draw marker world positions in the Isaac GUI
+        if self.sensor.cfg.debug_vis:
+            if not self.gelpad_uipc.uipc_sim.cfg.debug_vis:
+                self._draw.clear_points()
+                self._draw.clear_lines()
+
+            # draw markers in sim world
+            curr_marker_pts_3d = (
+                self.marker_motion_sim.transform_camera_to_world_frame(
+                    torch.tensor(self.marker_motion_sim.curr_marker_pts, device="cuda:0", dtype=torch.float32)
+                )
+                .cpu()
+                .numpy()
+            )
+            self._draw.draw_points(
+                curr_marker_pts_3d, [(255, 0, 0, 0.5)] * curr_marker_pts_3d.shape[0], [30] * curr_marker_pts_3d.shape[0]
+            )
 
     def _create_marker_img(self, marker_data):
         """Visualization of marker flow like in the original FOTS simulation.

@@ -32,7 +32,7 @@ if TYPE_CHECKING:
 class GelSightSensor(SensorBase):
     cfg: GelSightSensorCfg
 
-    def __init__(self, cfg: GelSightSensorCfg, gelpad_obj=None):
+    def __init__(self, cfg: GelSightSensorCfg, gelpad_obj=None) -> None:
         # initialize base class
         super().__init__(cfg)
 

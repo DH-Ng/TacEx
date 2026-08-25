@@ -23,6 +23,7 @@ from sklearn.neighbors import NearestNeighbors
 
 import isaaclab.utils.math as math_utils
 
+from ....gelsight_sensor import GelSightSensor
 from tacex_uipc.objects import UipcObject
 from tacex_uipc.sim import UipcSim
 
@@ -39,11 +40,11 @@ except ImportError:
     draw = None
 
 
-class VisionTactileSensorUIPC:
+class FemBasedMarkerSim:
     def __init__(
         self,
         uipc_gelpad: UipcObject,
-        camera,
+        sensor: GelSightSensor,
         tactile_img_width=320,
         tactile_img_height=240,
         marker_interval_range: tuple[float, float] = (2.0625, 2.0625),
@@ -54,13 +55,18 @@ class VisionTactileSensorUIPC:
         marker_lose_tracking_probability: float = 0.0,
         normalize: bool = False,
         num_markers: int = 128,
-        camera_params: tuple[float, float, float, float, float] = (
-            340,
-            325,
-            160,
-            125,
-            0.0,
-        ),
+        camera_focal_length_x: float = 6.70909926e03,
+        camera_focal_length_y: float = 6.70908555e03,
+        camera_optical_center_x: float = 1.37493298e02,
+        camera_optical_center_y: float = 1.23346390e02,
+        camera_distort_coeff: float = 0.0,
+        # camera_params: tuple[float, float, float, float, float] = (
+        #     340,
+        #     325,
+        #     160,
+        #     125,
+        #     0.0,
+        # ),
         **kwargs,
     ):
         """
@@ -79,7 +85,8 @@ class VisionTactileSensorUIPC:
         self.uipc_sim: UipcSim = uipc_gelpad.uipc_sim
         self.scene = self.uipc_sim.scene
 
-        self.camera = camera
+        self.sensor = sensor
+        self.camera = sensor.camera
         # overwrite config so that pose is always updated,
         # which is needed for projection of markers from gelpad frame into img frame
         self.camera.cfg.update_latest_camera_pose = True
@@ -102,13 +109,13 @@ class VisionTactileSensorUIPC:
         # NOTE: camera frame follows opencv coordinate system
         self.camera_intrinsic = np.array(
             [
-                [camera_params[0], 0, camera_params[2]],
-                [0, camera_params[1], camera_params[3]],
+                [camera_focal_length_x, 0, camera_optical_center_x],
+                [0, camera_focal_length_y, camera_optical_center_y],
                 [0, 0, 1],
             ],
             dtype=np.float32,
         )
-        self.camera_distort_coeffs = np.array([camera_params[4], 0, 0, 0, 0], dtype=np.float32)
+        self.camera_distort_coeffs = np.array([camera_distort_coeff, 0, 0, 0, 0], dtype=np.float32)
 
         self.init_vertices_camera = self.get_vertices_camera()
         self.init_surface_vertices_gelpad = self.get_surface_vertices_world().clone()
@@ -117,6 +124,7 @@ class VisionTactileSensorUIPC:
         self.reference_surface_vertices_camera = self.get_surface_vertices_camera().clone()
 
         # self.phong_shading_renderer = PhongShadingRenderer()
+        self.curr_marker_pts = None
 
     def get_vertices_world(self):
         v = self.gelpad_obj._data.nodal_pos_w
@@ -371,25 +379,13 @@ class VisionTactileSensorUIPC:
             self.reference_surface_vertices_camera[marker_pts_surface_idx].cpu().numpy()
             * marker_pts_surface_weight[..., None]
         ).sum(1)
-        curr_marker_pts = (
+        self.curr_marker_pts = (
             self.get_surface_vertices_camera()[marker_pts_surface_idx].cpu().numpy()
             * marker_pts_surface_weight[..., None]
         ).sum(1)
 
-        # draw markers in sim world
-        draw.clear_points()
-        curr_marker_pts_3d = curr_marker_pts.copy()
-        curr_marker_pts_3d = (
-            self.transform_camera_to_world_frame(torch.tensor(curr_marker_pts_3d, device="cuda:0", dtype=torch.float32))
-            .cpu()
-            .numpy()
-        )
-        draw.draw_points(
-            curr_marker_pts_3d, [(255, 0, 0, 0.5)] * curr_marker_pts_3d.shape[0], [30] * curr_marker_pts_3d.shape[0]
-        )
-
         init_marker_uv = self.gen_marker_uv(init_marker_pts)
-        curr_marker_uv = self.gen_marker_uv(curr_marker_pts)
+        curr_marker_uv = self.gen_marker_uv(self.curr_marker_pts)
         marker_mask = np.logical_and.reduce(
             [
                 init_marker_uv[:, 0] > 5,
