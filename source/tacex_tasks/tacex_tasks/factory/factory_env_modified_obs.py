@@ -15,15 +15,27 @@ from isaaclab.envs import DirectRLEnv
 from isaaclab.sim.spawners.from_files import GroundPlaneCfg, spawn_ground_plane
 from isaaclab.utils.assets import ISAAC_NUCLEUS_DIR
 from isaaclab.utils.math import axis_angle_from_quat
+import isaaclab.utils.math as math_utils
+from isaaclab.controllers import DifferentialIKController
 
 from . import factory_control, factory_utils
-from .factory_env_cfg import OBS_DIM_CFG, STATE_DIM_CFG, FactoryEnvCfg
+# from .factory_env_cfg import OBS_DIM_CFG, STATE_DIM_CFG, FactoryEnvCfg
+
+from .factory_env_modified_obs_cfg import (
+    OBS_DIM_CFG,
+    STATE_DIM_CFG,
+    FactoryEnvModifiedObsCfg,
+)
+
+from tacex_sim2real.franky_isaac_robot import FrankyIsaacRobotCfg, FrankyIsaacRobot
 
 
-class FactoryEnv(DirectRLEnv):
-    cfg: FactoryEnvCfg
+class FactoryModifiedObsEnv(DirectRLEnv):
+    cfg: FactoryEnvModifiedObsCfg
 
-    def __init__(self, cfg: FactoryEnvCfg, render_mode: str | None = None, **kwargs):
+    def __init__(
+        self, cfg: FactoryEnvModifiedObsCfg, render_mode: str | None = None, **kwargs
+    ):
         # Update number of obs/states
         cfg.observation_space = sum([OBS_DIM_CFG[obs] for obs in cfg.obs_order])
         cfg.state_space = sum([STATE_DIM_CFG[state] for state in cfg.state_order])
@@ -33,9 +45,37 @@ class FactoryEnv(DirectRLEnv):
 
         super().__init__(cfg, render_mode, **kwargs)
 
+        # --- For IK actions ---
+
+        # create the differential IK controller
+        self._ik_controller = DifferentialIKController(
+            cfg=self.cfg.ik_controller_cfg, num_envs=self.num_envs, device=self.device
+        )
+
+        body_ids, _ = self._robot.find_bodies("panda_hand")
+        # save only the first body index
+        self._panda_hand_idx = body_ids[0]
+
+        # For a fixed base robot, the frame index is one less than the body index.
+        # This is because the root body is not included in the returned Jacobians.
+        self._jacobi_panda_hand_idx = self._panda_hand_idx - 1
+
+        # ee offset w.r.t TCP -> TCP is defined so that z-axis shows down. In our case here we want z to show upwards
+        self._ee_pos_offset = torch.tensor(
+            self.cfg.ee_pos_offset, device=self.device
+        ).repeat(self.num_envs, 1)
+        self._ee_rot_offset = torch.tensor(
+            self.cfg.ee_rot_offset, device=self.device
+        ).repeat(self.num_envs, 1)
+        # ---
+
         factory_utils.set_body_inertias(self._robot, self.scene.num_envs)
         self._init_tensors()
         self._set_default_dynamics_parameters()
+
+        # Set initial gains.
+        self.task_prop_gains = self.default_gains
+        self.task_deriv_gains = factory_utils.get_deriv_gains(self.default_gains)
 
     def _set_default_dynamics_parameters(self):
         """Set parameters defining dynamic interactions."""
@@ -81,9 +121,10 @@ class FactoryEnv(DirectRLEnv):
         # Computer body indices.
         self.left_finger_body_idx = self._robot.body_names.index("panda_leftfinger")
         self.right_finger_body_idx = self._robot.body_names.index("panda_rightfinger")
-        self.fingertip_body_idx = self._robot.body_names.index(
-            "panda_fingertip_centered"
-        )
+        self.fingertip_body_idx = self._panda_hand_idx
+        # self.fingertip_body_idx = self._robot.body_names.index(
+        #     "panda_fingertip_centered"
+        # )
 
         # Tensors for finite-differencing.
         self.last_update_timestamp = (
@@ -104,6 +145,10 @@ class FactoryEnv(DirectRLEnv):
             (self.num_envs,), dtype=torch.long, device=self.device
         )
 
+        # Set initial actions to involve no-movement. Needed for EMA/correct penalties.
+        self.actions = torch.zeros_like(self.actions)
+        self.prev_actions = torch.zeros_like(self.actions)
+
     def _setup_scene(self):
         """Initialize simulation scene."""
         spawn_ground_plane(
@@ -123,7 +168,11 @@ class FactoryEnv(DirectRLEnv):
             orientation=(0.70711, 0.0, 0.0, 0.70711),
         )
 
-        self._robot = Articulation(self.cfg.robot)
+        if hasattr(self.cfg.robot, "isaac_articulation_cfg"):
+            self._robot = FrankyIsaacRobot(self.cfg.robot)
+        else:
+            self._robot = Articulation(self.cfg.robot)
+
         self._fixed_asset = Articulation(self.cfg_task.fixed_asset)
         self._held_asset = Articulation(self.cfg_task.held_asset)
         if self.cfg_task.name == "gear_mesh":
@@ -157,6 +206,7 @@ class FactoryEnv(DirectRLEnv):
 
         self.fingertip_midpoint_pos = (
             self._robot.data.body_pos_w[:, self.fingertip_body_idx]
+            - self._ee_pos_offset
             - self.scene.env_origins
         )
         self.fingertip_midpoint_quat = self._robot.data.body_quat_w[
@@ -229,9 +279,9 @@ class FactoryEnv(DirectRLEnv):
             "ee_linvel": self.fingertip_midpoint_linvel,
             "ee_angvel": self.fingertip_midpoint_angvel,
             "joint_pos": self.joint_pos[:, 0:7],
-            "held_pos": self.held_pos,
-            "held_pos_rel_fixed": self.held_pos - self.fixed_pos_obs_frame,
-            "held_quat": self.held_quat,
+            # "held_pos": self.held_pos,
+            # "held_pos_rel_fixed": self.held_pos - self.fixed_pos_obs_frame,
+            # "held_quat": self.held_quat,
             "fixed_pos": self.fixed_pos,
             "fixed_quat": self.fixed_quat,
             "task_prop_gains": self.task_prop_gains,
@@ -251,7 +301,8 @@ class FactoryEnv(DirectRLEnv):
         state_tensors = factory_utils.collapse_obs_dict(
             state_dict, self.cfg.state_order + ["prev_actions"]
         )
-        return {"policy": obs_tensors, "critic": state_tensors}
+        return {"policy": obs_tensors}
+        # return {"policy": obs_tensors, "critic": state_tensors}
 
     def _reset_buffers(self, env_ids):
         """Reset buffers."""
@@ -385,30 +436,59 @@ class FactoryEnv(DirectRLEnv):
         ctrl_target_gripper_dof_pos,
     ):
         """Get Jacobian. Set Franka DOF position targets (fingers) or DOF torques (arm)."""
-        self.joint_torque, self.applied_wrench = factory_control.compute_dof_torque(
-            cfg=self.cfg,
-            dof_pos=self.joint_pos,
-            dof_vel=self.joint_vel,
-            fingertip_midpoint_pos=self.fingertip_midpoint_pos,
-            fingertip_midpoint_quat=self.fingertip_midpoint_quat,
-            fingertip_midpoint_linvel=self.fingertip_midpoint_linvel,
-            fingertip_midpoint_angvel=self.fingertip_midpoint_angvel,
-            jacobian=self.fingertip_midpoint_jacobian,
-            arm_mass_matrix=self.arm_mass_matrix,
-            ctrl_target_fingertip_midpoint_pos=ctrl_target_fingertip_midpoint_pos,
-            ctrl_target_fingertip_midpoint_quat=ctrl_target_fingertip_midpoint_quat,
-            task_prop_gains=self.task_prop_gains,
-            task_deriv_gains=self.task_deriv_gains,
-            device=self.device,
-            dead_zone_thresholds=self.dead_zone_thresholds,
+        # self.joint_torque, self.applied_wrench = factory_control.compute_dof_torque(
+        #     cfg=self.cfg,
+        #     dof_pos=self.joint_pos,
+        #     dof_vel=self.joint_vel,
+        #     fingertip_midpoint_pos=self.fingertip_midpoint_pos,
+        #     fingertip_midpoint_quat=self.fingertip_midpoint_quat,
+        #     fingertip_midpoint_linvel=self.fingertip_midpoint_linvel,
+        #     fingertip_midpoint_angvel=self.fingertip_midpoint_angvel,
+        #     jacobian=self.fingertip_midpoint_jacobian,
+        #     arm_mass_matrix=self.arm_mass_matrix,
+        #     ctrl_target_fingertip_midpoint_pos=ctrl_target_fingertip_midpoint_pos,
+        #     ctrl_target_fingertip_midpoint_quat=ctrl_target_fingertip_midpoint_quat,
+        #     task_prop_gains=self.task_prop_gains,
+        #     task_deriv_gains=self.task_deriv_gains,
+        #     device=self.device,
+        #     dead_zone_thresholds=self.dead_zone_thresholds,
+        # )
+
+        # # set target for gripper joints to use physx's PD controller
+        # self.ctrl_target_joint_pos[:, 7:9] = ctrl_target_gripper_dof_pos
+        # self.joint_torque[:, 7:9] = 0.0
+
+        # self._robot.set_joint_position_target(self.ctrl_target_joint_pos)
+
+        # self._robot.set_joint_effort_target(self.joint_torque)
+
+        # Franky wrapper only works with joint position targets, so we compute desired joint target
+        # --- instead of factory torque control, use Isaac IK control
+
+        target_pose = torch.cat(
+            (ctrl_target_fingertip_midpoint_pos, ctrl_target_fingertip_midpoint_quat),
+            dim=1,
         )
 
-        # set target for gripper joints to use physx's PD controller
-        self.ctrl_target_joint_pos[:, 7:9] = ctrl_target_gripper_dof_pos
-        self.joint_torque[:, 7:9] = 0.0
+        # obtain ee positions and orientation w.r.t root (=base) frame
+        ee_pos_curr_b, ee_quat_curr_b = self._compute_frame_pose()
+        # set command into controller
+        self._ik_controller.set_command(target_pose, ee_pos_curr_b, ee_quat_curr_b)
 
+        joint_pos = self._robot.data.joint_pos[:]
+
+        # compute desired joint positions
+        if ee_pos_curr_b.norm() != 0:
+            jacobian = self._compute_frame_jacobian()
+            joint_pos_des = self._ik_controller.compute(
+                ee_pos_curr_b, ee_quat_curr_b, jacobian, joint_pos
+            )
+        else:
+            joint_pos_des = joint_pos.clone()
+
+        self.ctrl_target_joint_pos[:, 7:9] = ctrl_target_gripper_dof_pos
+        self.ctrl_target_joint_pos[:, :7] = joint_pos_des[:, :7]
         self._robot.set_joint_position_target(self.ctrl_target_joint_pos)
-        self._robot.set_joint_effort_target(self.joint_torque)
 
     def _get_dones(self):
         """Check which environments are terminated.
@@ -664,17 +744,44 @@ class FactoryEnv(DirectRLEnv):
                 rot_error_type="axis_angle",
             )
 
-            delta_hand_pose = torch.cat((pos_error, axis_angle_error), dim=-1)
+            # delta_hand_pose = torch.cat((pos_error, axis_angle_error), dim=-1)
 
-            # Solve DLS problem.
-            delta_dof_pos = factory_control.get_delta_dof_pos(
-                delta_pose=delta_hand_pose,
-                ik_method="dls",
-                jacobian=self.fingertip_midpoint_jacobian[env_ids],
-                device=self.device,
+            # # Solve DLS problem.
+            # delta_dof_pos = factory_control.get_delta_dof_pos(
+            #     delta_pose=delta_hand_pose,
+            #     ik_method="dls",
+            #     jacobian=self.fingertip_midpoint_jacobian[env_ids],
+            #     device=self.device,
+            # )
+            # self.joint_pos[env_ids, 0:7] += delta_dof_pos[:, 0:7]
+            # self.joint_vel[env_ids, :] = torch.zeros_like(self.joint_pos[env_ids,])
+
+            # ---
+            target_pose = torch.cat(
+                (
+                    ctrl_target_fingertip_midpoint_pos,
+                    ctrl_target_fingertip_midpoint_quat,
+                ),
+                dim=1,
             )
-            self.joint_pos[env_ids, 0:7] += delta_dof_pos[:, 0:7]
-            self.joint_vel[env_ids, :] = torch.zeros_like(self.joint_pos[env_ids,])
+
+            # obtain ee positions and orientation w.r.t root (=base) frame
+            ee_pos_curr_b, ee_quat_curr_b = self._compute_frame_pose()
+            # set command into controller
+            self._ik_controller.set_command(target_pose, ee_pos_curr_b, ee_quat_curr_b)
+
+            joint_pos = self._robot.data.joint_pos[:]
+
+            # compute desired joint positions
+            if ee_pos_curr_b.norm() != 0:
+                jacobian = self._compute_frame_jacobian()
+                joint_pos_des = self._ik_controller.compute(
+                    ee_pos_curr_b, ee_quat_curr_b, jacobian, joint_pos
+                )
+            else:
+                joint_pos_des = joint_pos.clone()
+            self.joint_pos[env_ids, 0:7] = joint_pos_des[env_ids, :7]
+            # ---
 
             self.ctrl_target_joint_pos[env_ids, 0:7] = self.joint_pos[env_ids, 0:7]
             # Update dof state.
@@ -750,7 +857,7 @@ class FactoryEnv(DirectRLEnv):
         )
         self._robot.write_joint_state_to_sim(joint_pos, joint_vel, env_ids=env_ids)
         self._robot.reset()
-        self._robot.set_joint_effort_target(joint_effort, env_ids=env_ids)
+        # self._robot.set_joint_effort_target(joint_effort, env_ids=env_ids)
 
         self.step_sim_no_action()
 
@@ -761,7 +868,7 @@ class FactoryEnv(DirectRLEnv):
         reset at the same time.
         """
         self.scene.write_data_to_sim()
-        self.sim.step(render=True)
+        self.sim.step(render=False)
         self.scene.update(dt=self.physics_dt)
         self._compute_intermediate_values(dt=self.physics_dt)
 
@@ -1036,3 +1143,70 @@ class FactoryEnv(DirectRLEnv):
         self.task_deriv_gains = factory_utils.get_deriv_gains(self.default_gains)
 
         physics_sim_view.set_gravity(carb.Float3(*self.cfg.sim.gravity))
+
+    # -- Utils for doing IK
+    @property
+    def jacobian_w(self) -> torch.Tensor:
+        return self._robot.root_physx_view.get_jacobians()[
+            :, self._jacobi_panda_hand_idx, :, :
+        ]
+
+    @property
+    def jacobian_b(self) -> torch.Tensor:
+        jacobian = self.jacobian_w
+        base_rot = self._robot.data.root_quat_w
+        base_rot_matrix = math_utils.matrix_from_quat(math_utils.quat_inv(base_rot))
+        jacobian[:, :3, :] = torch.bmm(base_rot_matrix, jacobian[:, :3, :])
+        jacobian[:, 3:, :] = torch.bmm(base_rot_matrix, jacobian[:, 3:, :])
+        return jacobian
+
+    def _compute_frame_pose(self) -> tuple[torch.Tensor, torch.Tensor]:
+        """Computes the ee pose in the root frame.
+
+        Returns:
+            A tuple of the body's position and orientation in the root frame.
+        """
+        ee_pos_w = self._robot.data.body_pos_w[:, self._panda_hand_idx]
+        ee_quat_w = self._robot.data.body_quat_w[:, self._panda_hand_idx]
+
+        root_pos_w = self._robot.data.root_pos_w
+        root_quat_w = self._robot.data.root_quat_w
+
+        # compute the pose of the body in the root frame
+        ee_pose_b, ee_quat_b = math_utils.subtract_frame_transforms(
+            root_pos_w, root_quat_w, ee_pos_w, ee_quat_w
+        )
+
+        # apply ee offset
+        ee_pose_b, ee_quat_b = math_utils.combine_frame_transforms(
+            ee_pose_b, ee_quat_b, self._ee_pos_offset, self._ee_rot_offset
+        )
+
+        return ee_pose_b, ee_quat_b
+
+    def _compute_frame_jacobian(self):
+        """Computes the geometric Jacobian of the target frame in the root frame.
+
+        This function accounts for the target frame offset and applies the necessary transformations to obtain
+        the right Jacobian from the parent body Jacobian.
+        """
+        # read the parent jacobian
+        jacobian = self.jacobian_b
+        # account for the offset
+        if self.cfg.ee_pos_offset is not None:
+            # Modify the jacobian to account for the offset
+            # -- translational part
+            # v_link = v_ee + w_ee x r_link_ee = v_J_ee * q + w_J_ee * q x r_link_ee
+            #        = (v_J_ee + w_J_ee x r_link_ee ) * q
+            #        = (v_J_ee - r_link_ee_[x] @ w_J_ee) * q
+            jacobian[:, 0:3, :] += torch.bmm(
+                -math_utils.skew_symmetric_matrix(self._ee_pos_offset),
+                jacobian[:, 3:, :],
+            )
+            # -- rotational part
+            # w_link = R_link_ee @ w_ee
+            jacobian[:, 3:, :] = torch.bmm(
+                math_utils.matrix_from_quat(self._ee_rot_offset), jacobian[:, 3:, :]
+            )
+
+        return jacobian

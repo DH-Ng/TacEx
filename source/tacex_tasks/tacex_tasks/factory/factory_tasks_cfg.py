@@ -33,7 +33,7 @@ class HeldAssetCfg:
 @configclass
 class RobotCfg:
     robot_usd: str = ""
-    franka_fingerpad_length: float = 0.017608
+    franka_fingerpad_length: float = 0.025 #0.017608
     friction: float = 0.75
 
 
@@ -64,10 +64,14 @@ class FactoryTask:
     # Held Asset (applies to all tasks)
     held_asset_pos_noise: list = [0.0, 0.006, 0.003]  # noise level of the held asset in gripper
     held_asset_rot_init: float = -90.0
+    
+    # Sets where the held asset is placed between the fingers.
+    # Per default, center of held asset is in the middle of the fingertips.
+    held_asset_offset: list = [0.0, 0.0, 0.0]
 
     # Reward
     ee_success_yaw: float = 0.0  # nut_thread task only.
-    action_penalty_scale: float = 0.0
+    action_penalty_ee_scale: float = 0.0
     action_grad_penalty_scale: float = 0.0
     # Reward function details can be found in Appendix B of https://arxiv.org/pdf/2408.04587.
     # Multi-scale keypoints are used to capture different phases of the task.
@@ -109,7 +113,9 @@ class PegInsert(FactoryTask):
     duration_s = 10.0
 
     # Robot
-    hand_init_pos: list = [0.0, 0.0, 0.047]  # Relative to fixed asset tip.
+    #hand_init_pos: list = [0.0, 0.0, 0.047]  # Relative to fixed asset tip.
+    hand_init_pos: list = [0.0, 0.0, 0.047 + 0.025]  # increase it due to bigger finger tips with GsMini's
+
     hand_init_pos_noise: list = [0.02, 0.02, 0.01]
     hand_init_orn: list = [3.1416, 0.0, 0.0]
     hand_init_orn_noise: list = [0.0, 0.0, 0.785]
@@ -122,14 +128,20 @@ class PegInsert(FactoryTask):
     # Held Asset (applies to all tasks)
     held_asset_pos_noise: list = [0.003, 0.0, 0.003]  # noise level of the held asset in gripper
     held_asset_rot_init: float = 0.0
+    # # Want held asset top part to be in the middle of the fingers, so we use an offset
+    # held_asset_offset: list = [0.0, 0.0, 4.0] # in peg case, we use size/2
 
     # Rewards
     keypoint_coef_baseline: list = [5, 4]
     keypoint_coef_coarse: list = [50, 2]
     keypoint_coef_fine: list = [100, 0]
     # Fraction of socket height.
-    success_threshold: float = 0.04
+    success_threshold: float = 0.06 #0.04
     engage_threshold: float = 0.9
+
+    # Penalize ee being too close to fixed asset -> only look at z-axis
+    too_close_penalty_threshold: float = 0.02 # rel. distance in [m] -> peg has height of 0.05, and we look at fixed_pos_obs_frame, which is at the top of the fixed asset. We want the ee to have sufficient distance when the peg is fully inserted.
+    too_close_penalty_scale: float = 0.15
 
     fixed_asset: ArticulationCfg = ArticulationCfg(
         prim_path="/World/envs/env_.*/FixedAsset",
@@ -206,7 +218,6 @@ class GearMesh(FactoryTask):
     name = "gear_mesh"
     fixed_asset_cfg = GearBase()
     held_asset_cfg = MediumGear()
-    target_gear = "gear_medium"
     duration_s = 20.0
 
     small_gear_usd = f"{ASSET_DIR}/factory_gear_small.usd"

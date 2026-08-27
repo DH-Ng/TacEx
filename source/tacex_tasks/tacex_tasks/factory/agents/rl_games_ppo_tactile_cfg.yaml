@@ -47,7 +47,7 @@ params:
   config:
     name: Factory
     device: cuda:0
-    full_experiment_name: factory_tacex
+    full_experiment_name: factory_tacex_tactile
     env_name: rlgpu
     multi_gpu: False
     ppo: True
@@ -68,7 +68,7 @@ params:
     score_to_win: 20000
     max_epochs: 200
     save_best_after: 10
-    save_frequency: 100
+    save_frequency: 50
     print_stats: True
     grad_norm: 1.0
     entropy_coef: 0.0  # 0.0001  # 0.0

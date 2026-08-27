@@ -97,7 +97,7 @@ def main():
     print("Mesh cfg ", mesh_cfg)
 
     # spawn uipc cube
-    tet_cube_asset_path = "/home/dh/Projects/Public_TacEx/TacEx/source/tacex_uipc/examples/assets/ycb_mustard_bottle.usd"  # pathlib.Path(__file__).parent.resolve() / "assets" / "cube.usd"
+    tet_cube_asset_path = pathlib.Path(__file__).parent.resolve() / "assets" / "cube.usd"
     soft_cfg = UipcDeformableObjectCfg(
         prim_path="/World/Objects/Cube0",
         init_state=AssetBaseCfg.InitialStateCfg(pos=[0, 0, 2.25]),  # rot=(0.72,-0.3,0.42,-0.45)

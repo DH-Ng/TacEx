@@ -2,9 +2,8 @@
 # All rights reserved.
 #
 # SPDX-License-Identifier: BSD-3-Clause
-
 import isaaclab.sim as sim_utils
-from isaaclab.actuators.actuator_cfg import ImplicitActuatorCfg
+from isaaclab.actuators import ImplicitActuatorCfg
 from isaaclab.assets import ArticulationCfg
 from isaaclab.envs import DirectRLEnvCfg
 from isaaclab.scene import InteractiveSceneCfg
@@ -12,7 +11,13 @@ from isaaclab.sim import PhysxCfg, SimulationCfg
 from isaaclab.sim.spawners.materials.physics_materials_cfg import RigidBodyMaterialCfg
 from isaaclab.utils import configclass
 
+from tacex_assets import FRANKA_PANDA_ARM_GSMINI_GRIPPER_HIGH_PD_RIGID_CFG
+from tacex_assets.sensors.gelsight_mini import GELSIGHT_MINI_TAXIM_CFG
+
 from .factory_tasks_cfg import ASSET_DIR, FactoryTask, GearMesh, NutThread, PegInsert
+from .factory_ik_joint_control_env_cfg import FactoryIKJointControlEnvCfg
+
+from .feature_extractor_tactile_rgb_images import TactileRGBFeatureExtractorCfg
 
 OBS_DIM_CFG = {
     "fingertip_pos": 3,
@@ -20,6 +25,7 @@ OBS_DIM_CFG = {
     "fingertip_quat": 4,
     "ee_linvel": 3,
     "ee_angvel": 3,
+    "tactile_rgb_features": 9,
 }
 
 STATE_DIM_CFG = {
@@ -38,6 +44,8 @@ STATE_DIM_CFG = {
     "ema_factor": 1,
     "pos_threshold": 3,
     "rot_threshold": 3,
+    "tactile_rgb_features": 9,
+    "gt_keypoints": 9,
 }
 
 
@@ -76,18 +84,25 @@ class CtrlCfg:
 
 
 @configclass
-class FactoryEnvCfg(DirectRLEnvCfg):
+class FactoryTactileEnvCfg(FactoryIKJointControlEnvCfg):
     decimation = 8
     action_space = 6
     # num_*: will be overwritten to correspond to obs_order, state_order.
-    observation_space = 21
-    state_space = 72
+    observation_space = (
+        21 + 9
+    )  # state observation + vision CNN embedding (3 keypoints with 3 points = 9 values)
+    state_space = (
+        72 + 9 + 9
+    )  # asymetric states + vision CNN embedding + groundtruth of the CNN embedding (= the keypoints)
     obs_order: list = [
         "fingertip_pos_rel_fixed",
         "fingertip_quat",
         "ee_linvel",
         "ee_angvel",
+        "tactile_rgb_features",
     ]
+    obs_dim_cfg = OBS_DIM_CFG
+
     state_order: list = [
         "fingertip_pos",
         "fingertip_quat",
@@ -99,7 +114,10 @@ class FactoryEnvCfg(DirectRLEnvCfg):
         "held_quat",
         "fixed_pos",
         "fixed_quat",
+        "tactile_rgb_features",
+        "gt_keypoints",
     ]
+    state_dim_cfg = STATE_DIM_CFG
 
     task_name: str = "peg_insert"  # peg_insert, gear_mesh, nut_thread
     task: FactoryTask = FactoryTask()
@@ -133,94 +151,84 @@ class FactoryEnvCfg(DirectRLEnvCfg):
         num_envs=128, env_spacing=2.0, clone_in_fabric=False
     )
 
-    robot = ArticulationCfg(
+    # use robot with stiff PD control for better IK tracking
+    robot: ArticulationCfg = FRANKA_PANDA_ARM_GSMINI_GRIPPER_HIGH_PD_RIGID_CFG.replace(
         prim_path="/World/envs/env_.*/Robot",
-        spawn=sim_utils.UsdFileCfg(
-            usd_path=f"{ASSET_DIR}/franka_mimic.usd",
-            activate_contact_sensors=True,
-            rigid_props=sim_utils.RigidBodyPropertiesCfg(
-                disable_gravity=True,
-                max_depenetration_velocity=5.0,
-                linear_damping=0.0,
-                angular_damping=0.0,
-                max_linear_velocity=1000.0,
-                max_angular_velocity=3666.0,
-                enable_gyroscopic_forces=True,
-                solver_position_iteration_count=192,
-                solver_velocity_iteration_count=1,
-                max_contact_impulse=1e32,
-            ),
-            articulation_props=sim_utils.ArticulationRootPropertiesCfg(
-                enabled_self_collisions=False,
-                solver_position_iteration_count=192,
-                solver_velocity_iteration_count=1,
-            ),
-            collision_props=sim_utils.CollisionPropertiesCfg(
-                contact_offset=0.005, rest_offset=0.0
-            ),
-        ),
         init_state=ArticulationCfg.InitialStateCfg(
             joint_pos={
-                "panda_joint1": 0.00871,
-                "panda_joint2": -0.10368,
-                "panda_joint3": -0.00794,
-                "panda_joint4": -1.49139,
-                "panda_joint5": -0.00083,
-                "panda_joint6": 1.38774,
-                "panda_joint7": 0.0,
-                "panda_finger_joint2": 0.04,
+                "panda_joint1": 0.0,
+                "panda_joint2": -0.569,
+                "panda_joint3": 0.0,
+                "panda_joint4": -2.810,
+                "panda_joint5": 0.0,
+                "panda_joint6": 3.037,
+                "panda_joint7": 0.741,
+                "panda_finger_joint.*": 0.04,
             },
-            pos=(0.0, 0.0, 0.0),
-            rot=(1.0, 0.0, 0.0, 0.0),
         ),
-        actuators={
-            "panda_arm1": ImplicitActuatorCfg(
-                joint_names_expr=["panda_joint[1-4]"],
-                stiffness=0.0,
-                damping=0.0,
-                friction=0.0,
-                armature=0.0,
-                effort_limit_sim=87,
-                velocity_limit_sim=124.6,
-            ),
-            "panda_arm2": ImplicitActuatorCfg(
-                joint_names_expr=["panda_joint[5-7]"],
-                stiffness=0.0,
-                damping=0.0,
-                friction=0.0,
-                armature=0.0,
-                effort_limit_sim=12,
-                velocity_limit_sim=149.5,
-            ),
-            "panda_hand": ImplicitActuatorCfg(
-                joint_names_expr=["panda_finger_joint[1-2]"],
-                effort_limit_sim=40.0,
-                velocity_limit_sim=0.04,
-                stiffness=7500.0,
-                damping=173.0,
-                friction=0.1,
-                armature=0.0,
-            ),
-        },
+    )
+
+    # GelSight Mini Sensors
+    gsmini_left = GELSIGHT_MINI_TAXIM_CFG.replace(
+        prim_path="/World/envs/env_.*/Robot/gelsight_mini_case_left",
+        sensor_camera_cfg=GELSIGHT_MINI_TAXIM_CFG.SensorCameraCfg(
+            prim_name="Camera",
+            update_period=0,
+            resolution=(32, 32),
+            data_types=["depth"],
+            clipping_range=(0.024, 0.034),
+        ),
+        device="cuda",
+        debug_vis=True,  # for rendering sensor output in the gui
+        # update Taxim cfg
+        marker_motion_sim_cfg=None,
+        data_types=["tactile_rgb"],  # marker_motion
+    )
+    # settings for optical sim
+    gsmini_left.optical_sim_cfg = gsmini_left.optical_sim_cfg.replace(
+        with_shadow=False,
+        device="cuda",
+        tactile_img_res=(32, 32),
+    )
+    gsmini_right = gsmini_left.copy().replace(
+        prim_path="/World/envs/env_.*/Robot/gelsight_mini_case_right",
+    )
+
+    tactile_rgb_feature_extractor = TactileRGBFeatureExtractorCfg(
+        write_image_to_file=False,
+        save_step_frequency=int(10.0 / (1 / 120)), # save after each episode
+        load_checkpoint=True,
     )
 
 
 @configclass
-class FactoryTaskPegInsertCfg(FactoryEnvCfg):
+class FactoryTaskPegInsertTactileCfg(FactoryTactileEnvCfg):
     task_name = "peg_insert"
     task = PegInsert()
     episode_length_s = 10.0
 
 
 @configclass
-class FactoryTaskGearMeshCfg(FactoryEnvCfg):
+class FactoryTaskGearMeshTactileCfg(FactoryTactileEnvCfg):
     task_name = "gear_mesh"
     task = GearMesh()
     episode_length_s = 20.0
 
 
 @configclass
-class FactoryTaskNutThreadCfg(FactoryEnvCfg):
+class FactoryTaskNutThreadTactileCfg(FactoryTactileEnvCfg):
     task_name = "nut_thread"
     task = NutThread()
     episode_length_s = 30.0
+
+
+# --- Play scripts ---
+@configclass
+class FactoryTaskPegInsertTactilePlayCfg(FactoryTactileEnvCfg):
+    task_name = "peg_insert"
+    task = PegInsert()
+    episode_length_s = 10.0
+
+    tactile_rgb_feature_extractor = TactileRGBFeatureExtractorCfg(
+        train=False, load_checkpoint=True, write_image_to_file=False,
+    )
