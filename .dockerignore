@@ -27,3 +27,6 @@ _isaac_lab?
 # Omniverse
 **/*.dmp
 **/.thumbs
+
+# Ignore the UIPC build output, since we need to rebuild anyways
+source/tacex_uipc/build/
