@@ -6,6 +6,7 @@ from .franka_gsmini_gripper_uipc import (
     FRANKA_PANDA_ARM_GSMINI_GRIPPER_HIGH_PD_UIPC_CFG,
     FRANKA_PANDA_ARM_GSMINI_GRIPPER_UIPC_CFG,
 )
+
 from .franka_gsmini_single_rigid import (
     FRANKA_PANDA_ARM_SINGLE_GSMINI_HIGH_PD_RIGID_CFG,
     FRANKA_PANDA_ARM_SINGLE_GSMINI_RIGID_CFG,

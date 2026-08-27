@@ -60,7 +60,7 @@ from isaaclab.utils import configclass
 from tacex import GelSightSensor
 
 from tacex_assets import TACEX_ASSETS_DATA_DIR
-from tacex_assets.robots.franka.franka_gsmini_gripper_rigid import FRANKA_PANDA_ARM_GSMINI_GRIPPER_HIGH_PD_RIGID_CFG
+from tacex_assets import FRANKA_PANDA_ARM_GSMINI_GRIPPER_HIGH_PD_RIGID_CFG
 from tacex_assets.sensors.gelsight_mini import GELSIGHT_MINI_TAXIM_CFG
 
 
@@ -349,7 +349,7 @@ class BallRollingEnv(DirectRLEnv):
         # self._jacobi_joint_ids = self._joint_ids # we take every joint
 
         # ee offset w.r.t panda hand -> based on the asset
-        self._offset_pos = torch.tensor([0.0, 0.0, 0.11841], device=self.device).repeat(self.num_envs, 1)
+        self._offset_pos = torch.tensor([0.0, 0.0, 0.13768], device=self.device).repeat(self.num_envs, 1)
         self._offset_rot = torch.tensor([1.0, 0.0, 0.0, 0.0], device=self.device).repeat(self.num_envs, 1)
         # ---
 
