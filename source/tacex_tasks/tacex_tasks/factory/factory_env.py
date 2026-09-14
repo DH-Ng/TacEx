@@ -13,6 +13,9 @@ import isaaclab.sim as sim_utils
 from isaaclab.assets import Articulation
 from isaaclab.envs import DirectRLEnv
 from isaaclab.sim.spawners.from_files import GroundPlaneCfg, spawn_ground_plane
+from isaaclab.sim.schemas import modify_rigid_body_properties
+from isaaclab.sim.spawners.materials import spawn_rigid_body_material
+
 from isaaclab.utils.assets import ISAAC_NUCLEUS_DIR
 from isaaclab.utils.math import axis_angle_from_quat
 
@@ -21,12 +24,19 @@ from .factory_env_cfg import OBS_DIM_CFG, STATE_DIM_CFG, FactoryEnvCfg
 
 
 class FactoryEnv(DirectRLEnv):
+    """Factory Env, but with TacEx Franka Robot model (i.e., 2 GelSight Minis as fingertip).
+
+    This environment does not use the Visuotactile sensors.
+    Its basically the same env as the original Isaac Lab factory environment, but with minor adjustments
+    for the different Finger geometry.
+    """
+
     cfg: FactoryEnvCfg
 
     def __init__(self, cfg: FactoryEnvCfg, render_mode: str | None = None, **kwargs):
         # Update number of obs/states
-        cfg.observation_space = sum([OBS_DIM_CFG[obs] for obs in cfg.obs_order])
-        cfg.state_space = sum([STATE_DIM_CFG[state] for state in cfg.state_order])
+        cfg.observation_space = sum([cfg.obs_dim_cfg[obs] for obs in cfg.obs_order])
+        cfg.state_space = sum([cfg.state_dim_cfg[state] for state in cfg.state_order])
         cfg.observation_space += cfg.action_space
         cfg.state_space += cfg.action_space
         self.cfg_task = cfg.task
@@ -49,6 +59,12 @@ class FactoryEnv(DirectRLEnv):
         self.rot_threshold = torch.tensor(
             self.cfg.ctrl.rot_action_threshold, device=self.device
         ).repeat((self.num_envs, 1))
+
+        # set velocity limit
+        control_dt = self.physics_dt * self.cfg.decimation
+
+        self.pos_threshold = self.cfg.ctrl.max_linear_velocity * control_dt
+        self.rot_threshold = self.cfg.ctrl.max_angular_velocity * control_dt
 
         # Set masses and frictions.
         factory_utils.set_friction(
@@ -81,9 +97,7 @@ class FactoryEnv(DirectRLEnv):
         # Computer body indices.
         self.left_finger_body_idx = self._robot.body_names.index("panda_leftfinger")
         self.right_finger_body_idx = self._robot.body_names.index("panda_rightfinger")
-        self.fingertip_body_idx = self._robot.body_names.index(
-            "panda_fingertip_centered"
-        )
+        self.fingertip_body_idx = self._robot.body_names.index("TCP")
 
         # Tensors for finite-differencing.
         self.last_update_timestamp = (
@@ -129,6 +143,41 @@ class FactoryEnv(DirectRLEnv):
         if self.cfg_task.name == "gear_mesh":
             self._small_gear_asset = Articulation(self.cfg_task.small_gear_cfg)
             self._large_gear_asset = Articulation(self.cfg_task.large_gear_cfg)
+
+        # Modify gelpad physics
+        gelpad_left_rigid_body_path = "/World/envs/env_0/Robot/gsmini_gelpad_left"
+        gelpad_right_rigid_body_path = "/World/envs/env_0/Robot/gsmini_gelpad_right"
+        modify_rigid_body_properties(
+            prim_path=gelpad_left_rigid_body_path,
+            cfg=self.cfg.gelpad_rigidbody_properties,
+        )
+
+        modify_rigid_body_properties(
+            prim_path=gelpad_right_rigid_body_path,
+            cfg=self.cfg.gelpad_rigidbody_properties,
+        )
+        # change physics material
+        material_cfg = sim_utils.RigidBodyMaterialCfg(
+            static_friction=0.9,
+            dynamic_friction=0.7,
+            restitution=0.0,
+            compliant_contact_stiffness=0.0,
+            compliant_contact_damping=0.0,
+        )
+        spawn_rigid_body_material(
+            prim_path="/World/gelpad_material",
+            cfg=material_cfg,
+        )
+
+        sim_utils.bind_physics_material(
+            prim_path=gelpad_left_rigid_body_path,
+            material_path="/World/gelpad_material",
+        )
+
+        sim_utils.bind_physics_material(
+            prim_path=gelpad_right_rigid_body_path,
+            material_path="/World/gelpad_material",
+        )
 
         self.scene.clone_environments(copy_from_source=False)
         if self.device == "cpu":
@@ -688,15 +737,15 @@ class FactoryEnv(DirectRLEnv):
         return pos_error, axis_angle_error
 
     def get_handheld_asset_relative_pose(self):
-        """Get default relative pose between help asset and fingertip."""
+        """Get default relative pose between held asset and fingertip."""
         if self.cfg_task.name == "peg_insert":
             held_asset_relative_pos = torch.zeros(
                 (self.num_envs, 3), device=self.device
             )
             held_asset_relative_pos[:, 2] = self.cfg_task.held_asset_cfg.height
-            held_asset_relative_pos[:, 2] -= (
-                self.cfg_task.robot_cfg.franka_fingerpad_length
-            )
+            held_asset_relative_pos[
+                :, 2
+            ] -= self.cfg_task.robot_cfg.franka_fingerpad_length
         elif self.cfg_task.name == "gear_mesh":
             held_asset_relative_pos = torch.zeros(
                 (self.num_envs, 3), device=self.device
@@ -705,7 +754,7 @@ class FactoryEnv(DirectRLEnv):
             held_asset_relative_pos[:, 0] += gear_base_offset[0]
             held_asset_relative_pos[:, 2] += gear_base_offset[2]
             held_asset_relative_pos[:, 2] += (
-                self.cfg_task.held_asset_cfg.height / 2.0 * 1.1
+                self.cfg_task.held_asset_cfg.height / 2.0 * 1.2
             )
         elif self.cfg_task.name == "nut_thread":
             held_asset_relative_pos = factory_utils.get_held_base_pos_local(
@@ -716,6 +765,9 @@ class FactoryEnv(DirectRLEnv):
             )
         else:
             raise NotImplementedError("Task not implemented")
+
+        # Add offset so that top held asset is at finger_middle_point
+        held_asset_relative_pos[:, 2] += self.cfg_task.held_asset_cfg.height / 2.0
 
         held_asset_relative_quat = (
             torch.tensor([1.0, 0.0, 0.0, 0.0], device=self.device)
@@ -763,6 +815,7 @@ class FactoryEnv(DirectRLEnv):
         self.scene.write_data_to_sim()
         self.sim.step(render=True)
         self.scene.update(dt=self.physics_dt)
+        self.sim.render()
         self._compute_intermediate_values(dt=self.physics_dt)
 
     def randomize_initial_state(self, env_ids):

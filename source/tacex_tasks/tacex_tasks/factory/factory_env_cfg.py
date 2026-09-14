@@ -12,6 +12,8 @@ from isaaclab.sim import PhysxCfg, SimulationCfg
 from isaaclab.sim.spawners.materials.physics_materials_cfg import RigidBodyMaterialCfg
 from isaaclab.utils import configclass
 
+from tacex_assets import FRANKA_PANDA_ARM_GSMINI_GRIPPER_HIGH_PD_RIGID_CFG
+
 from .factory_tasks_cfg import ASSET_DIR, FactoryTask, GearMesh, NutThread, PegInsert
 
 OBS_DIM_CFG = {
@@ -53,6 +55,9 @@ class CtrlCfg:
     pos_action_bounds = [0.05, 0.05, 0.05]
     rot_action_bounds = [1.0, 1.0, 1.0]
 
+    max_linear_velocity = 0.5  # m/s
+    max_angular_velocity = 0.15  # rad/s
+
     pos_action_threshold = [0.02, 0.02, 0.02]
     rot_action_threshold = [0.097, 0.097, 0.097]
 
@@ -88,6 +93,8 @@ class FactoryEnvCfg(DirectRLEnvCfg):
         "ee_linvel",
         "ee_angvel",
     ]
+    obs_dim_cfg = OBS_DIM_CFG
+
     state_order: list = [
         "fingertip_pos",
         "fingertip_quat",
@@ -100,6 +107,7 @@ class FactoryEnvCfg(DirectRLEnvCfg):
         "fixed_pos",
         "fixed_quat",
     ]
+    state_dim_cfg = STATE_DIM_CFG
 
     task_name: str = "peg_insert"  # peg_insert, gear_mesh, nut_thread
     task: FactoryTask = FactoryTask()
@@ -133,32 +141,9 @@ class FactoryEnvCfg(DirectRLEnvCfg):
         num_envs=128, env_spacing=2.0, clone_in_fabric=False
     )
 
-    robot = ArticulationCfg(
+    # Use our Franka with GsMini Adapters
+    robot: ArticulationCfg = FRANKA_PANDA_ARM_GSMINI_GRIPPER_HIGH_PD_RIGID_CFG.replace(
         prim_path="/World/envs/env_.*/Robot",
-        spawn=sim_utils.UsdFileCfg(
-            usd_path=f"{ASSET_DIR}/franka_mimic.usd",
-            activate_contact_sensors=True,
-            rigid_props=sim_utils.RigidBodyPropertiesCfg(
-                disable_gravity=True,
-                max_depenetration_velocity=5.0,
-                linear_damping=0.0,
-                angular_damping=0.0,
-                max_linear_velocity=1000.0,
-                max_angular_velocity=3666.0,
-                enable_gyroscopic_forces=True,
-                solver_position_iteration_count=192,
-                solver_velocity_iteration_count=1,
-                max_contact_impulse=1e32,
-            ),
-            articulation_props=sim_utils.ArticulationRootPropertiesCfg(
-                enabled_self_collisions=False,
-                solver_position_iteration_count=192,
-                solver_velocity_iteration_count=1,
-            ),
-            collision_props=sim_utils.CollisionPropertiesCfg(
-                contact_offset=0.005, rest_offset=0.0
-            ),
-        ),
         init_state=ArticulationCfg.InitialStateCfg(
             joint_pos={
                 "panda_joint1": 0.00871,
@@ -203,6 +188,41 @@ class FactoryEnvCfg(DirectRLEnvCfg):
             ),
         },
     )
+    robot.spawn = robot.spawn.replace(
+        rigid_props=sim_utils.RigidBodyPropertiesCfg(
+            disable_gravity=True,  # or true?
+            max_depenetration_velocity=5.0,
+            linear_damping=0.0,
+            angular_damping=0.0,
+            max_linear_velocity=1000.0,
+            max_angular_velocity=3666.0,
+            enable_gyroscopic_forces=True,
+            solver_position_iteration_count=192,
+            solver_velocity_iteration_count=1,
+            max_contact_impulse=1e32,
+        ),
+        articulation_props=sim_utils.ArticulationRootPropertiesCfg(
+            enabled_self_collisions=False,
+            solver_position_iteration_count=192,
+            solver_velocity_iteration_count=1,
+        ),
+        collision_props=sim_utils.CollisionPropertiesCfg(
+            contact_offset=0.005, rest_offset=0.0
+        ),
+    )
+
+    gelpad_rigidbody_properties = sim_utils.RigidBodyPropertiesCfg(
+        disable_gravity=True,
+        max_depenetration_velocity=5.0,
+        linear_damping=0.0,
+        angular_damping=0.0,
+        max_linear_velocity=1000.0,
+        max_angular_velocity=3666.0,
+        enable_gyroscopic_forces=True,
+        solver_position_iteration_count=192,
+        solver_velocity_iteration_count=1,
+        max_contact_impulse=1e32,
+    )
 
 
 @configclass
@@ -223,4 +243,4 @@ class FactoryTaskGearMeshCfg(FactoryEnvCfg):
 class FactoryTaskNutThreadCfg(FactoryEnvCfg):
     task_name = "nut_thread"
     task = NutThread()
-    episode_length_s = 30.0
+    episode_length_s = 5.0  # 30.0

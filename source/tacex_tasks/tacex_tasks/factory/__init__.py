@@ -13,13 +13,6 @@ from .factory_env_cfg import (
     FactoryTaskPegInsertCfg,
 )
 
-from .factory_env_modified_obs import FactoryModifiedObsEnv
-from .factory_env_modified_obs_cfg import (
-    FactoryTaskPegInsertModifiedObsCfg,
-    FactoryTaskNutThreadModifiedObsCfg,
-    FactoryTaskGearMeshModifiedObsCfg,
-)
-
 from .factory_ik_joint_control_env import FactoryIKJointControlEnv
 from .factory_ik_joint_control_env_cfg import (
     FactoryTaskGearMeshIKJointControlCfg,
@@ -32,14 +25,14 @@ from .factory_tactile_env_cfg import (
     FactoryTaskGearMeshTactileCfg,
     FactoryTaskNutThreadTactileCfg,
     FactoryTaskPegInsertTactileCfg,
-    FactoryTaskPegInsertTactilePlayCfg
+    FactoryTaskPegInsertTactilePlayCfg,
 )
 
 # ---
 # Register Gym environments.
 # ---
 
-# isaaclab -p ./scripts/reinforcement_learning/rl_games/train.py --task TacEx-Factory-PegInsert-Direct-v0 --num_envs 100 --enable_cameras
+# isaaclab -p ./scripts/reinforcement_learning/rl_games/train.py --task TacEx-Factory-PegInsert-Direct-v0 --num_envs 128 agent.params.config.full_experiment_name=factory_peg_insert
 gym.register(
     id="TacEx-Factory-PegInsert-Direct-v0",
     entry_point=f"{__name__}.factory_env:FactoryEnv",
@@ -50,7 +43,7 @@ gym.register(
     },
 )
 
-# isaaclab -p ./scripts/reinforcement_learning/rl_games/train.py --task TacEx-Factory-GearMesh-Direct-v0 --num_envs 100 --enable_cameras
+# isaaclab -p ./scripts/reinforcement_learning/rl_games/train.py --task TacEx-Factory-GearMesh-Direct-v0 --num_envs 128 agent.params.config.full_experiment_name=factory_gear_insert
 gym.register(
     id="TacEx-Factory-GearMesh-Direct-v0",
     entry_point=f"{__name__}.factory_env:FactoryEnv",
@@ -61,7 +54,7 @@ gym.register(
     },
 )
 
-# isaaclab -p ./scripts/reinforcement_learning/rl_games/train.py --task TacEx-Factory-NutThread-Direct-v0 --num_envs 20 --enable_cameras
+# isaaclab -p ./scripts/reinforcement_learning/rl_games/train.py --task TacEx-Factory-NutThread-Direct-v0 --num_envs 64 agent.params.config.full_experiment_name=factory_nut_thread
 gym.register(
     id="TacEx-Factory-NutThread-Direct-v0",
     entry_point=f"{__name__}.factory_env:FactoryEnv",
@@ -83,7 +76,7 @@ gym.register(
 # )
 
 
-# isaaclab -p ./scripts/reinforcement_learning/rl_games/train.py --task TacEx-Factory-PegInsert-Direct-IK-JointControl-v0 --num_envs 128 --enable_cameras
+# isaaclab -p ./scripts/reinforcement_learning/rl_games/train.py --task TacEx-Factory-PegInsert-Direct-IK-JointControl-v0 --num_envs 128 agent.params.config.full_experiment_name=peg_insert_ik
 gym.register(
     id="TacEx-Factory-PegInsert-Direct-IK-JointControl-v0",
     # entry_point=f"{__name__}.factory_ik_joint_control_env:FactoryIKJointControlEnv",
@@ -94,7 +87,7 @@ gym.register(
         "rl_games_cfg_entry_point": f"{agents.__name__}:rl_games_ppo_cfg.yaml",
     },
 )
-# isaaclab -p ./scripts/reinforcement_learning/rl_games/train.py --task TacEx-Factory-PegInsert-Direct-Tactile-v0 --num_envs 128 --enable_cameras
+# isaaclab -p ./scripts/reinforcement_learning/rl_games/train.py --task TacEx-Factory-PegInsert-Direct-Tactile-v0 --num_envs 128 --enable_cameras agent.params.config.full_experiment_name=peg_insert_tactile
 gym.register(
     id="TacEx-Factory-PegInsert-Direct-Tactile-v0",
     entry_point="tacex_tasks.factory:FactoryTactileEnv",
@@ -105,7 +98,7 @@ gym.register(
     },
 )
 
-# isaaclab -p ./scripts/reinforcement_learning/rl_games/play.py --task TacEx-Factory-PegInsert-Direct-Tactile-Play-v0 --num_envs 128 --enable_cameras
+# isaaclab -p ./scripts/reinforcement_learning/rl_games/play.py --task TacEx-Factory-PegInsert-Direct-Tactile-Play-v0 --num_envs 128 --enable_cameras --checkpoint
 gym.register(
     id="TacEx-Factory-PegInsert-Direct-Tactile-Play-v0",
     entry_point="tacex_tasks.factory:FactoryTactileEnv",
@@ -113,5 +106,52 @@ gym.register(
     kwargs={
         "env_cfg_entry_point": FactoryTaskPegInsertTactilePlayCfg,
         "rl_games_cfg_entry_point": f"{agents.__name__}:rl_games_ppo_tactile_cfg.yaml",
+    },
+)
+
+### Gear Insertion
+# isaaclab -p ./scripts/reinforcement_learning/rl_games/train.py --task TacEx-Factory-GearInsert-Direct-IK-JointControl-v0 --num_envs 64 agent.params.config.full_experiment_name=gear_insert_ik
+gym.register(
+    id="TacEx-Factory-GearInsert-Direct-IK-JointControl-v0",
+    entry_point="tacex_tasks.factory:FactoryIKJointControlEnv",
+    disable_env_checker=True,
+    kwargs={
+        "env_cfg_entry_point": FactoryTaskGearMeshIKJointControlCfg,
+        "rl_games_cfg_entry_point": f"{agents.__name__}:rl_games_ppo_cfg.yaml",
+    },
+)
+
+# isaaclab -p ./scripts/reinforcement_learning/rl_games/train.py --task TacEx-Factory-GearInsert-Direct-Tactile-v0 --num_envs 128 --enable_cameras agent.params.config.full_experiment_name=gear_insert_tactile
+gym.register(
+    id="TacEx-Factory-GearInsert-Direct-Tactile-v0",
+    entry_point="tacex_tasks.factory:FactoryTactileEnv",
+    disable_env_checker=True,
+    kwargs={
+        "env_cfg_entry_point": FactoryTaskGearMeshTactileCfg,
+        "rl_games_cfg_entry_point": f"{agents.__name__}:rl_games_ppo_tactile_cfg.yaml",
+    },
+)
+
+
+### Nut-Thread
+# isaaclab -p ./scripts/reinforcement_learning/rl_games/train.py --task TacEx-Factory-NutThread-Direct-IK-JointControl-v0 --num_envs 64 agent.params.config.full_experiment_name=nut_thread_ik
+gym.register(
+    id="TacEx-Factory-NutThread-Direct-IK-JointControl-v0",
+    entry_point="tacex_tasks.factory:FactoryIKJointControlEnv",
+    disable_env_checker=True,
+    kwargs={
+        "env_cfg_entry_point": FactoryTaskNutThreadIKJointControlCfg,
+        "rl_games_cfg_entry_point": f"{agents.__name__}:rl_games_ppo_tactile_nut_cfg.yaml",
+    },
+)
+
+# isaaclab -p ./scripts/reinforcement_learning/rl_games/train.py --task TacEx-Factory-NutThread-Direct-Tactile-v0 --num_envs 64 --enable_cameras agent.params.config.full_experiment_name=nut_thread_tactile
+gym.register(
+    id="TacEx-Factory-NutThread-Direct-Tactile-v0",
+    entry_point="tacex_tasks.factory:FactoryTactileEnv",
+    disable_env_checker=True,
+    kwargs={
+        "env_cfg_entry_point": FactoryTaskNutThreadTactileCfg,
+        "rl_games_cfg_entry_point": f"{agents.__name__}:rl_games_ppo_tactile_nut_cfg.yaml",
     },
 )

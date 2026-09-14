@@ -15,7 +15,7 @@ from tacex_assets import FRANKA_PANDA_ARM_GSMINI_GRIPPER_HIGH_PD_RIGID_CFG
 from tacex_assets.sensors.gelsight_mini import GELSIGHT_MINI_TAXIM_CFG
 
 from .factory_tasks_cfg import ASSET_DIR, FactoryTask, GearMesh, NutThread, PegInsert
-from .factory_ik_joint_control_env_cfg import FactoryIKJointControlEnvCfg
+from .factory_ik_joint_control_env_cfg import FactoryIKJointControlEnvCfg, CtrlCfg
 
 from .feature_extractor_tactile_rgb_images import TactileRGBFeatureExtractorCfg
 
@@ -25,7 +25,7 @@ OBS_DIM_CFG = {
     "fingertip_quat": 4,
     "ee_linvel": 3,
     "ee_angvel": 3,
-    "tactile_rgb_features": 9,
+    "tactile_rgb_features": 9,  # use tactile rgb feature extractor to regress 3 keypoints of held asset, which contain rel. position information
 }
 
 STATE_DIM_CFG = {
@@ -55,38 +55,7 @@ class ObsRandCfg:
 
 
 @configclass
-class CtrlCfg:
-    ema_factor = 0.2
-
-    pos_action_bounds = [0.05, 0.05, 0.05]
-    rot_action_bounds = [1.0, 1.0, 1.0]
-
-    pos_action_threshold = [0.02, 0.02, 0.02]
-    rot_action_threshold = [0.097, 0.097, 0.097]
-
-    reset_joints = [
-        1.5178e-03,
-        -1.9651e-01,
-        -1.4364e-03,
-        -1.9761,
-        -2.7717e-04,
-        1.7796,
-        7.8556e-01,
-    ]
-    reset_task_prop_gains = [300, 300, 300, 20, 20, 20]
-    reset_rot_deriv_scale = 10.0
-    default_task_prop_gains = [100, 100, 100, 30, 30, 30]
-
-    # Null space parameters.
-    default_dof_pos_tensor = [-1.3003, -0.4015, 1.1791, -2.1493, 0.4001, 1.9425, 0.4754]
-    kp_null = 10.0
-    kd_null = 6.3246
-
-
-@configclass
 class FactoryTactileEnvCfg(FactoryIKJointControlEnvCfg):
-    decimation = 8
-    action_space = 6
     # num_*: will be overwritten to correspond to obs_order, state_order.
     observation_space = (
         21 + 9
@@ -125,48 +94,6 @@ class FactoryTactileEnvCfg(FactoryIKJointControlEnvCfg):
     ctrl: CtrlCfg = CtrlCfg()
 
     episode_length_s = 10.0  # Probably need to override.
-    sim: SimulationCfg = SimulationCfg(
-        device="cuda:0",
-        dt=1 / 120,
-        gravity=(0.0, 0.0, -9.81),
-        physx=PhysxCfg(
-            solver_type=1,
-            max_position_iteration_count=192,  # Important to avoid interpenetration.
-            max_velocity_iteration_count=1,
-            bounce_threshold_velocity=0.2,
-            friction_offset_threshold=0.01,
-            friction_correlation_distance=0.00625,
-            gpu_max_rigid_contact_count=2**23,
-            gpu_max_rigid_patch_count=2**23,
-            gpu_collision_stack_size=2**28,
-            gpu_max_num_partitions=1,  # Important for stable simulation.
-        ),
-        physics_material=RigidBodyMaterialCfg(
-            static_friction=1.0,
-            dynamic_friction=1.0,
-        ),
-    )
-
-    scene: InteractiveSceneCfg = InteractiveSceneCfg(
-        num_envs=128, env_spacing=2.0, clone_in_fabric=False
-    )
-
-    # use robot with stiff PD control for better IK tracking
-    robot: ArticulationCfg = FRANKA_PANDA_ARM_GSMINI_GRIPPER_HIGH_PD_RIGID_CFG.replace(
-        prim_path="/World/envs/env_.*/Robot",
-        init_state=ArticulationCfg.InitialStateCfg(
-            joint_pos={
-                "panda_joint1": 0.0,
-                "panda_joint2": -0.569,
-                "panda_joint3": 0.0,
-                "panda_joint4": -2.810,
-                "panda_joint5": 0.0,
-                "panda_joint6": 3.037,
-                "panda_joint7": 0.741,
-                "panda_finger_joint.*": 0.04,
-            },
-        ),
-    )
 
     # GelSight Mini Sensors
     gsmini_left = GELSIGHT_MINI_TAXIM_CFG.replace(
@@ -196,7 +123,9 @@ class FactoryTactileEnvCfg(FactoryIKJointControlEnvCfg):
 
     tactile_rgb_feature_extractor = TactileRGBFeatureExtractorCfg(
         write_image_to_file=False,
-        save_step_frequency=int(10.0 / (1 / 120)), # save after each episode
+        save_step_frequency=int(
+            episode_length_s / (1 / 120)
+        ),  # save after each episode
         load_checkpoint=True,
     )
 
@@ -219,6 +148,7 @@ class FactoryTaskGearMeshTactileCfg(FactoryTactileEnvCfg):
 class FactoryTaskNutThreadTactileCfg(FactoryTactileEnvCfg):
     task_name = "nut_thread"
     task = NutThread()
+
     episode_length_s = 30.0
 
 
@@ -230,5 +160,7 @@ class FactoryTaskPegInsertTactilePlayCfg(FactoryTactileEnvCfg):
     episode_length_s = 10.0
 
     tactile_rgb_feature_extractor = TactileRGBFeatureExtractorCfg(
-        train=False, load_checkpoint=True, write_image_to_file=False,
+        train=False,
+        load_checkpoint=True,
+        write_image_to_file=False,
     )

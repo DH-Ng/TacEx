@@ -13,6 +13,7 @@ from isaaclab.sim.spawners.materials.physics_materials_cfg import RigidBodyMater
 from isaaclab.utils import configclass
 
 from isaaclab.controllers import DifferentialIKControllerCfg
+
 # from isaaclab_assets import FRANKA_PANDA_HIGH_PD_CFG
 from tacex_assets import FRANKA_PANDA_ARM_GSMINI_GRIPPER_HIGH_PD_RIGID_CFG
 
@@ -60,6 +61,13 @@ class CtrlCfg:
     pos_action_threshold = [0.02, 0.02, 0.02]
     rot_action_threshold = [0.097, 0.097, 0.097]
 
+    max_linear_velocity = 0.5  # m/s
+    max_angular_velocity = 0.15  # rad/s
+
+    # thresholds scale our actions
+    # self.pos_threshold = 0.01  # 1 cm per policy action at action = 1
+    # self.rot_threshold = 0.01   # 0.01 rad per policy action at action = 1
+
     reset_joints = [
         1.5178e-03,
         -1.9651e-01,
@@ -93,7 +101,7 @@ class FactoryIKJointControlEnvCfg(DirectRLEnvCfg):
         "ee_angvel",
     ]
     obs_dim_cfg = OBS_DIM_CFG
-    
+
     state_order: list = [
         "fingertip_pos",
         "fingertip_quat",
@@ -113,15 +121,19 @@ class FactoryIKJointControlEnvCfg(DirectRLEnvCfg):
     obs_rand: ObsRandCfg = ObsRandCfg()
     ctrl: CtrlCfg = CtrlCfg()
 
-    episode_length_s = 10.0  # Probably need to override.
+    episode_length_s = 10.0  # Probably need to override for Real deployment.
+    # simulation
     sim: SimulationCfg = SimulationCfg(
         device="cuda:0",
-        dt=1 / 120,
+        dt=1.0 / 120.0,
         gravity=(0.0, 0.0, -9.81),
         physx=PhysxCfg(
+            enable_ccd=True,
             solver_type=1,
             max_position_iteration_count=192,  # Important to avoid interpenetration.
-            max_velocity_iteration_count=1,
+            max_velocity_iteration_count=8,
+            # min_position_iteration_count=192,
+            # min_velocity_iteration_count=8,
             bounce_threshold_velocity=0.2,
             friction_offset_threshold=0.01,
             friction_correlation_distance=0.00625,
@@ -137,7 +149,10 @@ class FactoryIKJointControlEnvCfg(DirectRLEnvCfg):
     )
 
     scene: InteractiveSceneCfg = InteractiveSceneCfg(
-        num_envs=128, env_spacing=2.0, clone_in_fabric=False
+        num_envs=128,
+        env_spacing=2.0,
+        clone_in_fabric=False,
+        replicate_physics=True,
     )
 
     # use robot with stiff PD control for better IK tracking
@@ -145,105 +160,89 @@ class FactoryIKJointControlEnvCfg(DirectRLEnvCfg):
         prim_path="/World/envs/env_.*/Robot",
         init_state=ArticulationCfg.InitialStateCfg(
             joint_pos={
-                "panda_joint1": 0.0,
-                "panda_joint2": -0.569,
-                "panda_joint3": 0.0,
-                "panda_joint4": -2.810,
-                "panda_joint5": 0.0,
-                "panda_joint6": 3.037,
-                "panda_joint7": 0.741,
-                "panda_finger_joint.*": 0.04,
+                "panda_joint1": 0.00871,
+                "panda_joint2": -0.10368,
+                "panda_joint3": -0.00794,
+                "panda_joint4": -1.49139,
+                "panda_joint5": -0.00083,
+                "panda_joint6": 1.38774,
+                "panda_joint7": 0.0,
+                "panda_finger_joint2": 0.04,
             },
-            # joint_pos={
-            #     "panda_joint1": 0.00871,
-            #     "panda_joint2": -0.10368,
-            #     "panda_joint3": -0.00794,
-            #     "panda_joint4": -1.49139,
-            #     "panda_joint5": -0.00083,
-            #     "panda_joint6": 1.38774,
-            #     "panda_joint7": 0.0,
-            #     "panda_finger_joint2": 0.04,
-            # },
+        ),
+        actuators={
+            "panda_shoulder": ImplicitActuatorCfg(
+                joint_names_expr=["panda_joint[1-4]"],
+                effort_limit_sim=87.0,
+                velocity_limit_sim=2.175,
+                stiffness=400.0,
+                damping=80.0,
+            ),
+            "panda_forearm": ImplicitActuatorCfg(
+                joint_names_expr=["panda_joint[5-7]"],
+                effort_limit_sim=12.0,
+                velocity_limit_sim=2.61,
+                stiffness=400.0,
+                damping=80.0,
+            ),
+            "panda_hand": ImplicitActuatorCfg(
+                joint_names_expr=["panda_finger_joint.*"],
+                effort_limit_sim=40.0,
+                velocity_limit_sim=0.04,
+                stiffness=7500.0,
+                damping=173.0,
+                friction=0.1,
+                armature=0.0,
+            ),
+        },
+        soft_joint_pos_limit_factor=1.0,
+    )
+    robot.spawn = robot.spawn.replace(
+        rigid_props=sim_utils.RigidBodyPropertiesCfg(
+            disable_gravity=True,
+            max_depenetration_velocity=5.0,
+            linear_damping=0.0,
+            angular_damping=0.0,
+            max_linear_velocity=1000.0,
+            max_angular_velocity=3666.0,
+            enable_gyroscopic_forces=True,
+            solver_position_iteration_count=192,
+            solver_velocity_iteration_count=1,
+            max_contact_impulse=1e32,
+        ),
+        articulation_props=sim_utils.ArticulationRootPropertiesCfg(
+            enabled_self_collisions=False,
+            solver_position_iteration_count=192,
+            solver_velocity_iteration_count=1,
         ),
     )
 
-    # Actions are delta poses, but with factory we compute absolute positions.
+    gelpad_rigidbody_properties = sim_utils.RigidBodyPropertiesCfg(
+        disable_gravity=True,
+        max_depenetration_velocity=5.0,
+        linear_damping=0.0,
+        angular_damping=0.0,
+        max_linear_velocity=1000.0,
+        max_angular_velocity=3666.0,
+        enable_gyroscopic_forces=True,
+        solver_position_iteration_count=192,
+        solver_velocity_iteration_count=1,
+        max_contact_impulse=1e32,
+    )
+
+    # Actions are delta poses, and within factory env's we convert these to absolute goal poses.
     # -> Factory uses torque control to reach arm joint values, we instead use isaaclab ik controller
     ik_controller_cfg = DifferentialIKControllerCfg(
-        command_type="pose", use_relative_mode=False, ik_method="dls"
+        command_type="pose",
+        use_relative_mode=False,
+        ik_method="dls",
+        ik_params={
+            "lambda_val": 0.1,  # same value as factory control -> higher than the default value
+        },
     )
 
     ee_pos_offset = (0.0, 0.0, 0.0)  # (0.0, 0.0, 0.13768)
     ee_rot_offset = (1.0, 0.0, 0.0, 0.0)
-
-    # robot = ArticulationCfg(
-    #     prim_path="/World/envs/env_.*/Robot",
-    #     spawn=sim_utils.UsdFileCfg(
-    #         usd_path=f"{ASSET_DIR}/franka_mimic.usd",
-    #         activate_contact_sensors=True,
-    #         rigid_props=sim_utils.RigidBodyPropertiesCfg(
-    #             disable_gravity=True,
-    #             max_depenetration_velocity=5.0,
-    #             linear_damping=0.0,
-    #             angular_damping=0.0,
-    #             max_linear_velocity=1000.0,
-    #             max_angular_velocity=3666.0,
-    #             enable_gyroscopic_forces=True,
-    #             solver_position_iteration_count=192,
-    #             solver_velocity_iteration_count=1,
-    #             max_contact_impulse=1e32,
-    #         ),
-    #         articulation_props=sim_utils.ArticulationRootPropertiesCfg(
-    #             enabled_self_collisions=False,
-    #             solver_position_iteration_count=192,
-    #             solver_velocity_iteration_count=1,
-    #         ),
-    #         collision_props=sim_utils.CollisionPropertiesCfg(contact_offset=0.005, rest_offset=0.0),
-    #     ),
-    #     init_state=ArticulationCfg.InitialStateCfg(
-    #         joint_pos={
-    #             "panda_joint1": 0.00871,
-    #             "panda_joint2": -0.10368,
-    #             "panda_joint3": -0.00794,
-    #             "panda_joint4": -1.49139,
-    #             "panda_joint5": -0.00083,
-    #             "panda_joint6": 1.38774,
-    #             "panda_joint7": 0.0,
-    #             "panda_finger_joint2": 0.04,
-    #         },
-    #         pos=(0.0, 0.0, 0.0),
-    #         rot=(1.0, 0.0, 0.0, 0.0),
-    #     ),
-    #     actuators={
-    #         "panda_arm1": ImplicitActuatorCfg(
-    #             joint_names_expr=["panda_joint[1-4]"],
-    #             stiffness=0.0,
-    #             damping=0.0,
-    #             friction=0.0,
-    #             armature=0.0,
-    #             effort_limit_sim=87,
-    #             velocity_limit_sim=124.6,
-    #         ),
-    #         "panda_arm2": ImplicitActuatorCfg(
-    #             joint_names_expr=["panda_joint[5-7]"],
-    #             stiffness=0.0,
-    #             damping=0.0,
-    #             friction=0.0,
-    #             armature=0.0,
-    #             effort_limit_sim=12,
-    #             velocity_limit_sim=149.5,
-    #         ),
-    #         "panda_hand": ImplicitActuatorCfg(
-    #             joint_names_expr=["panda_finger_joint[1-2]"],
-    #             effort_limit_sim=40.0,
-    #             velocity_limit_sim=0.04,
-    #             stiffness=7500.0,
-    #             damping=173.0,
-    #             friction=0.1,
-    #             armature=0.0,
-    #         ),
-    #     },
-    # )
 
 
 @configclass

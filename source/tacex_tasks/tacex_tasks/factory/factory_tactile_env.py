@@ -13,6 +13,8 @@ import isaaclab.sim as sim_utils
 from isaaclab.assets import Articulation
 from isaaclab.envs import DirectRLEnv
 from isaaclab.sim.spawners.from_files import GroundPlaneCfg, spawn_ground_plane
+from isaaclab.sim.schemas import modify_rigid_body_properties
+from isaaclab.sim.spawners.materials import spawn_rigid_body_material
 from isaaclab.utils.assets import ISAAC_NUCLEUS_DIR
 from isaaclab.utils.math import axis_angle_from_quat
 import isaaclab.utils.math as math_utils
@@ -54,15 +56,13 @@ class FactoryTactileEnv(FactoryIKJointControlEnv):
             render_mode (str | None, optional): _description_. Defaults to None.
         """
 
-        # # Update number of obs/states
-        # cfg.observation_space = sum([cfg.obs_dim_cfg[obs] for obs in cfg.obs_order])
-        # cfg.state_space = sum([cfg.state_dim_cfg[state] for state in cfg.state_order])
-
         super().__init__(cfg, render_mode, **kwargs)
 
         # Feature extractor to extract 3D position of keypoints of the held asset from tactile RGB images
         self.feature_extractor = TactileRGBFeatureExtractor(
-            self.cfg.tactile_rgb_feature_extractor, self.device, f"{self.cfg.log_dir}/feature_extractor"
+            self.cfg.tactile_rgb_feature_extractor,
+            self.device,
+            f"{self.cfg.log_dir}/feature_extractor",
         )
 
         # keypoints buffer
@@ -90,6 +90,42 @@ class FactoryTactileEnv(FactoryIKJointControlEnv):
         )
 
         self._robot = Articulation(self.cfg.robot)
+
+        # Modify gelpad physics
+        gelpad_left_rigid_body_path = "/World/envs/env_0/Robot/gsmini_gelpad_left"
+        gelpad_right_rigid_body_path = "/World/envs/env_0/Robot/gsmini_gelpad_right"
+        modify_rigid_body_properties(
+            prim_path=gelpad_left_rigid_body_path,
+            cfg=self.cfg.gelpad_rigidbody_properties,
+        )
+
+        modify_rigid_body_properties(
+            prim_path=gelpad_right_rigid_body_path,
+            cfg=self.cfg.gelpad_rigidbody_properties,
+        )
+        # change physics material
+        material_cfg = sim_utils.RigidBodyMaterialCfg(
+            static_friction=0.9,
+            dynamic_friction=0.7,
+            restitution=0.0,
+            compliant_contact_stiffness=10.0,
+            compliant_contact_damping=5.0,
+        )
+        spawn_rigid_body_material(
+            prim_path="/World/gelpad_material",
+            cfg=material_cfg,
+        )
+
+        sim_utils.bind_physics_material(
+            prim_path=gelpad_left_rigid_body_path,
+            material_path="/World/gelpad_material",
+        )
+
+        sim_utils.bind_physics_material(
+            prim_path=gelpad_right_rigid_body_path,
+            material_path="/World/gelpad_material",
+        )
+
         self._fixed_asset = Articulation(self.cfg_task.fixed_asset)
         self._held_asset = Articulation(self.cfg_task.held_asset)
         if self.cfg_task.name == "gear_mesh":
@@ -123,11 +159,12 @@ class FactoryTactileEnv(FactoryIKJointControlEnv):
         # generate ground truth keypoints for held-asset
         self.compute_keypoints(
             held_asset_pose=torch.cat((self.held_pos, self.held_quat), dim=1),
-            size=(
+            asset_size=(
                 self.cfg_task.held_asset_cfg.diameter,
                 self.cfg_task.held_asset_cfg.diameter,
                 self.cfg_task.held_asset_cfg.height,
             ),
+            max_rel_pos=self.cfg.gsmini_left.gelpad_dimensions.as_tuple,
             out=self.gt_keypoints,
         )
 
@@ -164,30 +201,6 @@ class FactoryTactileEnv(FactoryIKJointControlEnv):
             state_dict, self.cfg.state_order + ["prev_actions"]
         )
         return {"policy": obs_tensors, "critic": state_tensors}
-
-    def _reset_buffers(self, env_ids):
-        """Reset buffers."""
-        self.ep_succeeded[env_ids] = 0
-        self.ep_success_times[env_ids] = 0
-
-    def _get_rewards(self):
-        """Update rewards and compute success statistics."""
-        # Get successful and failed envs at current timestep
-        check_rot = self.cfg_task.name == "nut_thread"
-        curr_successes = self._get_curr_successes(
-            success_threshold=self.cfg_task.success_threshold, check_rot=check_rot
-        )
-
-        rew_dict, rew_scales = self._get_factory_rew_dict(curr_successes)
-
-        rew_buf = torch.zeros_like(rew_dict["kp_coarse"])
-        for rew_name, rew in rew_dict.items():
-            rew_buf += rew_dict[rew_name] * rew_scales[rew_name]
-
-        self.prev_actions = self.actions.clone()
-
-        self._log_factory_metrics(rew_dict, curr_successes)
-        return rew_buf
 
     def _get_factory_rew_dict(self, curr_successes):
         """Compute reward terms at current timestep."""
@@ -255,13 +268,15 @@ class FactoryTactileEnv(FactoryIKJointControlEnv):
         )
 
         # Penalize ee being too close to fixed asset based on rel. height
-        ee_fixed_asset_rel_height = (self.fingertip_midpoint_pos - self.fixed_pos_obs_frame)[:, 2]
+        ee_fixed_asset_rel_height = (
+            self.fingertip_midpoint_pos - self.fixed_pos_obs_frame
+        )[:, 2]
         too_close = torch.where(
             ee_fixed_asset_rel_height < self.cfg_task.too_close_penalty_threshold,
             1.0,
             0.0,
         )
-    
+
         rew_dict = {
             "kp_baseline": factory_utils.squashing_fn(keypoint_dist, a0, b0),
             "kp_coarse": factory_utils.squashing_fn(keypoint_dist, a1, b1),
@@ -284,35 +299,38 @@ class FactoryTactileEnv(FactoryIKJointControlEnv):
         }
         return rew_dict, rew_scales
 
-    def _reset_idx(self, env_ids):
-        """We assume all envs will always be reset at the same time."""
-        super()._reset_idx(env_ids)
-
-        self._set_assets_to_default_pose(env_ids)
-        self._set_franka_to_default_pose(
-            joints=self.cfg.ctrl.reset_joints, env_ids=env_ids
-        )
-        self.step_sim_no_action()
-
-        self.randomize_initial_state(env_ids)
-
     def compute_keypoints(
         self,
         held_asset_pose: torch.Tensor,
         num_keypoints: int = 3,
-        size: tuple[float, float, float] = (0.007986, 0.007986, 0.05),
+        asset_size: tuple[float, float, float] = (0.007986, 0.007986, 0.05),
+        max_rel_pos: tuple[float, float, float] = (1.0, 1.0, 1.0),
         out: torch.Tensor | None = None,
     ):
-        """Computes positions of 3 keypoints of the held asset. 
+        """Compute keypoint positions for the held asset.
 
-        The positions are relative to the finger middle point.
+        Keypoint positions are expressed relative to the middle point of the
+        finger. The asset transform is assumed to be located at the center of
+        the asset.
 
-        Assumes that xform of held asset is at its center.
         Args:
-            held_asset_pose: (Local) position and orientation of the center of the held asset. Shape is (N, 7)
-            num_keypoints: Number of keypoints to compute. Default = 3
-            size: Length of X, Y, Z dimensions of held asset. Defaults to the PEG dimensions = [0.007986, 0.007986, 0.05]
-            out: Buffer to store keypoints. If None, a new buffer will be created. Shape: (N, num_keypoints, 3)
+            held_asset_pose: Local position and orientation of the asset center,
+                with shape ``(N, 7)``. The pose contains three position values (units are in [m])
+                followed by four orientation values (quaternion).
+            num_keypoints: Number of keypoints to compute. Defaults to 3.
+            asset_size: Asset dimensions along the X, Y, and Z axes, in meters.
+                Defaults to ``(0.007986, 0.007986, 0.05)``.
+            max_rel_pos: Maximum allowed relative position along each axis (x,y,z).
+                Relative positions exceeding these limits are clamped to the
+                fixed value (-1, -1, -1). (x,y) correspond to gelpad (width, height) and z to gelpad depth.
+            out: Optional output buffer with shape ``(N, num_keypoints, 3)``.
+                If provided, the result is written into this tensor. Otherwise,
+                a new tensor is allocated.
+
+        Returns:
+            A tensor containing the keypoint positions, with shape
+            ``(N, num_keypoints, 3)``. If ``out`` is provided, the returned
+            tensor is the same object as ``out``.
         """
         num_envs = held_asset_pose.shape[0]
         if out is None:
@@ -326,7 +344,7 @@ class FactoryTactileEnv(FactoryIKJointControlEnv):
         else:
             out[:] = 1.0
 
-        half_asset_height = size[2] / 2.0
+        half_asset_height = asset_size[2] / 2.0
 
         position = held_asset_pose[:, :3]
         local_axis_offset = torch.zeros_like(position)
@@ -345,5 +363,26 @@ class FactoryTactileEnv(FactoryIKJointControlEnv):
 
         # Relative position to the finger midpoint
         out -= self.fingertip_midpoint_pos.unsqueeze(1)
+
+        # Check if keypoint is in sensor area. If not, set value (-1,-1,-1) for the keypoint
+        max_pos = torch.as_tensor(
+            max_rel_pos,
+            dtype=out.dtype,
+            device=out.device,
+        )
+        exceeds_limit = (out.abs() > max_pos).any(dim=-1, keepdim=True)
+
+        # Replace invalid keypoints with a fixed value.
+        invalid_value = torch.ones(
+            3,
+            dtype=out.dtype,
+            device=out.device,
+        ) * (-1.0)
+
+        out = torch.where(
+            exceeds_limit,
+            invalid_value,
+            out,
+        )
 
         return out

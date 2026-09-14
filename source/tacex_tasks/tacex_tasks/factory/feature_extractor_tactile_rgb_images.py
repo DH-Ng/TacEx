@@ -76,12 +76,12 @@ class TactileRGBFeatureExtractorNetwork(nn.Module):
         x = x.permute(0, 3, 1, 2)
 
         # Normalize the rgb image
-        x[:, 0:3, :, :] = self.data_transforms(x[:, 0:3, :, :]) # left sensor image
-        x[:, 3:6, :, :] = self.data_transforms(x[:, 3:6, :, :]) # right sensor image
+        x[:, 0:3, :, :] = self.data_transforms(x[:, 0:3, :, :])  # left sensor image
+        x[:, 3:6, :, :] = self.data_transforms(x[:, 3:6, :, :])  # right sensor image
 
         # extract visual features
         cnn_x = self.cnn(x)
-    
+
         out = self.linear(cnn_x.view(-1, 128))
         return out
 
@@ -111,7 +111,10 @@ class TactileRGBFeatureExtractor:
     """
 
     def __init__(
-        self, cfg: TactileRGBFeatureExtractorCfg, device: str, log_dir: str | None = None
+        self,
+        cfg: TactileRGBFeatureExtractorCfg,
+        device: str,
+        log_dir: str | None = None,
     ):
         """Initialize the feature extractor model.
 
@@ -125,7 +128,9 @@ class TactileRGBFeatureExtractor:
         self.device = device
 
         # Feature extractor model
-        self.feature_extractor = TactileRGBFeatureExtractorNetwork(num_keypoints=3, coordinate_dim=3)
+        self.feature_extractor = TactileRGBFeatureExtractorNetwork(
+            num_keypoints=3, coordinate_dim=3
+        )
         self.feature_extractor.to(self.device)
 
         self.step_count = 0
@@ -191,12 +196,18 @@ class TactileRGBFeatureExtractor:
             depth_img (torch.Tensor): Depth image tensor. Shape: (N, H, W, 1).
             segmentation_img (torch.Tensor): Segmentation image tensor. Shape: (N, H, W, 3).
         """
-        save_images_to_file(left_sensor_rgb_img, f"{self.log_dir}/feature_extractor_images/left_sensor_rgb_img_{self.step_count}.png")
-        save_images_to_file(right_sensor_rgb_img, f"{self.log_dir}/feature_extractor_images/right_sensor_rgb_img_{self.step_count}.png")
+        save_images_to_file(
+            left_sensor_rgb_img,
+            f"{self.log_dir}/feature_extractor_images/left_sensor_rgb_img_{self.step_count}.png",
+        )
+        save_images_to_file(
+            right_sensor_rgb_img,
+            f"{self.log_dir}/feature_extractor_images/right_sensor_rgb_img_{self.step_count}.png",
+        )
 
     def step(
         self,
-        left_sensor_rgb_img: torch.Tensor, 
+        left_sensor_rgb_img: torch.Tensor,
         right_sensor_rgb_img: torch.Tensor,
         gt_pose: torch.Tensor,
     ) -> tuple[torch.Tensor, torch.Tensor]:
@@ -234,7 +245,9 @@ class TactileRGBFeatureExtractor:
                     self.optimizer.step()
 
                     if self.step_count % self.cfg.save_step_frequency == 0:
-                        print(f"Saving feature extractor at {self.step_count}. Loss = {pose_loss.detach().cpu().numpy()}")
+                        print(
+                            f"Saving feature extractor at {self.step_count}. Loss = {pose_loss.detach().cpu().numpy()}"
+                        )
                         torch.save(
                             self.feature_extractor.state_dict(),
                             os.path.join(
