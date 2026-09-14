@@ -18,9 +18,11 @@ services:
       context: ../
       dockerfile: docker/Dockerfile
       args:
+        - ISAAC_SIM_VER_ARG=${ISAAC_SIM_VER}
         - ISAACLAB_BASE_IMAGE_ARG=${ISAACLAB_BASE_IMAGE}
         - ISAACLAB_EXTENSION_TEMPLATE_PATH_ARG=${ISAACLAB_EXTENSION_TEMPLATE_PATH}
         - ISAACLAB_PATH_ARG=${DOCKER_ISAACLAB_PATH}
+        - CONDA_ENV_NAME_ARG=${CONDA_ENV_NAME}
     image: isaac-lab-tacex
     container_name: isaac-lab-tacex
     # This overlay allows changes on the local files to
