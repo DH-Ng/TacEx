@@ -83,9 +83,7 @@ class FactoryTask:
     action_grad_penalty_scale: float = 0.0
 
     # Penalize ee being too close to fixed asset -> only look at z-axis
-    too_close_penalty_threshold: float = (
-        0.0  # rel. distance in [m] -> peg has height of 0.05, and we look at fixed_pos_obs_frame, which is at the top of the fixed asset. We want the ee to have sufficient distance when the peg is fully inserted.
-    )
+    too_close_penalty_threshold: float = 0.0  # rel. distance in [m] -> peg has height of 0.05, and we look at fixed_pos_obs_frame, which is at the top of the fixed asset. We want the ee to have sufficient distance when the peg is fully inserted.
     too_close_penalty_scale: float = 0.0
 
     # Reward function details can be found in Appendix B of https://arxiv.org/pdf/2408.04587.
@@ -164,9 +162,7 @@ class PegInsert(FactoryTask):
     engage_threshold: float = 0.9
 
     # Penalize ee being too close to fixed asset -> only look at z-axis
-    too_close_penalty_threshold: float = (
-        0.02  # rel. distance in [m] -> peg has height of 0.05, and we look at fixed_pos_obs_frame, which is at the top of the fixed asset. We want the ee to have sufficient distance when the peg is fully inserted.
-    )
+    too_close_penalty_threshold: float = 0.02  # rel. distance in [m] -> peg has height of 0.05, and we look at fixed_pos_obs_frame, which is at the top of the fixed asset. We want the ee to have sufficient distance when the peg is fully inserted.
     too_close_penalty_scale: float = 0.15
 
     fixed_asset: ArticulationCfg = ArticulationCfg(
@@ -187,9 +183,7 @@ class PegInsert(FactoryTask):
                 max_contact_impulse=1e32,
             ),
             mass_props=sim_utils.MassPropertiesCfg(mass=fixed_asset_cfg.mass),
-            collision_props=sim_utils.CollisionPropertiesCfg(
-                contact_offset=0.005, rest_offset=0.0
-            ),
+            collision_props=sim_utils.CollisionPropertiesCfg(contact_offset=0.005, rest_offset=0.0),
         ),
         init_state=ArticulationCfg.InitialStateCfg(
             pos=(0.6, 0.0, 0.05), rot=(1.0, 0.0, 0.0, 0.0), joint_pos={}, joint_vel={}
@@ -214,9 +208,7 @@ class PegInsert(FactoryTask):
                 max_contact_impulse=1e32,
             ),
             mass_props=sim_utils.MassPropertiesCfg(mass=held_asset_cfg.mass),
-            collision_props=sim_utils.CollisionPropertiesCfg(
-                contact_offset=0.005, rest_offset=0.0
-            ),
+            collision_props=sim_utils.CollisionPropertiesCfg(contact_offset=0.005, rest_offset=0.0),
         ),
         init_state=ArticulationCfg.InitialStateCfg(
             pos=(0.0, 0.4, 0.1), rot=(1.0, 0.0, 0.0, 0.0), joint_pos={}, joint_vel={}
@@ -271,9 +263,7 @@ class GearMesh(FactoryTask):
                 max_contact_impulse=1e32,
             ),
             mass_props=sim_utils.MassPropertiesCfg(mass=0.019),
-            collision_props=sim_utils.CollisionPropertiesCfg(
-                contact_offset=0.005, rest_offset=0.0
-            ),
+            collision_props=sim_utils.CollisionPropertiesCfg(contact_offset=0.005, rest_offset=0.0),
         ),
         init_state=ArticulationCfg.InitialStateCfg(
             pos=(0.0, 0.4, 0.1), rot=(1.0, 0.0, 0.0, 0.0), joint_pos={}, joint_vel={}
@@ -299,9 +289,7 @@ class GearMesh(FactoryTask):
                 max_contact_impulse=1e32,
             ),
             mass_props=sim_utils.MassPropertiesCfg(mass=0.019),
-            collision_props=sim_utils.CollisionPropertiesCfg(
-                contact_offset=0.005, rest_offset=0.0
-            ),
+            collision_props=sim_utils.CollisionPropertiesCfg(contact_offset=0.005, rest_offset=0.0),
         ),
         init_state=ArticulationCfg.InitialStateCfg(
             pos=(0.0, 0.4, 0.1), rot=(1.0, 0.0, 0.0, 0.0), joint_pos={}, joint_vel={}
@@ -357,9 +345,7 @@ class GearMesh(FactoryTask):
                 max_contact_impulse=1e32,
             ),
             mass_props=sim_utils.MassPropertiesCfg(mass=fixed_asset_cfg.mass),
-            collision_props=sim_utils.CollisionPropertiesCfg(
-                contact_offset=0.005, rest_offset=0.0
-            ),
+            collision_props=sim_utils.CollisionPropertiesCfg(contact_offset=0.005, rest_offset=0.0),
         ),
         init_state=ArticulationCfg.InitialStateCfg(
             pos=(0.6, 0.0, 0.05), rot=(1.0, 0.0, 0.0, 0.0), joint_pos={}, joint_vel={}
@@ -384,9 +370,7 @@ class GearMesh(FactoryTask):
                 max_contact_impulse=1e32,
             ),
             mass_props=sim_utils.MassPropertiesCfg(mass=held_asset_cfg.mass),
-            collision_props=sim_utils.CollisionPropertiesCfg(
-                contact_offset=0.005, rest_offset=0.0
-            ),
+            collision_props=sim_utils.CollisionPropertiesCfg(contact_offset=0.005, rest_offset=0.0),
         ),
         init_state=ArticulationCfg.InitialStateCfg(
             pos=(0.0, 0.4, 0.1), rot=(1.0, 0.0, 0.0, 0.0), joint_pos={}, joint_vel={}
@@ -477,9 +461,7 @@ class NutThread(FactoryTask):
                 max_contact_impulse=1e32,
             ),
             mass_props=sim_utils.MassPropertiesCfg(mass=fixed_asset_cfg.mass),
-            collision_props=sim_utils.CollisionPropertiesCfg(
-                contact_offset=0.005, rest_offset=0.0
-            ),
+            collision_props=sim_utils.CollisionPropertiesCfg(contact_offset=0.005, rest_offset=0.0),
         ),
         init_state=ArticulationCfg.InitialStateCfg(
             pos=(0.6, 0.0, 0.05), rot=(1.0, 0.0, 0.0, 0.0), joint_pos={}, joint_vel={}
@@ -504,9 +486,7 @@ class NutThread(FactoryTask):
                 max_contact_impulse=1e32,
             ),
             mass_props=sim_utils.MassPropertiesCfg(mass=held_asset_cfg.mass),
-            collision_props=sim_utils.CollisionPropertiesCfg(
-                contact_offset=0.005, rest_offset=0.0
-            ),
+            collision_props=sim_utils.CollisionPropertiesCfg(contact_offset=0.005, rest_offset=0.0),
         ),
         init_state=ArticulationCfg.InitialStateCfg(
             pos=(0.0, 0.4, 0.1), rot=(1.0, 0.0, 0.0, 0.0), joint_pos={}, joint_vel={}

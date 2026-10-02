@@ -137,7 +137,9 @@ class FactoryEnv(DirectRLEnv):
             orientation=(0.70711, 0.0, 0.0, 0.70711),
         )
 
-        self._robot = Articulation(self.cfg.robot)
+        # self._robot = Articulation(self.cfg.robot)
+        self._robot = self.cfg.robot.class_type(self.cfg.robot)
+
         self._fixed_asset = Articulation(self.cfg_task.fixed_asset)
         self._held_asset = Articulation(self.cfg_task.held_asset)
         if self.cfg_task.name == "gear_mesh":
@@ -743,9 +745,9 @@ class FactoryEnv(DirectRLEnv):
                 (self.num_envs, 3), device=self.device
             )
             held_asset_relative_pos[:, 2] = self.cfg_task.held_asset_cfg.height
-            held_asset_relative_pos[
-                :, 2
-            ] -= self.cfg_task.robot_cfg.franka_fingerpad_length
+            held_asset_relative_pos[:, 2] -= (
+                self.cfg_task.robot_cfg.franka_fingerpad_length
+            )
         elif self.cfg_task.name == "gear_mesh":
             held_asset_relative_pos = torch.zeros(
                 (self.num_envs, 3), device=self.device
