@@ -36,7 +36,9 @@ FRANKA_PANDA_ARM_GSMINI_GRIPPER_UIPC_CFG = ArticulationCfg(
             max_depenetration_velocity=5.0,
         ),
         articulation_props=sim_utils.ArticulationRootPropertiesCfg(
-            enabled_self_collisions=True, solver_position_iteration_count=8, solver_velocity_iteration_count=0
+            enabled_self_collisions=True,
+            solver_position_iteration_count=8,
+            solver_velocity_iteration_count=0,
         ),
         # collision_props=sim_utils.CollisionPropertiesCfg(contact_offset=0.005, rest_offset=0.0),
     ),
@@ -92,7 +94,9 @@ Gelpad prim names:
 
 
 # todo shorten the name?
-FRANKA_PANDA_ARM_GSMINI_GRIPPER_HIGH_PD_UIPC_CFG = FRANKA_PANDA_ARM_GSMINI_GRIPPER_UIPC_CFG.copy()
+FRANKA_PANDA_ARM_GSMINI_GRIPPER_HIGH_PD_UIPC_CFG = (
+    FRANKA_PANDA_ARM_GSMINI_GRIPPER_UIPC_CFG.copy()
+)
 """Configuration of Franka Emika Panda robot with stiffer PD control.
 
 This configuration is useful for task-space control using differential IK.
@@ -106,8 +110,18 @@ Gelpad prim names:
 - `gelpad_right`
 """
 
-FRANKA_PANDA_ARM_GSMINI_GRIPPER_HIGH_PD_UIPC_CFG.spawn.rigid_props.disable_gravity = True
-FRANKA_PANDA_ARM_GSMINI_GRIPPER_HIGH_PD_UIPC_CFG.actuators["panda_shoulder"].stiffness = 400.0
-FRANKA_PANDA_ARM_GSMINI_GRIPPER_HIGH_PD_UIPC_CFG.actuators["panda_shoulder"].damping = 80.0
-FRANKA_PANDA_ARM_GSMINI_GRIPPER_HIGH_PD_UIPC_CFG.actuators["panda_forearm"].stiffness = 400.0
-FRANKA_PANDA_ARM_GSMINI_GRIPPER_HIGH_PD_UIPC_CFG.actuators["panda_forearm"].damping = 80.0
+FRANKA_PANDA_ARM_GSMINI_GRIPPER_HIGH_PD_UIPC_CFG.spawn.rigid_props.disable_gravity = (
+    True
+)
+FRANKA_PANDA_ARM_GSMINI_GRIPPER_HIGH_PD_UIPC_CFG.actuators[
+    "panda_shoulder"
+].stiffness = 400.0
+FRANKA_PANDA_ARM_GSMINI_GRIPPER_HIGH_PD_UIPC_CFG.actuators["panda_shoulder"].damping = (
+    80.0
+)
+FRANKA_PANDA_ARM_GSMINI_GRIPPER_HIGH_PD_UIPC_CFG.actuators[
+    "panda_forearm"
+].stiffness = 400.0
+FRANKA_PANDA_ARM_GSMINI_GRIPPER_HIGH_PD_UIPC_CFG.actuators["panda_forearm"].damping = (
+    80.0
+)
