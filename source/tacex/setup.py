@@ -8,7 +8,9 @@ from setuptools import setup
 # Obtain the extension data from the extension.toml file
 EXTENSION_PATH = os.path.dirname(os.path.realpath(__file__))
 # Read the extension.toml file
-EXTENSION_TOML_DATA = toml.load(os.path.join(EXTENSION_PATH, "config", "extension.toml"))
+EXTENSION_TOML_DATA = toml.load(
+    os.path.join(EXTENSION_PATH, "config", "extension.toml")
+)
 
 # Minimum dependencies required prior to installation
 INSTALL_REQUIRES = [
@@ -50,12 +52,11 @@ setup(
     # dependency_links=PYTORCH_INDEX_URL,
     license="MIT",
     include_package_data=True,
-    python_requires=">=3.10",
+    python_requires=">=3.11",
     classifiers=[
         "Natural Language :: English",
-        "Programming Language :: Python :: 3.10",
-        "Isaac Sim :: 2023.1.1",
-        "Isaac Sim :: 4.5.0",
+        "Programming Language :: Python :: 3.11",
+        "Isaac Sim :: 5.1.0",
     ],
     zip_safe=False,
 )

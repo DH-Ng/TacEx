@@ -32,7 +32,12 @@ from uipc.constitution import AffineBodyConstitution
 from uipc.core import (
     AffineBodyStateAccessorFeature,
 )
-from uipc.geometry import flip_inward_triangles, label_surface, label_triangle_orient, tetmesh
+from uipc.geometry import (
+    flip_inward_triangles,
+    label_surface,
+    label_triangle_orient,
+    tetmesh,
+)
 from uipc.unit import MPa
 
 import isaaclab.utils.math as math_utils
@@ -110,7 +115,9 @@ class UipcRigidObject(UipcObject):
     Operations - Write to simulation.
     """
 
-    def write_pose_to_sim(self, pose: torch.Tensor, env_ids: Sequence[int] | None = None):
+    def write_root_pose_to_sim(
+        self, root_pose: torch.Tensor, env_ids: Sequence[int] | None = None
+    ):
         """Sets pose [pos, quat] of the UIPC rigid body into the UIPC simulation.
 
         Args:
@@ -126,13 +133,34 @@ class UipcRigidObject(UipcObject):
 
         # write pose
         # self._state_accessor.copy_to(self._state_geo)  # Get state data from backend
-        pose_matrix = math_utils.make_pose(pose[:, :3], math_utils.matrix_from_quat(pose[:, 3:]))
+        pose_matrix = math_utils.make_pose(
+            root_pose[:, :3], math_utils.matrix_from_quat(root_pose[:, 3:])
+        )
         view(self._state_geo.transforms())[:, :] = pose_matrix.cpu()
-        self._state_accessor.copy_from(self._state_geo)  # Copy modified data back to backend
+        # Copy modified data back to backend
+        self._state_accessor.copy_from(self._state_geo)
+
+    def write_root_velocity_to_sim(
+        self, root_velocity: torch.Tensor, env_ids: Sequence[int] | None = None
+    ):
+        """Set the root center of mass velocity over selected environment indices into the simulation.
+
+        Args:
+            root_velocity: Root center of mass velocities in simulation world frame.
+                           The velocities will be written into the UIPC sim for the object.
+                           Shape is (len(env_ids), 6).
+        """
+        # resolve all indices
+        # physx_env_ids = env_ids
+        # if env_ids is None:
+        #     env_ids = slice(None)
+        #     physx_env_ids = self._ALL_INDICES
 
         # write velocity
-        # self._state_accessor.copy_to(self._state_geo)
-        # test = view(self._state_geo.instances().find(builtin.velocity))
+        vel_buffer = view(self._state_geo.instances().find(builtin.velocity))
+        vel_buffer = root_velocity.numpy().cpu()
+
+        self._state_accessor.copy_to(self._state_geo)
 
     def update(self, dt: float):
         self._data.update(dt)
@@ -153,23 +181,29 @@ class UipcRigidObject(UipcObject):
                     f"No precomputed tet mesh data found for prim at {self._usd_mesh_prim.GetPath()}... Creating a tet mesh with default config..."
                 )
                 mesh_gen = MeshGenerator(config=TetMeshCfg())
-                tet_points, tet_indices, surf_points, surf_indices = mesh_gen.generate_tet_mesh_for_prim(
-                    self._usd_geom_mesh
+                tet_points, tet_indices, surf_points, surf_indices = (
+                    mesh_gen.generate_tet_mesh_for_prim(self._usd_geom_mesh)
                 )
             else:
-                print(f"Using precomputed mesh data; num_tet_points={tet_points.shape[0]}")
+                print(
+                    f"Using precomputed mesh data; num_tet_points={tet_points.shape[0]}"
+                )
         else:
             mesh_gen = MeshGenerator(config=self.cfg.mesh_cfg)
             if type(self.cfg.mesh_cfg) is TetMeshCfg:
-                tet_points, tet_indices, surf_points, surf_indices = mesh_gen.generate_tet_mesh_for_prim(
-                    self._usd_geom_mesh
+                tet_points, tet_indices, surf_points, surf_indices = (
+                    mesh_gen.generate_tet_mesh_for_prim(self._usd_geom_mesh)
                 )
 
         tf_world = omni.usd.get_world_transform_matrix(self._usd_geom_mesh)
 
         translation = np.array(tf_world.ExtractTranslation())
-        rotation = math_utils.quat_from_matrix(torch.tensor(np.array(tf_world.ExtractRotationMatrix())))
-        scale = np.array(Gf.Vec3d(*(v.GetLength() for v in tf_world.ExtractRotationMatrix())))
+        rotation = math_utils.quat_from_matrix(
+            torch.tensor(np.array(tf_world.ExtractRotationMatrix()))
+        )
+        scale = np.array(
+            Gf.Vec3d(*(v.GetLength() for v in tf_world.ExtractRotationMatrix()))
+        )
 
         # workaround for bug with kinematic objects -> somehow mesh is scaled additionally/twice?
         if self.cfg.constitution_cfg.kinematic:
@@ -196,7 +230,9 @@ class UipcRigidObject(UipcObject):
         label_surface(uipc_mesh)
         label_triangle_orient(uipc_mesh)
         # flip the triangles inward for better rendering
-        uipc_mesh = flip_inward_triangles(uipc_mesh)  # NOTE idk if this makes a difference for us
+        uipc_mesh = flip_inward_triangles(
+            uipc_mesh
+        )  # NOTE idk if this makes a difference for us
 
         # set transform of uipc ABD body
         trans_view = view(uipc_mesh.transforms())
@@ -211,7 +247,9 @@ class UipcRigidObject(UipcObject):
         # create and apply the constitution for the affine body
         stiffness = self.cfg.constitution_cfg.m_kappa
         constitution = AffineBodyConstitution()
-        constitution.apply_to(uipc_mesh, stiffness * MPa, mass_density=self.cfg.mass_density)
+        constitution.apply_to(
+            uipc_mesh, stiffness * MPa, mass_density=self.cfg.mass_density
+        )
 
         if self.cfg.constitution_cfg.kinematic:
             # make ABD body kinematic
@@ -229,12 +267,14 @@ class UipcRigidObject(UipcObject):
         omni.log.info(f"UIPC Rigid Body initialized at: {self.cfg.prim_path}.")
         omni.log.info(f"Number of instances: {self.num_instances}")
 
-        self._state_accessor: AffineBodyStateAccessorFeature = self._uipc_sim.world.features().find(
-            AffineBodyStateAccessorFeature
+        self._state_accessor: AffineBodyStateAccessorFeature = (
+            self._uipc_sim.world.features().find(AffineBodyStateAccessorFeature)
         )
 
         # create buffers
-        self._data = UipcRigidObjectData(self._uipc_sim, self, self.device)  # container for data access
+        self._data = UipcRigidObjectData(
+            self._uipc_sim, self, self.device
+        )  # container for data access
         self._create_buffers()
         # process configuration
         self._process_cfg()
@@ -247,7 +287,9 @@ class UipcRigidObject(UipcObject):
     def _create_buffers(self):
         """Create buffers for storing data."""
         # constants
-        self._ALL_INDICES = torch.arange(self.num_instances, dtype=torch.long, device=self.device)
+        self._ALL_INDICES = torch.arange(
+            self.num_instances, dtype=torch.long, device=self.device
+        )
 
         # Create a state_geo to contain data
         self._state_geo = self._state_accessor.create_geometry(
@@ -271,11 +313,14 @@ class UipcRigidObject(UipcObject):
 
         # note: we cast to tuple to avoid torch/numpy type mismatch.
         default_root_state = (
-            tuple(self.cfg.init_state.pos) + tuple(self.cfg.init_state.rot)
+            tuple(self.cfg.init_state.pos)
+            + tuple(self.cfg.init_state.rot)
             # + tuple(self.cfg.init_state.lin_vel)
             # + tuple(self.cfg.init_state.ang_vel)
         )
-        default_root_state = torch.tensor(default_root_state, dtype=torch.float, device=self.device)
+        default_root_state = torch.tensor(
+            default_root_state, dtype=torch.float, device=self.device
+        )
         self._data.default_root_state = default_root_state.repeat(self.num_instances, 1)
 
     """

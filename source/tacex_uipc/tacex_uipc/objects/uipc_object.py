@@ -9,7 +9,7 @@ import usdrt
 import usdrt.UsdGeom
 from isaacsim.core.prims import XFormPrim
 import isaacsim.core.utils.prims as prims_utils
-from pxr import UsdGeom, UsdPhysics, Sdf
+from pxr import UsdGeom, UsdPhysics, Sdf, Usd
 
 try:
     from isaacsim.util.debug_draw import _debug_draw
@@ -44,7 +44,12 @@ from tacex_uipc.utils import (
 )
 
 
-from .constraints import UipcConstraint, UipcConstraintCfg, UipcIsaacAttachments, UipcIsaacAttachmentsCfg
+from .constraints import (
+    UipcConstraint,
+    UipcConstraintCfg,
+    UipcIsaacAttachments,
+    UipcIsaacAttachmentsCfg,
+)
 
 if TYPE_CHECKING:
     from tacex_uipc.sim import UipcSim
@@ -52,7 +57,9 @@ if TYPE_CHECKING:
 
 @configclass
 class UipcObjectCfg(AssetBaseCfg):
-    mesh_cfg: TetMeshCfg | None = None  # TODO make more General MeshCfg -> want to have Tet and Tri (for cloth) Meshes
+    mesh_cfg: TetMeshCfg | None = (
+        None  # TODO make more General MeshCfg -> want to have Tet and Tri (for cloth) Meshes
+    )
 
     mass_density: float = 1e3
 
@@ -84,33 +91,46 @@ class UipcObject(AssetBase):
 
         prim_paths_expr = self.cfg.prim_path
         print(f"Initializing uipc objects {prim_paths_expr}...")
-        self._prim_view = XFormPrim(prim_paths_expr=prim_paths_expr, name=f"{prim_paths_expr}", usd=False)
+        self._prim_view = XFormPrim(
+            prim_paths_expr=prim_paths_expr, name=f"{prim_paths_expr}", usd=False
+        )
         self._prim_view.initialize()
 
-        # check if prim of uipc_object has PhysX rigid body API applied to it
-        if UsdPhysics.RigidBodyAPI(self._prim_view.prims[0]):
-            # if yes disable it, otherwise render errors
-            UsdPhysics.RigidBodyAPI(self._prim_view.prims[0]).GetRigidBodyEnabledAttr().Set(False)
-
-            # disable collisions
-            for prim_child in self._prim_view.prims[0].GetChildren():  # todo properly deal with multiple meshs
-                if UsdPhysics.CollisionAPI(prim_child):
-                    UsdPhysics.CollisionAPI(prim_child).GetCollisionEnabledAttr().Set(False)
-
         # the isaac mesh that should be used for creating the Tet mesh
-        if self.cfg.usd_mesh_prim_name is not None:
-            self._usd_mesh_prim = prims_utils.get_prim_at_path(
-                str(self._prim_view.prims[0].GetPath()) + f"/{self.cfg.usd_mesh_prim_name}"
-            )
-        else:
-            # Take first child prim that is a USD mesh, i.e. has "points"-Attribute
-            prim_children = self._prim_view.prims[0].GetChildren()
-            for prim in prim_children:
-                if prim.GetAttribute("points").IsValid():
-                    self._usd_mesh_prim = prim
-                    break
+        self._usd_mesh_prim = None
 
-        print("USD mesh that is used for creating the UIPC Mesh: ", self._usd_mesh_prim.GetPath())
+        # check if prim or a child of the uipc_object has PhysX rigid body API applied to it
+        root_prim = self._prim_view.prims[0]
+
+        # Check root prim and all its descendants for PhysxAPI and disable if present
+        for prim in Usd.PrimRange(root_prim):
+            # Disable PhysX rigid body API
+            if prim.HasAPI(UsdPhysics.RigidBodyAPI):
+                UsdPhysics.RigidBodyAPI(prim).GetRigidBodyEnabledAttr().Set(False)
+            # Disable PhysX collisions
+            if prim.HasAPI(UsdPhysics.CollisionAPI):
+                UsdPhysics.CollisionAPI(prim).GetCollisionEnabledAttr().Set(False)
+            # Take first child prim that is a USD mesh, i.e. has "points"-Attribute, as the mesh to create the UIPC mesh
+            if self._usd_mesh_prim is None and prim.GetAttribute("points").IsValid():
+                self._usd_mesh_prim = prim
+
+        if self.cfg.usd_mesh_prim_name is not None:
+            usd_mesh_prim = prims_utils.get_prim_at_path(
+                str(self._prim_view.prims[0].GetPath())
+                + f"/{self.cfg.usd_mesh_prim_name}"
+            )
+            if usd_mesh_prim.GetAttribute("points").IsValid():
+                self._usd_mesh_prim = usd_mesh_prim
+
+        if self._usd_mesh_prim is None:
+            raise RuntimeWarning(
+                f"No USD geom mesh found for uipc object at {prim_paths_expr}."
+            )
+
+        print(
+            "USD mesh that is used for creating the UIPC Mesh: ",
+            self._usd_mesh_prim.GetPath(),
+        )
         self._usd_geom_mesh = UsdGeom.Mesh(self._usd_mesh_prim)
 
         self.stage = usdrt.Usd.Stage.Attach(omni.usd.get_context().get_stage_id())
@@ -135,9 +155,13 @@ class UipcObject(AssetBase):
         # add constraints
         self.constraint: UipcConstraint = None
         if type(self.cfg.constraint_cfg) is UipcConstraintCfg:
-            self.constraint: UipcConstraint = UipcConstraint(self.cfg.constraint_cfg, self)
+            self.constraint: UipcConstraint = UipcConstraint(
+                self.cfg.constraint_cfg, self
+            )
         elif type(self.cfg.constraint_cfg) is UipcIsaacAttachmentsCfg:
-            self.constraint: UipcIsaacAttachments = UipcIsaacAttachments(self.cfg.constraint_cfg, self)
+            self.constraint: UipcIsaacAttachments = UipcIsaacAttachments(
+                self.cfg.constraint_cfg, self
+            )
 
         obj_geo_slot = self._spawn_uipc_scene_object(obj, uipc_mesh)
         self.geo_slot_list.append(obj_geo_slot)
@@ -149,7 +173,9 @@ class UipcObject(AssetBase):
         surf_tri_orient = surf.triangles().find(builtin.orient).view()
 
         # TODO handle multi env
-        fabric_prim = self._setup_render_mesh(self._usd_geom_mesh, surf_points_world, surf_tri, surf_tri_orient)
+        fabric_prim = self._setup_render_mesh(
+            self._usd_geom_mesh, surf_points_world, surf_tri, surf_tri_orient
+        )
         self.fabric_prim = fabric_prim
 
         # add fabric meshes to uipc sim class for updating the render meshes
@@ -157,7 +183,9 @@ class UipcObject(AssetBase):
 
         # save surface offsets for finding corresponding surface points of the meshes for rendering
         num_surf_points = surf_points_world.shape[0]
-        self._uipc_sim._surf_vertex_offsets.append(self._uipc_sim._surf_vertex_offsets[-1] + num_surf_points)
+        self._uipc_sim._surf_vertex_offsets.append(
+            self._uipc_sim._surf_vertex_offsets[-1] + num_surf_points
+        )
 
     """
     Properties
@@ -203,7 +231,9 @@ class UipcObject(AssetBase):
         """
         raise NotImplementedError
 
-    def _spawn_uipc_scene_object(self, obj, uipc_mesh: SimplicialComplex) -> SimplicialComplexSlot:
+    def _spawn_uipc_scene_object(
+        self, obj, uipc_mesh: SimplicialComplex
+    ) -> SimplicialComplexSlot:
         # spawn mesh inside uipc simulation
         obj_geo_slot, obj_rest_geo_slot = obj.geometries().create(uipc_mesh)
         self.obj_id = obj_geo_slot.id()
@@ -212,12 +242,18 @@ class UipcObject(AssetBase):
         return obj_geo_slot
 
     def _setup_render_mesh(
-        self, gprim: UsdGeom.Mesh, surf_points: np.array, surf_tri: np.array, surf_tri_orient: np.array
+        self,
+        gprim: UsdGeom.Mesh,
+        surf_points: np.array,
+        surf_tri: np.array,
+        surf_tri_orient: np.array,
     ) -> usdrt.Usd.Prim:
         usd_mesh_path = str(gprim.GetPath())
 
         # update the isaac surface mesh with the new topology
-        MeshGenerator.update_usd_mesh(gprim=gprim, surf_points=surf_points, triangles=surf_tri)
+        MeshGenerator.update_usd_mesh(
+            gprim=gprim, surf_points=surf_points, triangles=surf_tri
+        )
 
         # setup mesh updates via Fabric
         fabric_prim = self.stage.GetPrimAtPath(usdrt.Sdf.Path(usd_mesh_path))
@@ -228,12 +264,16 @@ class UipcObject(AssetBase):
 
         # Tell OmniHydra to render points from Fabric
         if not fabric_prim.HasAttribute("Deformable"):
-            fabric_prim.CreateAttribute("Deformable", usdrt.Sdf.ValueTypeNames.PrimTypeTag, True)
+            fabric_prim.CreateAttribute(
+                "Deformable", usdrt.Sdf.ValueTypeNames.PrimTypeTag, True
+            )
 
         # Set xform transformation to identity, since uipc data is defined in world frame
         stage_id = self.stage.GetStageIdAsStageId()
         fabric_id = self.stage.GetFabricId()
-        hier = usdrt.hierarchy.IFabricHierarchy().get_fabric_hierarchy(fabric_id, stage_id)
+        hier = usdrt.hierarchy.IFabricHierarchy().get_fabric_hierarchy(
+            fabric_id, stage_id
+        )
         hier.set_world_xform(usdrt.Sdf.Path(usd_mesh_path), usdrt.Gf.Matrix4d(1))
         hier.update_world_xforms()
 
