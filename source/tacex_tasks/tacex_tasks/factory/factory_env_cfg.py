@@ -58,7 +58,10 @@ class CtrlCfg:
     max_linear_velocity = 0.5  # m/s
     max_angular_velocity = 0.15  # rad/s
 
+    # thresholds to scale our actions
+    # maximum 2 cm per policy action when action = 1
     pos_action_threshold = [0.02, 0.02, 0.02]
+    # maximum  0.097 rad per policy action when action = 1
     rot_action_threshold = [0.097, 0.097, 0.097]
 
     reset_joints = [
@@ -114,7 +117,7 @@ class FactoryEnvCfg(DirectRLEnvCfg):
     obs_rand: ObsRandCfg = ObsRandCfg()
     ctrl: CtrlCfg = CtrlCfg()
 
-    episode_length_s = 10.0  # Probably need to override.
+    episode_length_s = 10.0  # Probably need to override for Real deployment.
     sim: SimulationCfg = SimulationCfg(
         device="cuda:0",
         dt=1 / 120,
@@ -190,7 +193,7 @@ class FactoryEnvCfg(DirectRLEnvCfg):
     )
     robot.spawn = robot.spawn.replace(
         rigid_props=sim_utils.RigidBodyPropertiesCfg(
-            disable_gravity=True,  # or true?
+            disable_gravity=True,  # or False?
             max_depenetration_velocity=5.0,
             linear_damping=0.0,
             angular_damping=0.0,

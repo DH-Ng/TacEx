@@ -14,8 +14,8 @@ from isaaclab.utils import configclass
 from tacex_assets import FRANKA_PANDA_ARM_GSMINI_GRIPPER_HIGH_PD_RIGID_CFG
 from tacex_assets.sensors.gelsight_mini import GELSIGHT_MINI_TAXIM_CFG
 
-from .factory_tasks_cfg import ASSET_DIR, FactoryTask, GearMesh, NutThread, PegInsert
-from .factory_ik_joint_control_env_cfg import FactoryIKJointControlEnvCfg, CtrlCfg
+from ..factory_tasks_cfg import ASSET_DIR, FactoryTask, GearMesh, NutThread, PegInsert
+from ..factory_ik_joint_control_env_cfg import FactoryIKJointControlEnvCfg
 
 from .feature_extractor_tactile_rgb_images import TactileRGBFeatureExtractorCfg
 
@@ -91,7 +91,6 @@ class FactoryTactileEnvCfg(FactoryIKJointControlEnvCfg):
     task_name: str = "peg_insert"  # peg_insert, gear_mesh, nut_thread
     task: FactoryTask = FactoryTask()
     obs_rand: ObsRandCfg = ObsRandCfg()
-    ctrl: CtrlCfg = CtrlCfg()
 
     episode_length_s = 10.0  # Probably need to override.
 
@@ -126,7 +125,6 @@ class FactoryTactileEnvCfg(FactoryIKJointControlEnvCfg):
         save_step_frequency=int(
             episode_length_s / (1 / 120)
         ),  # save after each episode
-        load_checkpoint=True,
     )
 
 
@@ -150,6 +148,15 @@ class FactoryTaskNutThreadTactileCfg(FactoryTactileEnvCfg):
     task = NutThread()
 
     episode_length_s = 30.0
+
+    tactile_rgb_feature_extractor = TactileRGBFeatureExtractorCfg(
+        write_image_to_file=False,
+        save_step_frequency=int(
+            episode_length_s / (1 / 120)
+        ),  # save after each episode
+        load_checkpoint=True,
+        checkpoint_path="/home/dh/Projects/Public_TacEx/TacEx/logs/rl_games/Factory/nut_thread_tactile/feature_extractor/cnn_step_50400_loss_0.0008332598372362554.pth",
+    )
 
 
 # --- Play scripts ---

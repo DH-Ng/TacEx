@@ -1,8 +1,3 @@
-# Copyright (c) 2022-2025, The Isaac Lab Project Developers (https://github.com/isaac-sim/IsaacLab/blob/main/CONTRIBUTORS.md).
-# All rights reserved.
-#
-# SPDX-License-Identifier: BSD-3-Clause
-
 import gymnasium as gym
 
 from . import agents
@@ -20,13 +15,6 @@ from .factory_ik_joint_control_env_cfg import (
     FactoryTaskPegInsertIKJointControlCfg,
 )
 
-from .factory_tactile_env import FactoryTactileEnv
-from .factory_tactile_env_cfg import (
-    FactoryTaskGearMeshTactileCfg,
-    FactoryTaskNutThreadTactileCfg,
-    FactoryTaskPegInsertTactileCfg,
-    FactoryTaskPegInsertTactilePlayCfg,
-)
 
 # ---
 # Register Gym environments.
@@ -65,17 +53,6 @@ gym.register(
     },
 )
 
-# gym.register(
-#     id="Isaac-Factory-PegInsert-Direct-ModifiedObs-v0",
-#     entry_point="isaaclab_tasks.direct.factory:FactoryModifiedObsEnv",
-#     disable_env_checker=True,
-#     kwargs={
-#         "env_cfg_entry_point": FactoryTaskPegInsertModifiedObsCfg,
-#         "rl_games_cfg_entry_point": f"{agents.__name__}:rl_games_ppo_cfg.yaml",
-#     },
-# )
-
-
 # isaaclab -p ./scripts/reinforcement_learning/rl_games/train.py --task TacEx-Factory-PegInsert-Direct-IK-JointControl-v0 --num_envs 128 agent.params.config.full_experiment_name=peg_insert_ik
 gym.register(
     id="TacEx-Factory-PegInsert-Direct-IK-JointControl-v0",
@@ -87,27 +64,7 @@ gym.register(
         "rl_games_cfg_entry_point": f"{agents.__name__}:rl_games_ppo_cfg.yaml",
     },
 )
-# isaaclab -p ./scripts/reinforcement_learning/rl_games/train.py --task TacEx-Factory-PegInsert-Direct-Tactile-v0 --num_envs 128 --enable_cameras agent.params.config.full_experiment_name=peg_insert_tactile
-gym.register(
-    id="TacEx-Factory-PegInsert-Direct-Tactile-v0",
-    entry_point="tacex_tasks.factory:FactoryTactileEnv",
-    disable_env_checker=True,
-    kwargs={
-        "env_cfg_entry_point": FactoryTaskPegInsertTactileCfg,
-        "rl_games_cfg_entry_point": f"{agents.__name__}:rl_games_ppo_tactile_cfg.yaml",
-    },
-)
 
-# isaaclab -p ./scripts/reinforcement_learning/rl_games/play.py --task TacEx-Factory-PegInsert-Direct-Tactile-Play-v0 --num_envs 128 --enable_cameras --checkpoint
-gym.register(
-    id="TacEx-Factory-PegInsert-Direct-Tactile-Play-v0",
-    entry_point="tacex_tasks.factory:FactoryTactileEnv",
-    disable_env_checker=True,
-    kwargs={
-        "env_cfg_entry_point": FactoryTaskPegInsertTactilePlayCfg,
-        "rl_games_cfg_entry_point": f"{agents.__name__}:rl_games_ppo_tactile_cfg.yaml",
-    },
-)
 
 ### Gear Insertion
 # isaaclab -p ./scripts/reinforcement_learning/rl_games/train.py --task TacEx-Factory-GearInsert-Direct-IK-JointControl-v0 --num_envs 64 agent.params.config.full_experiment_name=gear_insert_ik
@@ -121,17 +78,6 @@ gym.register(
     },
 )
 
-# isaaclab -p ./scripts/reinforcement_learning/rl_games/train.py --task TacEx-Factory-GearInsert-Direct-Tactile-v0 --num_envs 128 --enable_cameras agent.params.config.full_experiment_name=gear_insert_tactile
-gym.register(
-    id="TacEx-Factory-GearInsert-Direct-Tactile-v0",
-    entry_point="tacex_tasks.factory:FactoryTactileEnv",
-    disable_env_checker=True,
-    kwargs={
-        "env_cfg_entry_point": FactoryTaskGearMeshTactileCfg,
-        "rl_games_cfg_entry_point": f"{agents.__name__}:rl_games_ppo_tactile_cfg.yaml",
-    },
-)
-
 
 ### Nut-Thread
 # isaaclab -p ./scripts/reinforcement_learning/rl_games/train.py --task TacEx-Factory-NutThread-Direct-IK-JointControl-v0 --num_envs 64 agent.params.config.full_experiment_name=nut_thread_ik
@@ -141,17 +87,6 @@ gym.register(
     disable_env_checker=True,
     kwargs={
         "env_cfg_entry_point": FactoryTaskNutThreadIKJointControlCfg,
-        "rl_games_cfg_entry_point": f"{agents.__name__}:rl_games_ppo_tactile_nut_cfg.yaml",
-    },
-)
-
-# isaaclab -p ./scripts/reinforcement_learning/rl_games/train.py --task TacEx-Factory-NutThread-Direct-Tactile-v0 --num_envs 64 --enable_cameras agent.params.config.full_experiment_name=nut_thread_tactile
-gym.register(
-    id="TacEx-Factory-NutThread-Direct-Tactile-v0",
-    entry_point="tacex_tasks.factory:FactoryTactileEnv",
-    disable_env_checker=True,
-    kwargs={
-        "env_cfg_entry_point": FactoryTaskNutThreadTactileCfg,
         "rl_games_cfg_entry_point": f"{agents.__name__}:rl_games_ppo_tactile_nut_cfg.yaml",
     },
 )

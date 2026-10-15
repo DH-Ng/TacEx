@@ -27,20 +27,20 @@ from isaaclab.markers.config import FRAME_MARKER_CFG
 
 from tacex import GelSightSensor
 
-from . import factory_control, factory_utils
-from .factory_tactile_env_cfg import FactoryTactileEnvCfg
+from .. import factory_utils
+from ..factory_ik_joint_control_env import FactoryIKJointControlEnv
 
+# from ..factory_env import FactoryEnv
 
-from .factory_ik_joint_control_env import FactoryIKJointControlEnv
-
+from .factory_tactile_single_sensor_env_cfg import FactoryTactileSingleEnvCfg
 from .feature_extractor_tactile_rgb_images import TactileRGBFeatureExtractor
 
 
-class FactoryTactileEnv(FactoryIKJointControlEnv):
-    cfg: FactoryTactileEnvCfg
+class FactoryTactileSingleEnv(FactoryIKJointControlEnv):
+    cfg: FactoryTactileSingleEnvCfg
 
     def __init__(
-        self, cfg: FactoryTactileEnvCfg, render_mode: str | None = None, **kwargs
+        self, cfg: FactoryTactileSingleEnvCfg, render_mode: str | None = None, **kwargs
     ):
         """Factory tasks with GelSight Mini output for the policy observations.
 
@@ -148,12 +148,9 @@ class FactoryTactileEnv(FactoryIKJointControlEnv):
         light_cfg = sim_utils.DomeLightCfg(intensity=2000.0, color=(0.75, 0.75, 0.75))
         light_cfg.func("/World/Light", light_cfg)
 
-        # GelSight Mini's
+        # Only use the left GelSight Mini
         self.gsmini_left = GelSightSensor(self.cfg.gsmini_left)
         self.scene.sensors["gsmini_left"] = self.gsmini_left
-
-        self.gsmini_right = GelSightSensor(self.cfg.gsmini_right)
-        self.scene.sensors["gsmini_right"] = self.gsmini_right
 
     def _compute_image_observations(self):
         # generate ground truth keypoints for held-asset
@@ -171,7 +168,7 @@ class FactoryTactileEnv(FactoryIKJointControlEnv):
         # train CNN to regress on keypoint positions
         pose_loss, embeddings = self.feature_extractor.step(
             self.gsmini_left.data.output["tactile_rgb"],
-            self.gsmini_right.data.output["tactile_rgb"],
+            None,
             self.gt_keypoints.view(-1, 9),
         )
 

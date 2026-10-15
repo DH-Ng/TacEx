@@ -21,9 +21,12 @@ class TactileRGBFeatureExtractorNetwork(nn.Module):
     -> For keypoints we use "top", "middle" and "bottom" part of the object.
     """
 
-    def __init__(self, num_keypoints=3, coordinate_dim=3):
+    def __init__(self, num_keypoints=3, coordinate_dim=3, num_images=2):
         super().__init__()
-        num_channel = 6  # use two tactile rgb image concatenated
+        self.num_images = num_images
+        num_channel = (
+            3 * num_images
+        )  # 6, when we use two tactile rgb images concatenated
 
         output_dim = num_keypoints * coordinate_dim
         # Thats for image res. 120x120
@@ -72,15 +75,23 @@ class TactileRGBFeatureExtractorNetwork(nn.Module):
         )
 
     def forward(self, x):
-        # convert NHWC to NCHW
-        x = x.permute(0, 3, 1, 2)
+        # x: (N, H, W, 3 * num_images)
+        x = x.permute(0, 3, 1, 2).contiguous()  # NHWC -> NCHW
 
-        # Normalize the rgb image
-        x[:, 0:3, :, :] = self.data_transforms(x[:, 0:3, :, :])  # left sensor image
-        x[:, 3:6, :, :] = self.data_transforms(x[:, 3:6, :, :])  # right sensor image
+        # Normalize each RGB image independently.
+        x = torch.cat(
+            [
+                self.data_transforms(x[:, i * 3 : (i + 1) * 3])
+                for i in range(self.num_images)
+            ],
+            dim=1,
+        )
 
         # extract visual features
         cnn_x = self.cnn(x)
+
+        # [N, 128, 1, 1] -> [N, 128]
+        cnn_x = cnn_x.flatten(1)
 
         out = self.linear(cnn_x.view(-1, 128))
         return out
@@ -99,8 +110,12 @@ class TactileRGBFeatureExtractorCfg:
     load_checkpoint: bool = False
     """If True, the feature extractor model is loaded from a checkpoint. Default is False."""
 
+    checkpoint_path: str = ""
+
     write_image_to_file: bool = False
     """If True, the images from the camera sensor are written to file. Default is False."""
+
+    single_image: bool = False
 
 
 class TactileRGBFeatureExtractor:
@@ -126,10 +141,12 @@ class TactileRGBFeatureExtractor:
 
         self.cfg = cfg
         self.device = device
+        self.single_image = cfg.single_image
+        self.num_images = 1 if self.single_image else 2
 
         # Feature extractor model
         self.feature_extractor = TactileRGBFeatureExtractorNetwork(
-            num_keypoints=3, coordinate_dim=3
+            num_keypoints=3, coordinate_dim=3, num_images=self.num_images
         )
         self.feature_extractor.to(self.device)
 
@@ -148,14 +165,28 @@ class TactileRGBFeatureExtractor:
                 os.makedirs(f"{self.log_dir}/feature_extractor_images")
 
         if self.cfg.load_checkpoint:
-            list_of_files = glob.glob(self.log_dir + "/*.pth")
-            if len(list_of_files) == 0:
-                print("[INFO] No checkpoint for feature extractor found!")
-                print("[INFO] Training from scratch...")
+            print("[INFO - Feature Extractor]: Trying to load checkpoint...")
+            if self.cfg.checkpoint_path == "":
+                list_of_files = glob.glob(self.log_dir + "/*.pth")
+                if len(list_of_files) == 0:
+                    print(
+                        "[INFO - Feature Extractor]: No checkpoint for feature extractor found!"
+                    )
+                    print("[INFO - Feature Extractor]: Training from scratch...")
+                else:
+                    latest_file = max(list_of_files, key=os.path.getctime)
+                    checkpoint = latest_file
+                    print(
+                        f"[INFO - Feature Extractor]: Loading feature extractor checkpoint from {checkpoint}"
+                    )
+                    self.feature_extractor.load_state_dict(
+                        torch.load(checkpoint, weights_only=True)
+                    )
             else:
-                latest_file = max(list_of_files, key=os.path.getctime)
-                checkpoint = latest_file
-                print(f"[INFO]: Loading feature extractor checkpoint from {checkpoint}")
+                checkpoint = self.cfg.checkpoint_path
+                print(
+                    f"[INFO - Feature Extractor]: Loading feature extractor checkpoint from {checkpoint}"
+                )
                 self.feature_extractor.load_state_dict(
                     torch.load(checkpoint, weights_only=True)
                 )
@@ -186,23 +217,11 @@ class TactileRGBFeatureExtractor:
 
         return left_sensor_rgb_img, right_sensor_rgb_img
 
-    def _save_images(
-        self, left_sensor_rgb_img: torch.Tensor, right_sensor_rgb_img: torch.Tensor
-    ):
-        """Writes image buffers to file.
-
-        Args:
-            rgb_img (torch.Tensor): RGB image tensor. Shape: (N, H, W, 3).
-            depth_img (torch.Tensor): Depth image tensor. Shape: (N, H, W, 1).
-            segmentation_img (torch.Tensor): Segmentation image tensor. Shape: (N, H, W, 3).
-        """
+    def _save_images(self, image: torch.Tensor, filename: str):
+        """Save one RGB image batch to the feature-extractor image folder."""
         save_images_to_file(
-            left_sensor_rgb_img,
-            f"{self.log_dir}/feature_extractor_images/left_sensor_rgb_img_{self.step_count}.png",
-        )
-        save_images_to_file(
-            right_sensor_rgb_img,
-            f"{self.log_dir}/feature_extractor_images/right_sensor_rgb_img_{self.step_count}.png",
+            image,
+            os.path.join(self.log_dir, "feature_extractor_images", filename),
         )
 
     def step(
@@ -222,23 +241,35 @@ class TactileRGBFeatureExtractor:
         Returns:
             tuple[torch.Tensor, torch.Tensor]: Pose loss and predicted pose.
         """
-
         if self.cfg.write_image_to_file:
-            self._save_images(left_sensor_rgb_img, right_sensor_rgb_img)
+            if left_sensor_rgb_img is not None:
+                self._save_images(
+                    left_sensor_rgb_img, f"sensor_left_rgb_img_{self.step_count}.png"
+                )
+            if right_sensor_rgb_img is not None:
+                self._save_images(
+                    right_sensor_rgb_img, f"sensor_right_rgb_img_{self.step_count}.png"
+                )
 
-        left_sensor_rgb_img, right_sensor_rgb_img = self._preprocess_images(
-            left_sensor_rgb_img, right_sensor_rgb_img
-        )
+        if self.single_image:
+            if right_sensor_rgb_img is not None:
+                raise ValueError("Pass only one image when single_image=True.")
+            images = left_sensor_rgb_img / 255.0
+        else:
+            if right_sensor_rgb_img is None:
+                raise ValueError(
+                    "right_sensor_rgb_img is required when single_image=False."
+                )
+            left_sensor_rgb_img = left_sensor_rgb_img / 255.0
+            right_sensor_rgb_img = right_sensor_rgb_img / 255.0
+            images = torch.cat((left_sensor_rgb_img, right_sensor_rgb_img), dim=-1)
 
         if self.cfg.train:
             with torch.enable_grad():
                 with torch.inference_mode(False):
-                    img_input = torch.cat(
-                        (left_sensor_rgb_img, right_sensor_rgb_img), dim=-1
-                    )
                     self.optimizer.zero_grad()
 
-                    predicted_pose = self.feature_extractor(img_input)
+                    predicted_pose = self.feature_extractor(images)
                     pose_loss = self.l2_loss(predicted_pose, gt_pose.clone()) * 100
 
                     pose_loss.backward()
@@ -260,6 +291,5 @@ class TactileRGBFeatureExtractor:
 
                     return pose_loss, predicted_pose
         else:
-            img_input = torch.cat((left_sensor_rgb_img, right_sensor_rgb_img), dim=-1)
-            predicted_pose = self.feature_extractor(img_input)
+            predicted_pose = self.feature_extractor(images)
             return None, predicted_pose
