@@ -15,7 +15,7 @@ from tacex_assets import FRANKA_PANDA_ARM_GSMINI_GRIPPER_HIGH_PD_RIGID_CFG
 from tacex_assets.sensors.gelsight_mini import GELSIGHT_MINI_TAXIM_CFG
 
 from ..factory_tasks_cfg import ASSET_DIR, FactoryTask, GearMesh, NutThread, PegInsert
-from ..factory_ik_joint_control_env_cfg import FactoryIKJointControlEnvCfg
+from .factory_tactile_env_cfg import FactoryTactileEnvCfg
 
 from .feature_extractor_tactile_rgb_images import TactileRGBFeatureExtractorCfg
 
@@ -55,48 +55,10 @@ class ObsRandCfg:
 
 
 @configclass
-class FactoryTactileSingleEnvCfg(FactoryIKJointControlEnvCfg):
-    # num_*: will be overwritten to correspond to obs_order, state_order.
-    observation_space = (
-        21 + 9
-    )  # state observation + vision CNN embedding (3 keypoints with 3 points = 9 values)
-    state_space = (
-        72 + 9 + 9
-    )  # asymetric states + vision CNN embedding + groundtruth of the CNN embedding (= the keypoints)
-    obs_order: list = [
-        "fingertip_pos_rel_fixed",
-        "fingertip_quat",
-        "ee_linvel",
-        "ee_angvel",
-        "tactile_rgb_features",
-    ]
-    obs_dim_cfg = OBS_DIM_CFG
-
-    state_order: list = [
-        "fingertip_pos",
-        "fingertip_quat",
-        "ee_linvel",
-        "ee_angvel",
-        "joint_pos",
-        "held_pos",
-        "held_pos_rel_fixed",
-        "held_quat",
-        "fixed_pos",
-        "fixed_quat",
-        "tactile_rgb_features",
-        "gt_keypoints",
-    ]
-    state_dim_cfg = STATE_DIM_CFG
-
-    task_name: str = "peg_insert"  # peg_insert, gear_mesh, nut_thread
-    task: FactoryTask = FactoryTask()
-    obs_rand: ObsRandCfg = ObsRandCfg()
-
-    episode_length_s = 10.0  # Probably need to override.
-
-    # GelSight Mini Sensors
-    gsmini_left = GELSIGHT_MINI_TAXIM_CFG.replace(
-        prim_path="/World/envs/env_.*/Robot/gelsight_mini_case_left",
+class FactoryTactileSingleEnvCfg(FactoryTactileEnvCfg):
+    # Only use the right GelSight Mini Sensors
+    gsmini_right = GELSIGHT_MINI_TAXIM_CFG.replace(
+        prim_path="/World/envs/env_.*/Robot/gelsight_mini_case_right",
         sensor_camera_cfg=GELSIGHT_MINI_TAXIM_CFG.SensorCameraCfg(
             prim_name="Camera",
             update_period=0,
@@ -110,8 +72,8 @@ class FactoryTactileSingleEnvCfg(FactoryIKJointControlEnvCfg):
         marker_motion_sim_cfg=None,
         data_types=["tactile_rgb"],  # marker_motion
     )
-    # settings for optical sim
-    gsmini_left.optical_sim_cfg = gsmini_left.optical_sim_cfg.replace(
+    # overwrite settings for optical sim
+    gsmini_right.optical_sim_cfg = gsmini_right.optical_sim_cfg.replace(
         with_shadow=False,
         device="cuda",
         tactile_img_res=(32, 32),
@@ -120,8 +82,8 @@ class FactoryTactileSingleEnvCfg(FactoryIKJointControlEnvCfg):
     tactile_rgb_feature_extractor = TactileRGBFeatureExtractorCfg(
         write_image_to_file=False,
         save_step_frequency=int(
-            episode_length_s / (1 / 120)
-        ),  # save after each episode
+            20.0 / (1 / 120)
+        ), # safe after episode ended (with episode_length_s = 20.0)
         load_checkpoint=True,
         single_image=True,
     )
