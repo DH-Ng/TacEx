@@ -85,6 +85,8 @@ class CtrlCfg:
 
 @configclass
 class FactoryEnvCfg(DirectRLEnvCfg):
+    debug_vis: bool = True
+    
     decimation = 8
     action_space = 6
     # num_*: will be overwritten to correspond to obs_order, state_order.

@@ -15,6 +15,7 @@ from isaaclab.envs import DirectRLEnv
 from isaaclab.sim.spawners.from_files import GroundPlaneCfg, spawn_ground_plane
 from isaaclab.sim.schemas import modify_rigid_body_properties
 from isaaclab.sim.spawners.materials import spawn_rigid_body_material
+from isaaclab.markers import VisualizationMarkers, VisualizationMarkersCfg
 
 from isaaclab.utils.assets import ISAAC_NUCLEUS_DIR
 from isaaclab.utils.math import axis_angle_from_quat
@@ -46,6 +47,9 @@ class FactoryEnv(DirectRLEnv):
         factory_utils.set_body_inertias(self._robot, self.scene.num_envs)
         self._init_tensors()
         self._set_default_dynamics_parameters()
+
+        if self.cfg.debug_vis:
+            self.set_debug_vis(self.cfg.debug_vis)
 
     def _set_default_dynamics_parameters(self):
         """Set parameters defining dynamic interactions."""
@@ -1091,3 +1095,63 @@ class FactoryEnv(DirectRLEnv):
         self.task_deriv_gains = factory_utils.get_deriv_gains(self.default_gains)
 
         physics_sim_view.set_gravity(carb.Float3(*self.cfg.sim.gravity))
+
+    def _set_debug_vis_impl(self, debug_vis: bool):
+        # Spawn visualization for current held position and fixed position
+        self.held_marker = VisualizationMarkers(
+            VisualizationMarkersCfg(
+                prim_path="/World/Visuals/held_position",
+                markers={
+                    "sphere": sim_utils.SphereCfg(
+                        radius=0.0035,
+                        visual_material=sim_utils.PreviewSurfaceCfg(
+                            diffuse_color=(1.0, 0.0, 0.0),
+                            opacity=0.1,
+                        ),
+                    )
+                },
+            )
+        )
+
+        self.fixed_pos_obs_frame_marker = VisualizationMarkers(
+            VisualizationMarkersCfg(
+                prim_path="/World/Visuals/fixed_position",
+                markers={
+                    "sphere": sim_utils.SphereCfg(
+                        radius=0.0035,
+                        visual_material=sim_utils.PreviewSurfaceCfg(
+                            diffuse_color=(0.0, 0.0, 1.0),
+                            opacity=0.1,
+                        ),
+                    )
+                },
+            )
+        )
+
+        # And Visualization for TCP
+        self.tcp_marker = VisualizationMarkers(
+            VisualizationMarkersCfg(
+                prim_path="/World/Visuals/tcp_position",
+                markers={
+                    "sphere": sim_utils.SphereCfg(
+                        radius=0.0035,
+                        visual_material=sim_utils.PreviewSurfaceCfg(
+                            diffuse_color=(0.0, 1.0, 0.0),
+                            opacity=0.1,
+                        ),
+                    )
+                },
+            )
+        )
+
+    def _debug_vis_callback(self, event):
+        # Update the visualizations of held and fixed pos
+        if hasattr(self, "held_pos"):
+            held_pos_w = self.held_pos + self.scene.env_origins
+            self.held_marker.visualize(translations=held_pos_w)
+        if hasattr(self, "fixed_pos"):
+            fixed_pos_obs_frame_w = self.fixed_pos_obs_frame + self.scene.env_origins
+            self.fixed_pos_obs_frame_marker.visualize(translations=fixed_pos_obs_frame_w)
+        if hasattr(self, "fingertip_midpoint_pos"):
+            finger_midpoint_pos_w = self.fingertip_midpoint_pos + self.scene.env_origins
+            self.tcp_marker.visualize(translations=finger_midpoint_pos_w)

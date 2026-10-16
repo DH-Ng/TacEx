@@ -56,6 +56,8 @@ class ObsRandCfg:
 
 @configclass
 class FactoryTactileEnvCfg(FactoryIKJointControlEnvCfg):
+    debug_vis = True
+    
     # num_*: will be overwritten to correspond to obs_order, state_order.
     observation_space = (
         21 + 9
