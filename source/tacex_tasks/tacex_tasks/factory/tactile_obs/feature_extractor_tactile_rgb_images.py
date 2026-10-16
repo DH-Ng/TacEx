@@ -252,11 +252,14 @@ class TactileRGBFeatureExtractor:
                 )
 
         if self.single_image:
-            if right_sensor_rgb_img is not None:
+            if right_sensor_rgb_img is not None and left_sensor_rgb_img is not None:
                 raise ValueError("Pass only one image when single_image=True.")
-            images = left_sensor_rgb_img / 255.0
+            if left_sensor_rgb_img is not None:
+                images = left_sensor_rgb_img / 255.0
+            else:
+                images = right_sensor_rgb_img / 255.0
         else:
-            if right_sensor_rgb_img is None:
+            if right_sensor_rgb_img is None or left_sensor_rgb_img is None:
                 raise ValueError(
                     "right_sensor_rgb_img is required when single_image=False."
                 )
