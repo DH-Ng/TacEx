@@ -81,9 +81,7 @@ class FactoryTactileSingleEnvCfg(FactoryTactileEnvCfg):
 
     tactile_rgb_feature_extractor = TactileRGBFeatureExtractorCfg(
         write_image_to_file=False,
-        save_step_frequency=int(
-            20.0 / (1 / 120)
-        ), # safe after episode ended (with episode_length_s = 20.0)
+        save_step_frequency=int(20.0 / (1 / 120)),  # safe after episode ended (with episode_length_s = 20.0)
         load_checkpoint=True,
         single_image=True,
     )
@@ -122,5 +120,6 @@ class FactoryTaskPegInsertTactileSinglePlayCfg(FactoryTactileSingleEnvCfg):
         train=False,
         load_checkpoint=True,
         write_image_to_file=False,
+        checkpoint_path="logs/rl_games/Factory/peg_insert_tactile_single_sensor/feature_extractor/cnn_step_25200_loss_0.00029871691367588937.pth",
         single_image=True,
     )

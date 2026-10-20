@@ -40,9 +40,7 @@ from .feature_extractor_tactile_rgb_images import TactileRGBFeatureExtractor
 class FactoryTactileEnv(FactoryIKJointControlEnv):
     cfg: FactoryTactileEnvCfg
 
-    def __init__(
-        self, cfg: FactoryTactileEnvCfg, render_mode: str | None = None, **kwargs
-    ):
+    def __init__(self, cfg: FactoryTactileEnvCfg, render_mode: str | None = None, **kwargs):
         """Factory tasks with GelSight Mini output for the policy observations.
 
         Uses the IK control defined in FactoryIKJointControlEnv.
@@ -67,13 +65,9 @@ class FactoryTactileEnv(FactoryIKJointControlEnv):
         )
 
         # keypoints buffer
-        self.gt_keypoints = torch.ones(
-            self.num_envs, 3, 3, dtype=torch.float32, device=self.device
-        )
+        self.gt_keypoints = torch.ones(self.num_envs, 3, 3, dtype=torch.float32, device=self.device)
 
         self.set_debug_vis(self.cfg.debug_vis)
-
-
 
     def _setup_scene(self):
         """Initialize simulation scene."""
@@ -84,9 +78,7 @@ class FactoryTactileEnv(FactoryIKJointControlEnv):
         )
 
         # spawn a usd file of a table into the scene
-        cfg = sim_utils.UsdFileCfg(
-            usd_path=f"{ISAAC_NUCLEUS_DIR}/Props/Mounts/SeattleLabTable/table_instanceable.usd"
-        )
+        cfg = sim_utils.UsdFileCfg(usd_path=f"{ISAAC_NUCLEUS_DIR}/Props/Mounts/SeattleLabTable/table_instanceable.usd")
         cfg.func(
             "/World/envs/env_.*/Table",
             cfg,
@@ -199,12 +191,8 @@ class FactoryTactileEnv(FactoryIKJointControlEnv):
         state_dict["tactile_rgb_features"] = feature_extractor_embeddings
         state_dict["gt_keypoints"] = self.gt_keypoints.view(-1, 9)
 
-        obs_tensors = factory_utils.collapse_obs_dict(
-            obs_dict, self.cfg.obs_order + ["prev_actions"]
-        )
-        state_tensors = factory_utils.collapse_obs_dict(
-            state_dict, self.cfg.state_order + ["prev_actions"]
-        )
+        obs_tensors = factory_utils.collapse_obs_dict(obs_dict, self.cfg.obs_order + ["prev_actions"])
+        state_tensors = factory_utils.collapse_obs_dict(state_dict, self.cfg.state_order + ["prev_actions"])
         return {"policy": obs_tensors, "critic": state_tensors}
 
     def _get_factory_rew_dict(self, curr_successes):
@@ -220,47 +208,33 @@ class FactoryTactileEnv(FactoryIKJointControlEnv):
             self.num_envs,
             self.device,
         )
-        target_held_base_pos, target_held_base_quat = (
-            factory_utils.get_target_held_base_pose(
-                self.fixed_pos,
-                self.fixed_quat,
-                self.cfg_task.name,
-                self.cfg_task.fixed_asset_cfg,
-                self.num_envs,
-                self.device,
-            )
+        target_held_base_pos, target_held_base_quat = factory_utils.get_target_held_base_pose(
+            self.fixed_pos,
+            self.fixed_quat,
+            self.cfg_task.name,
+            self.cfg_task.fixed_asset_cfg,
+            self.num_envs,
+            self.device,
         )
 
-        keypoints_held = torch.zeros(
-            (self.num_envs, self.cfg_task.num_keypoints, 3), device=self.device
-        )
-        keypoints_fixed = torch.zeros(
-            (self.num_envs, self.cfg_task.num_keypoints, 3), device=self.device
-        )
-        offsets = factory_utils.get_keypoint_offsets(
-            self.cfg_task.num_keypoints, self.device
-        )
+        keypoints_held = torch.zeros((self.num_envs, self.cfg_task.num_keypoints, 3), device=self.device)
+        keypoints_fixed = torch.zeros((self.num_envs, self.cfg_task.num_keypoints, 3), device=self.device)
+        offsets = factory_utils.get_keypoint_offsets(self.cfg_task.num_keypoints, self.device)
         keypoint_offsets = offsets * self.cfg_task.keypoint_scale
         for idx, keypoint_offset in enumerate(keypoint_offsets):
             keypoints_held[:, idx] = torch_utils.tf_combine(
                 held_base_quat,
                 held_base_pos,
-                torch.tensor([1.0, 0.0, 0.0, 0.0], device=self.device)
-                .unsqueeze(0)
-                .repeat(self.num_envs, 1),
+                torch.tensor([1.0, 0.0, 0.0, 0.0], device=self.device).unsqueeze(0).repeat(self.num_envs, 1),
                 keypoint_offset.repeat(self.num_envs, 1),
             )[1]
             keypoints_fixed[:, idx] = torch_utils.tf_combine(
                 target_held_base_quat,
                 target_held_base_pos,
-                torch.tensor([1.0, 0.0, 0.0, 0.0], device=self.device)
-                .unsqueeze(0)
-                .repeat(self.num_envs, 1),
+                torch.tensor([1.0, 0.0, 0.0, 0.0], device=self.device).unsqueeze(0).repeat(self.num_envs, 1),
                 keypoint_offset.repeat(self.num_envs, 1),
             )[1]
-        keypoint_dist = torch.norm(keypoints_held - keypoints_fixed, p=2, dim=-1).mean(
-            -1
-        )
+        keypoint_dist = torch.norm(keypoints_held - keypoints_fixed, p=2, dim=-1).mean(-1)
 
         a0, b0 = self.cfg_task.keypoint_coef_baseline
         a1, b1 = self.cfg_task.keypoint_coef_coarse
@@ -268,14 +242,10 @@ class FactoryTactileEnv(FactoryIKJointControlEnv):
         # Action penalties.
         action_penalty_ee = torch.norm(self.actions, p=2)
         action_grad_penalty = torch.norm(self.actions - self.prev_actions, p=2, dim=-1)
-        curr_engaged = self._get_curr_successes(
-            success_threshold=self.cfg_task.engage_threshold, check_rot=False
-        )
+        curr_engaged = self._get_curr_successes(success_threshold=self.cfg_task.engage_threshold, check_rot=False)
 
         # Penalize ee being too close to fixed asset based on rel. height
-        ee_fixed_asset_rel_height = (
-            self.fingertip_midpoint_pos - self.fixed_pos_obs_frame
-        )[:, 2]
+        ee_fixed_asset_rel_height = (self.fingertip_midpoint_pos - self.fixed_pos_obs_frame)[:, 2]
         too_close = torch.where(
             ee_fixed_asset_rel_height < self.cfg_task.too_close_penalty_threshold,
             1.0,
@@ -358,13 +328,19 @@ class FactoryTactileEnv(FactoryIKJointControlEnv):
 
         axis_offset_world = quat_apply(quat, axis_offset_local)
 
-        # Code assumes that XForm is at the center of the held object.
-        top_position = position + axis_offset_world
-        bottom_position = position - axis_offset_world
+        # # Code assumes that XForm is at the center of the held object.
+        # top_position = position + axis_offset_world
+        # center_position = position
+        # bottom_position = position - axis_offset_world
+
+        # Code assumes that XForm is at the bottom of the held object.
+        top_position = position + 2 * axis_offset_world
+        center_position = position + axis_offset_world
+        bottom_position = position
 
         # local env 3D positions of keypoints
         out[:, 0] = top_position
-        out[:, 1] = position
+        out[:, 1] = center_position
         out[:, 2] = bottom_position
 
         # Relative position to the finger midpoint
@@ -447,28 +423,28 @@ class FactoryTactileEnv(FactoryIKJointControlEnv):
 
         if not hasattr(self, "fingertip_midpoint_pos"):
             return
-        
+
         # Update the visualizations of keypoints
         if hasattr(self, "feature_extractor_embeddings"):
-            # feature_extractor embeddings are the keypoints for each env, flattened.
-            
+            # feature_extractor embeddings are the flattened keypoints of each env.
+
             # So we need to reshape the tensor
-            keypoints_pos = self.feature_extractor_embeddings[:].reshape(self.num_envs,3,3)
+            keypoints_pos = self.feature_extractor_embeddings[:].reshape(self.num_envs, 3, 3)
 
             # Top Position of held asset
             keypoint_1_pos = keypoints_pos[:, 0]
             estimated_held_asset_pos = self.fingertip_midpoint_pos[:, :3] + keypoint_1_pos
-            estimated_held_asset_pos_w = estimated_held_asset_pos + self.scene.env_origins 
+            estimated_held_asset_pos_w = estimated_held_asset_pos + self.scene.env_origins
             self.keypoint_1_marker.visualize(translations=estimated_held_asset_pos_w)
 
             # Center Position
             keypoint_2_pos = keypoints_pos[:, 1]
             estimated_held_asset_pos = self.fingertip_midpoint_pos[:, :3] + keypoint_2_pos
-            estimated_held_asset_pos_w = estimated_held_asset_pos + self.scene.env_origins 
+            estimated_held_asset_pos_w = estimated_held_asset_pos + self.scene.env_origins
             self.keypoint_2_marker.visualize(translations=estimated_held_asset_pos_w)
 
-            # Bottom Position 
+            # Bottom Position
             keypoint_3_pos = keypoints_pos[:, 2]
             estimated_held_asset_pos = self.fingertip_midpoint_pos[:, :3] + keypoint_3_pos
-            estimated_held_asset_pos_w = estimated_held_asset_pos + self.scene.env_origins 
+            estimated_held_asset_pos_w = estimated_held_asset_pos + self.scene.env_origins
             self.keypoint_3_marker.visualize(translations=estimated_held_asset_pos_w)
