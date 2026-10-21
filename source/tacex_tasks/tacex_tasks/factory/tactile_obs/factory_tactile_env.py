@@ -55,6 +55,8 @@ class FactoryTactileEnv(FactoryIKJointControlEnv):
             render_mode (str | None, optional): _description_. Defaults to None.
         """
 
+        self.num_keypoints = 3
+
         super().__init__(cfg, render_mode, **kwargs)
 
         # Feature extractor to extract 3D position of keypoints of the held asset from tactile RGB images
@@ -65,7 +67,7 @@ class FactoryTactileEnv(FactoryIKJointControlEnv):
         )
 
         # keypoints buffer
-        self.gt_keypoints = torch.ones(self.num_envs, 3, 3, dtype=torch.float32, device=self.device)
+        self.gt_keypoints = torch.ones(self.num_envs, self.num_keypoints, 3, dtype=torch.float32, device=self.device)
 
         self.set_debug_vis(self.cfg.debug_vis)
 
@@ -372,51 +374,42 @@ class FactoryTactileEnv(FactoryIKJointControlEnv):
     def _set_debug_vis_impl(self, debug_vis: bool):
         super()._set_debug_vis_impl(debug_vis)
 
-        # Spawn visualization for current regressed keypoints
-        self.keypoint_1_marker = VisualizationMarkers(
-            VisualizationMarkersCfg(
-                prim_path="/World/Visuals/key_point_1",
-                markers={
-                    "sphere": sim_utils.SphereCfg(
-                        radius=0.004,
-                        visual_material=sim_utils.PreviewSurfaceCfg(
-                            diffuse_color=(1.0, 0.0, 1.0),
-                            opacity=0.1,
-                        ),
-                    )
-                },
+        # Spawn visualization for current regressed keypoints and ground_truth keypoints
+        num_keypoints = self.num_keypoints
+        self.gt_keypoint_markers: list[VisualizationMarkers] = []
+        self.regressed_keypoint_markers: list[VisualizationMarkers] = []
+        for i in range(num_keypoints):
+            regresssed_marker = VisualizationMarkers(
+                VisualizationMarkersCfg(
+                    prim_path=f"/World/Visuals/regressed_keypoint_{i}",
+                    markers={
+                        "sphere": sim_utils.SphereCfg(
+                            radius=0.004,
+                            visual_material=sim_utils.PreviewSurfaceCfg(
+                                diffuse_color=(0.0, 0.0, 0.5),
+                                opacity=0.1,
+                            ),
+                        )
+                    },
+                )
             )
-        )
+            self.regressed_keypoint_markers.append(regresssed_marker)
 
-        self.keypoint_2_marker = VisualizationMarkers(
-            VisualizationMarkersCfg(
-                prim_path="/World/Visuals/key_point_2",
-                markers={
-                    "sphere": sim_utils.SphereCfg(
-                        radius=0.004,
-                        visual_material=sim_utils.PreviewSurfaceCfg(
-                            diffuse_color=(1.0, 0.0, 1.0),
-                            opacity=0.1,
-                        ),
-                    )
-                },
+            gt_marker = VisualizationMarkers(
+                VisualizationMarkersCfg(
+                    prim_path=f"/World/Visuals/gt_keypoint_{i}",
+                    markers={
+                        "sphere": sim_utils.SphereCfg(
+                            radius=0.004,
+                            visual_material=sim_utils.PreviewSurfaceCfg(
+                                diffuse_color=(0.5, 0.0, 0.0),
+                                opacity=0.1,
+                            ),
+                        )
+                    },
+                )
             )
-        )
-
-        self.keypoint_3_marker = VisualizationMarkers(
-            VisualizationMarkersCfg(
-                prim_path="/World/Visuals/key_point_3",
-                markers={
-                    "sphere": sim_utils.SphereCfg(
-                        radius=0.004,
-                        visual_material=sim_utils.PreviewSurfaceCfg(
-                            diffuse_color=(1.0, 0.0, 1.0),
-                            opacity=0.1,
-                        ),
-                    )
-                },
-            )
-        )
+            self.gt_keypoint_markers.append(gt_marker)
 
     def _debug_vis_callback(self, event):
         super()._debug_vis_callback(event)
@@ -426,25 +419,16 @@ class FactoryTactileEnv(FactoryIKJointControlEnv):
 
         # Update the visualizations of keypoints
         if hasattr(self, "feature_extractor_embeddings"):
-            # feature_extractor embeddings are the flattened keypoints of each env.
+            # feature_extractor embeddings are the flattened keypoints of each env. So we need to reshape the tensor
+            regressed_keypoint_pos = self.feature_extractor_embeddings[:].reshape(self.num_envs, 3, 3)
+            gt_keypoint_pos = self.gt_keypoints
+            for i in range(regressed_keypoint_pos.shape[1]):
+                regressed_pos = regressed_keypoint_pos[:, i]
+                estimated_held_asset_pos = self.fingertip_midpoint_pos[:, :3] + regressed_pos
+                estimated_held_asset_pos_w = estimated_held_asset_pos + self.scene.env_origins
+                self.regressed_keypoint_markers[i].visualize(translations=estimated_held_asset_pos_w)
 
-            # So we need to reshape the tensor
-            keypoints_pos = self.feature_extractor_embeddings[:].reshape(self.num_envs, 3, 3)
-
-            # Top Position of held asset
-            keypoint_1_pos = keypoints_pos[:, 0]
-            estimated_held_asset_pos = self.fingertip_midpoint_pos[:, :3] + keypoint_1_pos
-            estimated_held_asset_pos_w = estimated_held_asset_pos + self.scene.env_origins
-            self.keypoint_1_marker.visualize(translations=estimated_held_asset_pos_w)
-
-            # Center Position
-            keypoint_2_pos = keypoints_pos[:, 1]
-            estimated_held_asset_pos = self.fingertip_midpoint_pos[:, :3] + keypoint_2_pos
-            estimated_held_asset_pos_w = estimated_held_asset_pos + self.scene.env_origins
-            self.keypoint_2_marker.visualize(translations=estimated_held_asset_pos_w)
-
-            # Bottom Position
-            keypoint_3_pos = keypoints_pos[:, 2]
-            estimated_held_asset_pos = self.fingertip_midpoint_pos[:, :3] + keypoint_3_pos
-            estimated_held_asset_pos_w = estimated_held_asset_pos + self.scene.env_origins
-            self.keypoint_3_marker.visualize(translations=estimated_held_asset_pos_w)
+                gt_pos = gt_keypoint_pos[:, i]
+                gt_held_asset_pos = self.fingertip_midpoint_pos[:, :3] + gt_pos
+                gt_held_asset_pos_w = gt_held_asset_pos + self.scene.env_origins
+                self.gt_keypoint_markers[i].visualize(translations=gt_held_asset_pos_w)
