@@ -76,7 +76,7 @@ class FactoryTactileSingleEnv(FactoryTactileEnv):
             orientation=(0.70711, 0.0, 0.0, 0.70711),
         )
 
-        self._robot = Articulation(self.cfg.robot)
+        self._robot = self.cfg.robot.class_type(self.cfg.robot)
 
         # Modify gelpad physics
         gelpad_left_rigid_body_path = "/World/envs/env_0/Robot/gsmini_gelpad_left"
@@ -135,8 +135,8 @@ class FactoryTactileSingleEnv(FactoryTactileEnv):
         light_cfg = sim_utils.DomeLightCfg(intensity=2000.0, color=(0.75, 0.75, 0.75))
         light_cfg.func("/World/Light", light_cfg)
 
-        # Only use the left GelSight Mini
-        self.gsmini_right = GelSightSensor(self.cfg.gsmini_right)
+        # Only use the right GelSight Mini
+        self.gsmini_right = self.cfg.gsmini_right.class_type(self.cfg.gsmini_right)
         self.scene.sensors["gsmini_right"] = self.gsmini_right
 
     def _compute_image_observations(self):
