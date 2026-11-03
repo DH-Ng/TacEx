@@ -30,7 +30,7 @@ GELSIGHT_MINI_TAXIM_FEM_CFG = GELSIGHT_MINI_TAXIM_FEM_CFG.replace(
     ),
     marker_motion_sim_cfg=ManiSkillSimulatorCfg(),
     compute_indentation_depth_class="optical_sim",
-    device="cuda",  # use gpu per default #TODO currently gpu mandatory, also enable cpu only usage?
+    device="cuda",
 )
 
 
