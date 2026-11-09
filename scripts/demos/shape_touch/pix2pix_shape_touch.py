@@ -274,7 +274,7 @@ class ShapeTouchEnvCfg(DirectRLEnvCfg):
         sensor_camera_cfg=GELSIGHT_MINI_PIX2PIX_CFG.SensorCameraCfg(
             prim_name="Camera",
             resolution=(320, 240),
-            clipping_range=(0.024, 0.034),
+            clipping_range_m=(0.024, 0.034),
         ),
         device="cuda",
         debug_vis=True,  # for being able to see sensor output in the gui

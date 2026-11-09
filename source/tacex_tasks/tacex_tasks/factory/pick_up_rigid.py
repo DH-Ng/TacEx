@@ -8,12 +8,8 @@ from isaaclab.app import AppLauncher
 parser = argparse.ArgumentParser(
     description="Control Franka, which is equipped with two GelSight Mini sensors, by moving the Frame in the GUI"
 )
-parser.add_argument(
-    "--num_envs", type=int, default=1, help="Number of environments to spawn."
-)
-parser.add_argument(
-    "--sys", type=bool, default=True, help="Whether to track system utilization."
-)
+parser.add_argument("--num_envs", type=int, default=1, help="Number of environments to spawn.")
+parser.add_argument("--sys", type=bool, default=True, help="Whether to track system utilization.")
 parser.add_argument(
     "--debug_vis",
     default=True,
@@ -134,32 +130,24 @@ class CustomEnvWindow(BaseEnvWindow):
             vertical_scrollbar_policy=omni.ui.ScrollBarPolicy.SCROLLBAR_ALWAYS_ON,
         )
         with self.ui_window_elements["action_frame"]:
-            self.ui_window_elements["action_vstack"] = omni.ui.VStack(
-                spacing=5, height=50
-            )
+            self.ui_window_elements["action_vstack"] = omni.ui.VStack(spacing=5, height=50)
             with self.ui_window_elements["action_vstack"]:
-                self.ui_window_elements[
-                    "left_finger_pos"
-                ] = ui_utils.combo_floatfield_slider_builder(
+                self.ui_window_elements["left_finger_pos"] = ui_utils.combo_floatfield_slider_builder(
                     label="Left Finger Position",
                     default_val=self.left_finger_pos,  # open per default -> its open at joint pos 0.04
                     min=0.0,
                     max=0.04,
                     step=0.001,
                     tooltip="Specifies the position of the left finger of the franka.",
-                )[
-                    0
-                ]  # we just want to access the value model and not the floatslider
-                self.ui_window_elements["right_finger_pos"] = (
-                    ui_utils.combo_floatfield_slider_builder(
-                        label="Right Finger Position",
-                        default_val=self.left_finger_pos,
-                        min=0.0,
-                        max=0.04,
-                        step=0.001,
-                        tooltip="Specifies the position of the right finger of the franka.",
-                    )[0]
-                )
+                )[0]  # we just want to access the value model and not the floatslider
+                self.ui_window_elements["right_finger_pos"] = ui_utils.combo_floatfield_slider_builder(
+                    label="Right Finger Position",
+                    default_val=self.left_finger_pos,
+                    min=0.0,
+                    max=0.04,
+                    step=0.001,
+                    tooltip="Specifies the position of the right finger of the franka.",
+                )[0]
 
                 # objects_dropdown_cfg = {
                 #     "label": "Objects",
@@ -203,16 +191,12 @@ class CustomEnvWindow(BaseEnvWindow):
         self.new_action = True
 
         current_obj_idx = (
-            self.ui_window_elements["object_dropdown"]
-            .get_item_value_model()
-            .get_value_as_int()
+            self.ui_window_elements["object_dropdown"].get_item_value_model().get_value_as_int()
         )  # dropdown options are returned as numbers -> index in list
         self.current_object = self.objects[current_obj_idx]
 
         current_action_idx = (
-            self.ui_window_elements["action_dropdown"]
-            .get_item_value_model()
-            .get_value_as_int()
+            self.ui_window_elements["action_dropdown"].get_item_value_model().get_value_as_int()
         )  # dropdown options are returned as numbers -> index in list
         self.current_gripper_action = self.gripper_actions[current_action_idx]
 
@@ -380,7 +364,7 @@ class PickUpEnvCfg(DirectRLEnvCfg):
             update_period=0,
             resolution=(32, 24),
             data_types=["depth"],
-            clipping_range=(0.024, 0.034),
+            clipping_range_m=(0.024, 0.034),
         ),
         device="cuda",
         debug_vis=True,  # for rendering sensor output in the gui
@@ -436,23 +420,15 @@ class PickUpEnv(DirectRLEnv):
         self._jacobi_ee_idx = self._ee_idx - 1
 
         # Index of fingers -> first id is left, second id is right finger
-        self._finger_joint_ids, self._finger_joint_names = self._robot.find_joints(
-            ["panda_finger.*"]
-        )
+        self._finger_joint_ids, self._finger_joint_names = self._robot.find_joints(["panda_finger.*"])
 
         # ee offset w.r.t TCP -> TCP is defined so that z-axis shows down. In our case here we want z to show upwards
-        self._ee_pos_offset = torch.tensor(
-            self.cfg.ee_pos_offset, device=self.device
-        ).repeat(self.num_envs, 1)
-        self._ee_rot_offset = torch.tensor(
-            self.cfg.ee_rot_offset, device=self.device
-        ).repeat(self.num_envs, 1)
+        self._ee_pos_offset = torch.tensor(self.cfg.ee_pos_offset, device=self.device).repeat(self.num_envs, 1)
+        self._ee_rot_offset = torch.tensor(self.cfg.ee_rot_offset, device=self.device).repeat(self.num_envs, 1)
         # ---
 
         # create buffer to store actions (= ik_commands)
-        self.ik_commands = torch.zeros(
-            (self.num_envs, self._ik_controller.action_dim), device=self.device
-        )
+        self.ik_commands = torch.zeros((self.num_envs, self._ik_controller.action_dim), device=self.device)
         # self.ik_commands[:, 3:] = torch.tensor([0,1,0,0],device=self.device)
 
         self.step_count = 0
@@ -482,18 +458,16 @@ class PickUpEnv(DirectRLEnv):
         if self.cfg.task.name == "nut_thread":
             # rotate -90deg along z-axis
             initial_rot_deg = self.cfg.task.held_asset_rot_init
-            rot_yaw_euler = torch.tensor(
-                [0.0, 0.0, initial_rot_deg * np.pi / 180.0], device=self.device
-            ).repeat(self.num_envs, 1)
+            rot_yaw_euler = torch.tensor([0.0, 0.0, initial_rot_deg * np.pi / 180.0], device=self.device).repeat(
+                self.num_envs, 1
+            )
             new_rot_quat = torch_utils.quat_from_euler_xyz(
                 roll=rot_yaw_euler[:, 0],
                 pitch=rot_yaw_euler[:, 1],
                 yaw=rot_yaw_euler[:, 2],
             )
             # Update the init orientation of the asset
-            self.cfg.task.held_asset.init_state = (
-                self.cfg.task.held_asset.init_state.replace(rot=new_rot_quat[0, :])
-            )
+            self.cfg.task.held_asset.init_state = self.cfg.task.held_asset.init_state.replace(rot=new_rot_quat[0, :])
 
         self._held_asset = Articulation(self.cfg.task.held_asset)
         self.scene.articulations["held_asset"] = self._held_asset
@@ -585,9 +559,7 @@ class PickUpEnv(DirectRLEnv):
         # compute the delta in joint-space
         if ee_pos_curr_b.norm() != 0:
             jacobian = self._compute_frame_jacobian()
-            joint_pos_des = self._ik_controller.compute(
-                ee_pos_curr_b, ee_quat_curr_b, jacobian, joint_pos
-            )
+            joint_pos_des = self._ik_controller.compute(ee_pos_curr_b, ee_quat_curr_b, jacobian, joint_pos)
         else:
             joint_pos_des = joint_pos.clone()
 
@@ -635,9 +607,7 @@ class PickUpEnv(DirectRLEnv):
         fixed_state[:, 2] = 0.005
         fixed_state[:, 7:] = 0.0
         self._fixed_asset.write_root_pose_to_sim(fixed_state[:, 0:7], env_ids=env_ids)
-        self._fixed_asset.write_root_velocity_to_sim(
-            fixed_state[:, 7:], env_ids=env_ids
-        )
+        self._fixed_asset.write_root_velocity_to_sim(fixed_state[:, 7:], env_ids=env_ids)
         self._fixed_asset.reset()
 
         # reset robot state
@@ -687,9 +657,7 @@ class PickUpEnv(DirectRLEnv):
         root_pos_w = self._robot.data.root_link_pos_w
         root_quat_w = self._robot.data.root_link_quat_w
         # compute the pose of the body in the root frame
-        ee_pose_b, ee_quat_b = math_utils.subtract_frame_transforms(
-            root_pos_w, root_quat_w, ee_pos_w, ee_quat_w
-        )
+        ee_pose_b, ee_quat_b = math_utils.subtract_frame_transforms(root_pos_w, root_quat_w, ee_pos_w, ee_quat_w)
         # account for the offset
         # if self.cfg.body_offset is not None:
         ee_pose_b, ee_quat_b = math_utils.combine_frame_transforms(
@@ -714,14 +682,10 @@ class PickUpEnv(DirectRLEnv):
         # v_link = v_ee + w_ee x r_link_ee = v_J_ee * q + w_J_ee * q x r_link_ee
         #        = (v_J_ee + w_J_ee x r_link_ee ) * q
         #        = (v_J_ee - r_link_ee_[x] @ w_J_ee) * q
-        jacobian[:, 0:3, :] += torch.bmm(
-            -math_utils.skew_symmetric_matrix(self._ee_pos_offset), jacobian[:, 3:, :]
-        )
+        jacobian[:, 0:3, :] += torch.bmm(-math_utils.skew_symmetric_matrix(self._ee_pos_offset), jacobian[:, 3:, :])
         # -- rotational part
         # w_link = R_link_ee @ w_ee
-        jacobian[:, 3:, :] = torch.bmm(
-            math_utils.matrix_from_quat(self._ee_rot_offset), jacobian[:, 3:, :]
-        )
+        jacobian[:, 3:, :] = torch.bmm(math_utils.matrix_from_quat(self._ee_rot_offset), jacobian[:, 3:, :])
 
         return jacobian
 
@@ -775,12 +739,8 @@ def main():
     # Define simulation env
     env_cfg = PickUpEnvCfg()
     # override configurations with non-hydra CLI arguments
-    env_cfg.scene.num_envs = (
-        args_cli.num_envs if args_cli.num_envs is not None else env_cfg.scene.num_envs
-    )
-    env_cfg.sim.device = (
-        args_cli.device if args_cli.device is not None else env_cfg.sim.device
-    )
+    env_cfg.scene.num_envs = args_cli.num_envs if args_cli.num_envs is not None else env_cfg.scene.num_envs
+    env_cfg.sim.device = args_cli.device if args_cli.device is not None else env_cfg.sim.device
     env_cfg.gsmini_left.debug_vis = args_cli.debug_vis
 
     experiment = PickUpEnv(env_cfg)

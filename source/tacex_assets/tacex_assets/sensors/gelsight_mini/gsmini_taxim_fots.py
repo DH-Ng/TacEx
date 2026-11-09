@@ -17,7 +17,7 @@ GELSIGHT_MINI_TAXIM_FOTS_CFG = GELSIGHT_MINI_TAXIM_FOTS_CFG.replace(
         update_period=0,
         resolution=(32, 24),
         data_types=["depth"],
-        clipping_range=(0.024, 0.029),
+        clipping_range_m=(0.024, 0.029),
     ),
     update_period=0.01,
     data_types=["tactile_rgb", "marker_motion", "height_map"],

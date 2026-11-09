@@ -8,12 +8,8 @@ from isaaclab.app import AppLauncher
 parser = argparse.ArgumentParser(
     description="Control Franka, which is equipped with two GelSight Mini sensors, by moving the Frame in the GUI"
 )
-parser.add_argument(
-    "--num_envs", type=int, default=1, help="Number of environments to spawn."
-)
-parser.add_argument(
-    "--sys", type=bool, default=True, help="Whether to track system utilization."
-)
+parser.add_argument("--num_envs", type=int, default=1, help="Number of environments to spawn.")
+parser.add_argument("--sys", type=bool, default=True, help="Whether to track system utilization.")
 parser.add_argument(
     "--debug_vis",
     default=True,
@@ -122,32 +118,24 @@ class CustomEnvWindow(BaseEnvWindow):
             vertical_scrollbar_policy=omni.ui.ScrollBarPolicy.SCROLLBAR_ALWAYS_ON,
         )
         with self.ui_window_elements["action_frame"]:
-            self.ui_window_elements["action_vstack"] = omni.ui.VStack(
-                spacing=5, height=50
-            )
+            self.ui_window_elements["action_vstack"] = omni.ui.VStack(spacing=5, height=50)
             with self.ui_window_elements["action_vstack"]:
-                self.ui_window_elements[
-                    "left_finger_pos"
-                ] = ui_utils.combo_floatfield_slider_builder(
+                self.ui_window_elements["left_finger_pos"] = ui_utils.combo_floatfield_slider_builder(
                     label="Left Finger Position",
                     default_val=0.0,  # open per default -> its open at joint pos 0
                     min=0.0,
                     max=0.04,
                     step=0.001,
                     tooltip="Specifies the position of the left finger of the franka.",
-                )[
-                    0
-                ]  # we just want to access the value model and not the floatslider
-                self.ui_window_elements["right_finger_pos"] = (
-                    ui_utils.combo_floatfield_slider_builder(
-                        label="Right Finger Position",
-                        default_val=0.0,
-                        min=0.0,
-                        max=0.04,
-                        step=0.001,
-                        tooltip="Specifies the position of the right finger of the franka.",
-                    )[0]
-                )
+                )[0]  # we just want to access the value model and not the floatslider
+                self.ui_window_elements["right_finger_pos"] = ui_utils.combo_floatfield_slider_builder(
+                    label="Right Finger Position",
+                    default_val=0.0,
+                    min=0.0,
+                    max=0.04,
+                    step=0.001,
+                    tooltip="Specifies the position of the right finger of the franka.",
+                )[0]
 
                 # objects_dropdown_cfg = {
                 #     "label": "Objects",
@@ -191,16 +179,12 @@ class CustomEnvWindow(BaseEnvWindow):
         self.new_action = True
 
         current_obj_idx = (
-            self.ui_window_elements["object_dropdown"]
-            .get_item_value_model()
-            .get_value_as_int()
+            self.ui_window_elements["object_dropdown"].get_item_value_model().get_value_as_int()
         )  # dropdown options are returned as numbers -> index in list
         self.current_object = self.objects[current_obj_idx]
 
         current_action_idx = (
-            self.ui_window_elements["action_dropdown"]
-            .get_item_value_model()
-            .get_value_as_int()
+            self.ui_window_elements["action_dropdown"].get_item_value_model().get_value_as_int()
         )  # dropdown options are returned as numbers -> index in list
         self.current_gripper_action = self.gripper_actions[current_action_idx]
 
@@ -314,7 +298,7 @@ class BallRollingEnvCfg(DirectRLEnvCfg):
             update_period=0,
             resolution=(32, 24),
             data_types=["depth"],
-            clipping_range=(0.024, 0.034),
+            clipping_range_m=(0.024, 0.034),
         ),
         device="cuda",
         debug_vis=True,  # for rendering sensor output in the gui
@@ -332,9 +316,7 @@ class BallRollingEnvCfg(DirectRLEnvCfg):
         prim_path="/World/envs/env_.*/Robot/gelsight_mini_case_right",
     )
 
-    ik_controller_cfg = DifferentialIKControllerCfg(
-        command_type="pose", use_relative_mode=False, ik_method="dls"
-    )
+    ik_controller_cfg = DifferentialIKControllerCfg(command_type="pose", use_relative_mode=False, ik_method="dls")
 
     ball_radius = 0.005
 
@@ -350,9 +332,7 @@ class BallRollingEnvCfg(DirectRLEnvCfg):
 class BallRollingEnv(DirectRLEnv):
     cfg: BallRollingEnvCfg
 
-    def __init__(
-        self, cfg: BallRollingEnvCfg, render_mode: str | None = None, **kwargs
-    ):
+    def __init__(self, cfg: BallRollingEnvCfg, render_mode: str | None = None, **kwargs):
         super().__init__(cfg, render_mode, **kwargs)
 
         # --- for IK ---
@@ -367,9 +347,7 @@ class BallRollingEnv(DirectRLEnv):
         self._body_name = body_names[0]
 
         # Index of fingers -> first id is left, second id is right finger
-        self._finger_joint_ids, self._finger_joint_names = self._robot.find_joints(
-            ["panda_finger.*"]
-        )
+        self._finger_joint_ids, self._finger_joint_names = self._robot.find_joints(["panda_finger.*"])
 
         # For a fixed base robot, the frame index is one less than the body index.
         # This is because the root body is not included in the returned Jacobians.
@@ -377,18 +355,12 @@ class BallRollingEnv(DirectRLEnv):
         # self._jacobi_joint_ids = self._joint_ids # we take every joint
 
         # ee offset w.r.t panda hand -> based on the asset
-        self._offset_pos = torch.tensor([0.0, 0.0, 0.13768], device=self.device).repeat(
-            self.num_envs, 1
-        )
-        self._offset_rot = torch.tensor(
-            [1.0, 0.0, 0.0, 0.0], device=self.device
-        ).repeat(self.num_envs, 1)
+        self._offset_pos = torch.tensor([0.0, 0.0, 0.13768], device=self.device).repeat(self.num_envs, 1)
+        self._offset_rot = torch.tensor([1.0, 0.0, 0.0, 0.0], device=self.device).repeat(self.num_envs, 1)
         # ---
 
         # create buffer to store actions (= ik_commands)
-        self.ik_commands = torch.zeros(
-            (self.num_envs, self._ik_controller.action_dim), device=self.device
-        )
+        self.ik_commands = torch.zeros((self.num_envs, self._ik_controller.action_dim), device=self.device)
         # self.ik_commands[:, 3:] = torch.tensor([0,1,0,0],device=self.device)
 
         self.step_count = 0
@@ -472,9 +444,7 @@ class BallRollingEnv(DirectRLEnv):
         # compute the delta in joint-space
         if ee_pos_curr_b.norm() != 0:
             jacobian = self._compute_frame_jacobian()
-            joint_pos_des = self._ik_controller.compute(
-                ee_pos_curr_b, ee_quat_curr_b, jacobian, joint_pos
-            )
+            joint_pos_des = self._ik_controller.compute(ee_pos_curr_b, ee_quat_curr_b, jacobian, joint_pos)
         else:
             joint_pos_des = joint_pos.clone()
 
@@ -539,9 +509,7 @@ class BallRollingEnv(DirectRLEnv):
 
     @property
     def jacobian_w(self) -> torch.Tensor:
-        return self._robot.root_physx_view.get_jacobians()[
-            :, self._jacobi_body_idx, :, :
-        ]
+        return self._robot.root_physx_view.get_jacobians()[:, self._jacobi_body_idx, :, :]
 
     @property
     def jacobian_b(self) -> torch.Tensor:
@@ -564,9 +532,7 @@ class BallRollingEnv(DirectRLEnv):
         root_pos_w = self._robot.data.root_link_pos_w
         root_quat_w = self._robot.data.root_link_quat_w
         # compute the pose of the body in the root frame
-        ee_pose_b, ee_quat_b = math_utils.subtract_frame_transforms(
-            root_pos_w, root_quat_w, ee_pos_w, ee_quat_w
-        )
+        ee_pose_b, ee_quat_b = math_utils.subtract_frame_transforms(root_pos_w, root_quat_w, ee_pos_w, ee_quat_w)
         # account for the offset
         # if self.cfg.body_offset is not None:
         ee_pose_b, ee_quat_b = math_utils.combine_frame_transforms(
@@ -591,14 +557,10 @@ class BallRollingEnv(DirectRLEnv):
         # v_link = v_ee + w_ee x r_link_ee = v_J_ee * q + w_J_ee * q x r_link_ee
         #        = (v_J_ee + w_J_ee x r_link_ee ) * q
         #        = (v_J_ee - r_link_ee_[x] @ w_J_ee) * q
-        jacobian[:, 0:3, :] += torch.bmm(
-            -math_utils.skew_symmetric_matrix(self._offset_pos), jacobian[:, 3:, :]
-        )
+        jacobian[:, 0:3, :] += torch.bmm(-math_utils.skew_symmetric_matrix(self._offset_pos), jacobian[:, 3:, :])
         # -- rotational part
         # w_link = R_link_ee @ w_ee
-        jacobian[:, 3:, :] = torch.bmm(
-            math_utils.matrix_from_quat(self._offset_rot), jacobian[:, 3:, :]
-        )
+        jacobian[:, 3:, :] = torch.bmm(math_utils.matrix_from_quat(self._offset_rot), jacobian[:, 3:, :])
 
         return jacobian
 
@@ -652,12 +614,8 @@ def main():
     # Define simulation env
     env_cfg = BallRollingEnvCfg()
     # override configurations with non-hydra CLI arguments
-    env_cfg.scene.num_envs = (
-        args_cli.num_envs if args_cli.num_envs is not None else env_cfg.scene.num_envs
-    )
-    env_cfg.sim.device = (
-        args_cli.device if args_cli.device is not None else env_cfg.sim.device
-    )
+    env_cfg.scene.num_envs = args_cli.num_envs if args_cli.num_envs is not None else env_cfg.scene.num_envs
+    env_cfg.sim.device = args_cli.device if args_cli.device is not None else env_cfg.sim.device
     env_cfg.gsmini_left.debug_vis = args_cli.debug_vis
 
     experiment = BallRollingEnv(env_cfg)

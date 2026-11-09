@@ -301,7 +301,7 @@ class BallRollingTactileRGBCfg(DirectRLEnvCfg):
             update_period=0,
             resolution=(32, 32),
             data_types=["depth"],
-            clipping_range=(
+            clipping_range_m=(
                 0.024,
                 0.034,
             ),

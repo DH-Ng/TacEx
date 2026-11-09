@@ -32,7 +32,7 @@ class GeneralGelSightMiniCfg(GelSightSensorCfg):
         update_period=0,
         resolution=(320, 240),
         data_types=["depth"],
-        clipping_range=(0.024, 0.0255),
+        clipping_range_m=(0.024, 0.0255),
     )
 
     update_period: float = 0.01

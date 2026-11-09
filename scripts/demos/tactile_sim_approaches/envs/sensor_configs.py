@@ -51,7 +51,7 @@ TAXIM_CFG = GELSIGHT_MINI_TAXIM_CFG.replace(
         update_period=0,
         resolution=(320, 240),
         data_types=["depth"],
-        clipping_range=(0.024, 0.029),
+        clipping_range_m=(0.024, 0.029),
     ),
     update_period=0.01,
     optical_sim_cfg=TaximSimulatorCfg(
@@ -75,7 +75,7 @@ TAXIM_FOTS_CFG = GELSIGHT_MINI_TAXIM_FOTS_CFG.replace(
         update_period=0,
         resolution=(32, 24),
         data_types=["depth"],
-        clipping_range=(0.024, 0.034),
+        clipping_range_m=(0.024, 0.034),
     ),
     device="cuda",
     debug_vis=True,
@@ -124,7 +124,7 @@ TAXIM_FEM_CFG = GELSIGHT_MINI_TAXIM_FEM_CFG.replace(
         update_period=0,
         resolution=(32, 24),
         data_types=["depth"],
-        clipping_range=(0.024, 0.029),
+        clipping_range_m=(0.024, 0.029),
     ),
     update_period=0.01,
     optical_sim_cfg=TaximSimulatorCfg(

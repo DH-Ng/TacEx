@@ -291,7 +291,7 @@ class BallRollingEnvCfg(DirectRLEnvCfg):
             update_period=0,
             resolution=(48, 64),
             data_types=["depth"],
-            clipping_range=(0.024, 0.029),
+            clipping_range_m=(0.024, 0.029),
         ),
         device="cuda",
         debug_vis=True,  # for being able to see sensor output in the gui

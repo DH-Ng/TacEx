@@ -14,7 +14,7 @@ GELSIGHT_MINI_TAXIM_CFG = GELSIGHT_MINI_TAXIM_CFG.replace(
         update_period=0,
         resolution=(320, 240),
         data_types=["depth"],
-        clipping_range=(0.024, 0.029),
+        clipping_range_m=(0.024, 0.029),
     ),
     update_period=0.01,
     data_types=["tactile_rgb"],
@@ -48,7 +48,7 @@ GELSIGHT_MINI_TAXIM_CFG = GELSIGHT_MINI_TAXIM_CFG.replace(
 #         update_period=0,
 #         resolution=(320, 240),
 #         data_types=["depth"],
-#         clipping_range=(0.024, 0.029),
+#         clipping_range_m=(0.024, 0.029),
 #     )
 
 #     update_period: float = 0.0

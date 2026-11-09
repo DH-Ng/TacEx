@@ -42,7 +42,7 @@ class GelSightSensorCfg(SensorBaseCfg):
         update_period: float = 0
         resolution: tuple[int, int] = (32, 24)
         data_types: list[str] = ["depth"]
-        clipping_range: tuple[float, float] = (0.024, 0.028)
+        clipping_range_m: tuple[float, float] = (0.024, 0.028)
         update_latest_camera_pose: bool = False
 
         camera_pos_offset: tuple[float, float, float] = (0.0000, -0.0001, 0.0)
@@ -56,8 +56,8 @@ class GelSightSensorCfg(SensorBaseCfg):
         camera_rot_offset: tuple[float, float, float, float] = (0.0, 1.0, 0.0, 0.0)
         """Quaternion rotation (w, x, y, z) w.r.t. the parent frame. Defaults to (0.0, 1.0, 0.0, 0.0)."""
 
-        focal_length: float = 1.05
-        """Focal length of the sensor camera (in [cm]).
+        focal_length_cm: float = 1.0
+        """Focal length of the sensor camera (in centimeters).
         
         Determines the "zoom" in the image, i.e. how big objects appear. 
         Value should be set so that focus_distance and focal_length combination
@@ -70,19 +70,25 @@ class GelSightSensorCfg(SensorBaseCfg):
         Note: This value is not used to compute horizontal/vertical aperture.
         """
 
-        focus_distance: float = 0.024 + 0.004
-        """Distance from camera to focus plane (in [m]). 
+        focus_distance_m: float = 0.024 + 0.004
+        """Distance from camera to focus plane (in meters). 
         
         Determines where the FOV of the sensor camera is.
         Should be at highest point of the gelpad (e.g. for GsMini thats 2.5cm due to sensor case height + gelpad height 4mm)"""
 
-        fov_width = 0.02525 * (
-            1 - 0.15
-        )  # crop out border like real GelSight Mini # orig. camera fov: 0.0186
-        """Camera field of view width (in [m])."""
+        view_width_m = 0.02525 * (1 - 0.15)
+        """Physical width of the camera view (in meters).
+        
+        Reduced by 15% to crop borders as with the real GelSight Mini.
+        Original reference width: 0.0186m.
+        """
 
-        fov_height = 0.02075 * (1 - 0.15)  # 0.0143
-        """Camera field of view height (in [m])."""
+        view_height_m = 0.02075 * (1 - 0.15)
+        """Physical height of the camera view (in meters). 
+        
+        Reduced by 15% to crop borders as with the real GelSight Mini
+        Original reference height: 0.0143m
+        """
 
     sensor_camera_cfg: SensorCameraCfg = SensorCameraCfg()
 
@@ -105,17 +111,13 @@ class GelSightSensorCfg(SensorBaseCfg):
     - camera_rgb: rgb image from the sensor camera
     """
 
-    optical_sim_cfg: GelSightSimulatorCfg = (
-        None  # freely choose what simulation class, but can also be left None
-    )
+    optical_sim_cfg: GelSightSimulatorCfg = None  # freely choose what simulation class, but can also be left None
     """Cfg class of the optical simulator you want to use."""
 
     marker_motion_sim_cfg: GelSightSimulatorCfg = None
     """Cfg class of the marker motion simulator you want to use."""
 
-    compute_indentation_depth_class: Literal[
-        "optical_sim", "marker_motion_sim", "default"
-    ] = "default"
+    compute_indentation_depth_class: Literal["optical_sim", "marker_motion_sim", "default"] = "default"
     """Defines which approach is used for computing the indentation depth.
 
     You can use the method from your optical simulation (e.g. Taxim), or the one from your marker motion simulation (e.g. if its FEM based).

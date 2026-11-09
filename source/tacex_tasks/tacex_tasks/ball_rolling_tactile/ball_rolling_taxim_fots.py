@@ -302,7 +302,7 @@ class BallRollingTaximFotsCfg(DirectRLEnvCfg):
             update_period=0,
             resolution=(32, 24),  # (48, 64),
             data_types=["depth"],
-            clipping_range=(
+            clipping_range_m=(
                 0.024,
                 0.034,
             ),  # (0.024, 0.029), make min value little bit smaller, due to penetration issues

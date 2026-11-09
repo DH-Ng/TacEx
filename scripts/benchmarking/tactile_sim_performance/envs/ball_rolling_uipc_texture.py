@@ -127,7 +127,7 @@ class UipcTexturedEnvCfg(PhysXRigidEnvCfg):
             update_period=0,
             resolution=(640, 480),
             data_types=["depth", "rgb"],
-            clipping_range=(0.02, 0.034),  # (0.024, 0.034),
+            clipping_range_m=(0.02, 0.034),  # (0.024, 0.034),
         ),
         device="cuda",
         debug_vis=True,  # for rendering sensor output in the gui

@@ -174,7 +174,7 @@ class PoleBalancingEnvCfg(DirectRLEnvCfg):
             update_period=0,
             resolution=(32, 32),
             data_types=["depth"],
-            clipping_range=(0.024, 0.034),
+            clipping_range_m=(0.024, 0.034),
         ),
         device="cuda",
         debug_vis=True,  # for being able to see sensor output in the gui
