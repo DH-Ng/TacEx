@@ -75,8 +75,8 @@ class ExtraVisualizerWindow:
                 viewport_origin_cfg = {
                     "label": "Environment Index",
                     "type": "button",
-                    "default_val": self._env_idx + 1,
-                    "min": 1,
+                    "default_val": self._env_idx,
+                    "min": 0,
                     "max": self.num_envs,
                     "tooltip": "The environment index to follow. Only effective if follow mode is not 'World'.",
                 }
@@ -86,7 +86,7 @@ class ExtraVisualizerWindow:
                 self.ui_window_elements["viewer_env_index"].add_value_changed_fn(self._set_viewer_env_index_fn)
 
     def _set_viewer_env_index_fn(self, model: omni.ui.SimpleIntModel):
-        self._env_idx = model.as_int - 1
+        self._env_idx = model.as_int
 
     def _build_debug_vis_frame(self):
         # create collapsable frame for debug visualization
@@ -189,10 +189,10 @@ class DirectLiveVisualizer(ManagerLiveVisualizer):
         Args:
             env_idx: The index of the selected environment.
         """
-        if env_idx > 0 and env_idx < self.num_envs:
+        if env_idx >= 0 and env_idx < self.num_envs:
             self._env_idx = env_idx
         else:
-            logger.warning(f"Environment index is out of range (0, {self.num_envs - 1})")
+            logger.warning(f"Environment index is out of range [0, {self.num_envs - 1}]")
 
     #
     # Implementations
@@ -276,7 +276,7 @@ class DirectLiveVisualizer(ManagerLiveVisualizer):
         if SimulationContext.instance() is None or not SimulationContext.instance().is_playing():
             # Visualizers have not been created yet.
             return
-        self._env_idx = self._vis_window.ui_window_elements["viewer_env_index"].as_int - 1
+        self._env_idx = self._vis_window.ui_window_elements["viewer_env_index"].as_int
         # get updated data and update visualization
         for name, values in self.terms.items():
             # E.g. terms = actions: Actions values have the shape (num_envs, num_actions).
