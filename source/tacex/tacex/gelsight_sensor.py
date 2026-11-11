@@ -38,6 +38,7 @@ class GelSightSensor(SensorBase):
     def __init__(self, cfg: GelSightSensorCfg, gelpad_obj=None) -> None:
         # initialize base class
         super().__init__(cfg)
+        self._check_gel_geometry()
 
         self._prim_view = None
 
@@ -666,9 +667,11 @@ class GelSightSensor(SensorBase):
             self._data.output["height_map"][torch.isinf(self._data.output["height_map"])] = (
                 self.cfg.sensor_camera_cfg.clipping_range_m[1]
             )
-            # transform camera depth values to values in gelpad range, i.e. [0, gelpad_height]
-            self._data.output["height_map"] -= self.cfg.sensor_camera_cfg.clipping_range_m[0]
-            # height_map == 0 should mean that no indentation, min(height_map) == biggest indentation
+            # depth relative to the undeformed gel surface: 0 = no indentation, min(height_map) = biggest indentation.
+            # Two subtractions (underside, then gelpad height) instead of one by get_gel_surface_to_camera_distance_m():
+            # same value, but float32 rounds the sub-micrometer depth noise of the flat gel differently, and Taxim
+            # amplifies that into visible background texture -> keeps the output bit-identical to earlier versions.
+            self._data.output["height_map"] -= self.cfg.gelpad_underside_to_camera_distance_m
             self._data.output["height_map"] -= self.cfg.gelpad_dimensions.height
 
             self._data.output["height_map"] = self._data.output["height_map"].clamp(
@@ -685,6 +688,19 @@ class GelSightSensor(SensorBase):
             # or that we dont need a height map in general
             pass
 
+    def _check_gel_geometry(self):
+        """Warns about sensor camera settings that do not match the gel geometry."""
+        cam_cfg = self.cfg.sensor_camera_cfg
+        if cam_cfg is None:
+            return
+        gel_surface = self.cfg.get_gel_surface_to_camera_distance_m()
+        if cam_cfg.clipping_range_m[1] < gel_surface - 1e-6:
+            logger.warning(
+                f"Sensor camera far clipping plane ({cam_cfg.clipping_range_m[1]} m) is in front of the gel surface"
+                f" ({gel_surface} m = gelpad_underside_to_camera_distance_m + gelpad height): the undeformed gel"
+                " reads as indented."
+            )
+
     def _create_tiled_camera(self) -> TiledCamera:
         prim_path = self.cfg.prim_path + f"/{self.cfg.sensor_camera_cfg.prim_name}"
         # delete existing camera prim
@@ -697,17 +713,20 @@ class GelSightSensor(SensorBase):
             )
             self.cfg.sensor_camera_cfg.update_period = self.cfg.update_period
 
-        # The physical width/height of the viewable area at the focus distance (in meters).
+        # The physical width/height of the viewable area at the undeformed gel surface (in meters).
         view_width_m = self.cfg.sensor_camera_cfg.view_width_m
         view_height_m = self.cfg.sensor_camera_cfg.view_height_m
-        focus_dist_m = self.cfg.sensor_camera_cfg.focus_distance_m
+        # The view is defined at the gel surface (mm_per_pixel is measured on real images of it), so the (undeformed)
+        # gel surface is the focus distance. With f_stop = 0 (PinholeCameraCfg default) focusing is off: the USD
+        # focus distance does not change the image, it is only the reference distance for the aperture calculation.
+        focus_distance_m = self.cfg.get_gel_surface_to_camera_distance_m()
 
         focal_length = self.cfg.sensor_camera_cfg.focal_length_cm
 
         # Calculate aperture using the pinhole camera ratio:
         # aperture / focal_length = view_width / focus_distance
-        horizontal_aperture = (view_width_m * focal_length) / focus_dist_m
-        vertical_aperture = (view_height_m * focal_length) / focus_dist_m
+        horizontal_aperture = (view_width_m * focal_length) / focus_distance_m
+        vertical_aperture = (view_height_m * focal_length) / focus_distance_m
 
         self.camera_cfg: TiledCameraCfg = TiledCameraCfg(
             prim_path=prim_path,
@@ -724,7 +743,7 @@ class GelSightSensor(SensorBase):
             spawn=sim_utils.PinholeCameraCfg(
                 # use user-defined focal length to set proper zoom factor
                 focal_length=focal_length,
-                focus_distance=focus_dist_m,
+                focus_distance=focus_distance_m,
                 horizontal_aperture=horizontal_aperture,
                 vertical_aperture=vertical_aperture,
                 clipping_range=self.cfg.sensor_camera_cfg.clipping_range_m,

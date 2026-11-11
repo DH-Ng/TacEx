@@ -32,7 +32,7 @@ class GeneralGelSightMiniCfg(GelSightSensorCfg):
         update_period=0,
         resolution=(320, 240),
         data_types=["depth"],
-        clipping_range_m=(0.024, 0.0255),
+        clipping_range_m=(0.024, 0.029),  # far plane behind the gel surface (24 mm + 4 mm gelpad)
     )
 
     update_period: float = 0.01

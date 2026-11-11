@@ -6,7 +6,8 @@ and no physics contact:
 - every approach gets its own group of ``NUM_ENVS`` sensor bodies (bare Xforms at ``/World/<approach>/env_i``);
   the GelSight sensor spawns its depth camera as a child, looking along +Z
   (camera_rot_offset = 180 deg about X, OpenGL convention).
-- the undeformed gelpad surface lies at ``clipping_range_m[0] + gelpad_height`` in front of the camera.
+- the undeformed gelpad surface lies at ``get_gel_surface_to_camera_distance_m()`` (gelpad underside distance +
+  gelpad height) in front of the camera.
 - "contact" envs get a visual-only sphere that penetrates the gelpad surface by ``INDENTATION_MM``;
   the "no contact" env has no indenter.
 
@@ -109,7 +110,7 @@ Helpers.
 
 def _build_group(group_idx: int, group: str, cfg: GelSightSensorCfg):
     """Spawns NUM_ENVS sensor bodies for one approach, plus an indenter sphere in every contact env."""
-    gelpad_surface_z = cfg.sensor_camera_cfg.clipping_range_m[0] + cfg.gelpad_dimensions.height
+    gelpad_surface_z = cfg.get_gel_surface_to_camera_distance_m()
     indenter_center_z = gelpad_surface_z - INDENTATION_MM / 1000.0 + INDENTER_RADIUS_M
     indenter_cfg = sim_utils.SphereCfg(
         radius=INDENTER_RADIUS_M,

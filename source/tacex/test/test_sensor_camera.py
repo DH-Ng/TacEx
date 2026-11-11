@@ -1,8 +1,8 @@
 """Checks that the GelSight sensor camera sees exactly the configured physical view.
 
-`GelSightSensor._create_tiled_camera` derives the camera apertures from `SensorCameraCfg`:
-    aperture / focal_length = view_size / focus_distance
-so at `focus_distance_m` the image should span exactly `view_width_m` x `view_height_m`.
+`GelSightSensor._create_tiled_camera` derives the camera apertures from `SensorCameraCfg` and the gel geometry:
+    aperture / focal_length = view_size / focus_distance,   focus_distance = cfg.get_gel_surface_to_camera_distance_m()
+so at the undeformed gel surface the image should span exactly `view_width_m` x `view_height_m`.
 
 Two independent checks per camera config:
 1. intrinsics: focal length in pixels (fx, fy) of the spawned camera -> view size at the focus distance.
@@ -53,42 +53,55 @@ DEPTH_TOL_M = 1e-4
 FIGURE_DIR = Path(os.environ.get("TACEX_TEST_FIGURE_DIR", Path(__file__).resolve().parents[3] / "tests" / "figures"))
 """Where the rendering test writes its figures (repo `tests/` is git-ignored)."""
 
-CAMERA_CFGS: dict[str, GelSightSensorCfg.SensorCameraCfg] = {
-    # the camera used by the GelSight Mini presets (view from mm_per_pixel and 320x240 reference image)
-    "gsmini_preset": GELSIGHT_MINI_TAXIM_CFG.sensor_camera_cfg,
-    # different resolution, focal length, focus distance, scale and view size
-    "custom": GelSightSensorCfg.SensorCameraCfg(
-        resolution=(200, 100),
-        data_types=["depth"],
-        clipping_range_m=(0.02, 0.035),
-        focal_length_cm=2.0,
-        focus_distance_m=0.03,
-        mm_per_pixel=0.15,  # -> view 30 x 15 mm
-        reference_img_res=(200, 100),
-        camera_pos_offset=(0.0, 0.0, 0.0),
+SENSOR_CFGS: dict[str, GelSightSensorCfg] = {
+    # the camera and gel geometry of the GelSight Mini presets (view from mm_per_pixel and 320x240 reference image,
+    # defined at the (undeformed) gel surface 24 + 4 = 28 mm in front of the camera).
+    # The (undeformed) gel surface is used as reference distance.
+    "gsmini_preset": GeneralGelSightMiniCfg().replace(
+        sensor_camera_cfg=GELSIGHT_MINI_TAXIM_CFG.sensor_camera_cfg,
+        gelpad_dimensions=GELSIGHT_MINI_TAXIM_CFG.gelpad_dimensions,
+        gelpad_underside_to_camera_distance_m=GELSIGHT_MINI_TAXIM_CFG.gelpad_underside_to_camera_distance_m,
+    ),
+    # different resolution, focal length, gel surface distance, scale and view size
+    "custom": GeneralGelSightMiniCfg().replace(
+        sensor_camera_cfg=GelSightSensorCfg.SensorCameraCfg(
+            resolution=(200, 100),
+            data_types=["depth"],
+            clipping_range_m=(0.02, 0.035),
+            focal_length_cm=2.0,
+            mm_per_pixel=0.15,  # -> view 30 x 15 mm
+            reference_img_res=(200, 100),
+            camera_pos_offset=(0.0, 0.0, 0.0),
+        ),
+        gelpad_underside_to_camera_distance_m=0.026,  # + 4 mm gelpad -> view defined at 30 mm
     ),
 }
 
 
-def _target_distance(cam_cfg: GelSightSensorCfg.SensorCameraCfg) -> float:
-    return cam_cfg.focus_distance_m - TARGET_OFFSET_M
+def _focus_distance(cfg: GelSightSensorCfg) -> float:
+    """Distance at which the configured view applies (the undeformed gel surface)."""
+    return cfg.get_gel_surface_to_camera_distance_m()
 
 
-def _sensor_cfg(name: str, cam_cfg: GelSightSensorCfg.SensorCameraCfg) -> GelSightSensorCfg:
+def _target_distance(cfg: GelSightSensorCfg) -> float:
+    return _focus_distance(cfg) - TARGET_OFFSET_M
+
+
+def _sensor_cfg(name: str, cfg: GelSightSensorCfg) -> GelSightSensorCfg:
     # the target must lie inside the clipping range, otherwise it is not rendered
-    near, far = cam_cfg.clipping_range_m
-    assert near < _target_distance(cam_cfg) < far, f"{name}: target distance outside clipping range"
-    return GeneralGelSightMiniCfg().replace(
+    near, far = cfg.sensor_camera_cfg.clipping_range_m
+    assert near < _target_distance(cfg) < far, f"{name}: target distance outside clipping range"
+    return cfg.replace(
         prim_path=f"/World/{name}/env_.*/Sensor",
-        sensor_camera_cfg=cam_cfg,
         data_types=["height_map"],  # no simulation approach needed, we read the raw camera depth
         update_period=0.0,
         debug_vis=False,
     )
 
 
-def _build_scene(group_idx: int, name: str, cam_cfg: GelSightSensorCfg.SensorCameraCfg):
-    """Sensor bodies + a flat target at the focus distance, centered on the camera axis."""
+def _build_scene(group_idx: int, name: str, cfg: GelSightSensorCfg):
+    """Sensor bodies + a flat target at the gel surface distance, centered on the camera axis."""
+    cam_cfg = cfg.sensor_camera_cfg
     target_cfg = sim_utils.CuboidCfg(
         size=(
             TARGET_FRACTION * cam_cfg.view_width_m,
@@ -99,8 +112,8 @@ def _build_scene(group_idx: int, name: str, cam_cfg: GelSightSensorCfg.SensorCam
     )
     ox, oy, oz = cam_cfg.camera_pos_offset
     # camera looks along +Z of the sensor frame (camera_rot_offset = 180 deg about X, OpenGL convention);
-    # the target's near face lies at _target_distance (just in front of the focus distance)
-    target_pos = (ox, oy, oz + _target_distance(cam_cfg) + TARGET_THICKNESS_M / 2)
+    # the target's near face lies at _target_distance (just in front of the gel surface distance)
+    target_pos = (ox, oy, oz + _target_distance(cfg) + TARGET_THICKNESS_M / 2)
     for env_id in range(NUM_ENVS):
         env_path = f"/World/{name}/env_{env_id}"
         sim_utils.create_prim(env_path, "Xform", translation=(env_id * 1.0, group_idx * 1.0, 0.0))
@@ -112,11 +125,11 @@ def _build_scene(group_idx: int, name: str, cam_cfg: GelSightSensorCfg.SensorCam
 def sensors():
     sim_utils.create_new_stage()
     sim = sim_utils.SimulationContext(sim_utils.SimulationCfg(dt=DT, device="cuda"))
-    for group_idx, (name, cam_cfg) in enumerate(CAMERA_CFGS.items()):
-        _build_scene(group_idx, name, cam_cfg)
+    for group_idx, (name, cfg) in enumerate(SENSOR_CFGS.items()):
+        _build_scene(group_idx, name, cfg)
     sim_utils.update_stage()
 
-    sensors = {name: GelSightSensor(_sensor_cfg(name, cam_cfg)) for name, cam_cfg in CAMERA_CFGS.items()}
+    sensors = {name: GelSightSensor(_sensor_cfg(name, cfg)) for name, cfg in SENSOR_CFGS.items()}
     sim.reset()
     for _ in range(NUM_WARMUP_STEPS):
         sim.step()
@@ -126,15 +139,23 @@ def sensors():
     # no stage teardown (see test_simulation_approaches.py)
 
 
-def _intrinsics_view(sensor: GelSightSensor, cam_cfg: GelSightSensorCfg.SensorCameraCfg) -> tuple[float, float]:
-    """View size (m) at the focus distance from the camera's focal length in pixels (pinhole: px * d / f_px)."""
-    width_px, height_px = cam_cfg.resolution
+def _intrinsics_view(sensor: GelSightSensor) -> tuple[float, float]:
+    """View size (m) at the gel surface from the camera's focal length in pixels (pinhole: px * d / f_px)."""
+    width_px, height_px = sensor.cfg.sensor_camera_cfg.resolution
+    d = _focus_distance(sensor.cfg)
     K = sensor.camera.data.intrinsic_matrices[0]
-    return width_px * cam_cfg.focus_distance_m / K[0, 0].item(), height_px * cam_cfg.focus_distance_m / K[1, 1].item()
+    return width_px * d / K[0, 0].item(), height_px * d / K[1, 1].item()
 
 
-def _save_figure(name: str, sensor: GelSightSensor, depth_m: torch.Tensor, exp_px: tuple, meas_box: tuple,
-                 rendered_view_m: tuple, passed: bool) -> Path:
+def _save_figure(
+    name: str,
+    sensor: GelSightSensor,
+    depth_m: torch.Tensor,
+    exp_px: tuple,
+    meas_box: tuple,
+    rendered_view_m: tuple,
+    passed: bool,
+) -> Path:
     """Writes the rendered depth (with expected vs. measured target box) and the view footprint in mm."""
     import matplotlib
 
@@ -146,11 +167,12 @@ def _save_figure(name: str, sensor: GelSightSensor, depth_m: torch.Tensor, exp_p
     c_cfg, c_meas, c_intr = "#2a78d6", "#eb6834", "#1baf7a"
     ink, muted, gel_fill, gel_edge = "#0b0b0b", "#6f6d68", "#efeee9", "#b4b2a8"
 
-    cam_cfg = CAMERA_CFGS[name]
+    cfg = SENSOR_CFGS[name]
+    cam_cfg = cfg.sensor_camera_cfg
     width_px, height_px = cam_cfg.resolution
     exp_w, exp_h = exp_px
     c0, c1, r0, r1 = meas_box
-    intr_w, intr_h = _intrinsics_view(sensor, cam_cfg)
+    intr_w, intr_h = _intrinsics_view(sensor)
 
     fig, (ax_img, ax_mm) = plt.subplots(1, 2, figsize=(12, 4.8), gridspec_kw={"width_ratios": [1.1, 1]})
     fig.patch.set_facecolor("#fcfcfb")
@@ -161,17 +183,38 @@ def _save_figure(name: str, sensor: GelSightSensor, depth_m: torch.Tensor, exp_p
     cbar.set_label("depth (mm)", color=muted)
     cx, cy = (width_px - 1) / 2, (height_px - 1) / 2
     # measured (thick, below) and expected (thin dashed, on top): when both agree, the dashes sit on the solid line
-    ax_img.add_patch(Rectangle((c0 - 0.5, r0 - 0.5), c1 - c0 + 1, r1 - r0 + 1, fill=False, ec=c_meas, lw=3.5,
-                               label=f"measured {c1 - c0 + 1:.0f} x {r1 - r0 + 1:.0f} px", zorder=3))
-    ax_img.add_patch(Rectangle((cx - exp_w / 2, cy - exp_h / 2), exp_w, exp_h, fill=False, ec=c_cfg, lw=1.5, ls="--",
-                               label=f"expected {exp_w:.1f} x {exp_h:.1f} px", zorder=4))
+    ax_img.add_patch(
+        Rectangle(
+            (c0 - 0.5, r0 - 0.5),
+            c1 - c0 + 1,
+            r1 - r0 + 1,
+            fill=False,
+            ec=c_meas,
+            lw=3.5,
+            label=f"measured {c1 - c0 + 1:.0f} x {r1 - r0 + 1:.0f} px",
+            zorder=3,
+        )
+    )
+    ax_img.add_patch(
+        Rectangle(
+            (cx - exp_w / 2, cy - exp_h / 2),
+            exp_w,
+            exp_h,
+            fill=False,
+            ec=c_cfg,
+            lw=1.5,
+            ls="--",
+            label=f"expected {exp_w:.1f} x {exp_h:.1f} px",
+            zorder=4,
+        )
+    )
     ax_img.plot([cx], [cy], marker="+", ms=10, mew=1.5, color=c_cfg)
     ax_img.set_title(f"Rendered depth, env 0 ({width_px} x {height_px} px)", color=ink, fontsize=11, loc="left")
     ax_img.set_xlabel("x (px)", color=muted)
     ax_img.set_ylabel("y (px)", color=muted)
     ax_img.legend(loc="lower left", fontsize=8, frameon=True, framealpha=0.9)
 
-    # -- right: footprint at the focus distance in mm, centred on the camera axis
+    # -- right: footprint at the gel surface in mm, centred on the camera axis
     gel_len = sensor.cfg.gelpad_dimensions.length * 1000  # along the image width (as in the old view config)
     gel_wid = sensor.cfg.gelpad_dimensions.width * 1000
 
@@ -181,8 +224,15 @@ def _save_figure(name: str, sensor: GelSightSensor, depth_m: torch.Tensor, exp_p
     box(gel_len, gel_wid, fc=gel_fill, ec=gel_edge, lw=1, label=f"gelpad {gel_len:.2f} x {gel_wid:.2f} mm")
     vw, vh = cam_cfg.view_width_m * 1000, cam_cfg.view_height_m * 1000
     box(vw, vh, fill=False, ec=c_cfg, lw=2, ls="--", label=f"configured view {vw:.2f} x {vh:.2f} mm")
-    box(intr_w * 1000, intr_h * 1000, fill=False, ec=c_intr, lw=2, ls=":",
-        label=f"from intrinsics {intr_w * 1000:.2f} x {intr_h * 1000:.2f} mm")
+    box(
+        intr_w * 1000,
+        intr_h * 1000,
+        fill=False,
+        ec=c_intr,
+        lw=2,
+        ls=":",
+        label=f"from intrinsics {intr_w * 1000:.2f} x {intr_h * 1000:.2f} mm",
+    )
     rw, rh = rendered_view_m[0] * 1000, rendered_view_m[1] * 1000
     box(rw, rh, fc=c_meas, alpha=0.15, ec=c_meas, lw=2, label=f"implied by rendering {rw:.2f} x {rh:.2f} mm")
     half_w = max(gel_len, vw, rw, intr_w * 1000) / 2 * 1.08
@@ -192,8 +242,9 @@ def _save_figure(name: str, sensor: GelSightSensor, depth_m: torch.Tensor, exp_p
     ax_mm.set_aspect("equal")
     ax_mm.grid(color="#e1e0d9", lw=0.6)
     ax_mm.set_axisbelow(True)
-    ax_mm.set_title(f"View footprint at focus distance {cam_cfg.focus_distance_m * 1000:.1f} mm", color=ink,
-                    fontsize=11, loc="left")
+    ax_mm.set_title(
+        f"View footprint at gel surface {_focus_distance(cfg) * 1000:.1f} mm", color=ink, fontsize=11, loc="left"
+    )
     ax_mm.set_xlabel("x (mm)", color=muted)
     ax_mm.set_ylabel("y (mm)", color=muted)
     ax_mm.legend(loc="upper center", bbox_to_anchor=(0.5, -0.16), ncol=2, fontsize=8, frameon=False)
@@ -203,9 +254,15 @@ def _save_figure(name: str, sensor: GelSightSensor, depth_m: torch.Tensor, exp_p
         for spine in ax.spines.values():
             spine.set_color("#c3c2b7")
     verdict = "PASS" if passed else "FAIL"
-    fig.suptitle(f"Sensor camera view: {name}  [{verdict}]  (mm_per_pixel {cam_cfg.mm_per_pixel},"
-                 f" reference {cam_cfg.reference_img_res[0]} x {cam_cfg.reference_img_res[1]} px)",
-                 x=0.01, ha="left", color=ink, fontsize=12, fontweight="semibold")
+    fig.suptitle(
+        f"Sensor camera view: {name}  [{verdict}]  (mm_per_pixel {cam_cfg.mm_per_pixel},"
+        f" reference {cam_cfg.reference_img_res[0]} x {cam_cfg.reference_img_res[1]} px)",
+        x=0.01,
+        ha="left",
+        color=ink,
+        fontsize=12,
+        fontweight="semibold",
+    )
     fig.tight_layout()
 
     FIGURE_DIR.mkdir(parents=True, exist_ok=True)
@@ -215,13 +272,13 @@ def _save_figure(name: str, sensor: GelSightSensor, depth_m: torch.Tensor, exp_p
     return path
 
 
-@pytest.mark.parametrize("name", CAMERA_CFGS.keys())
+@pytest.mark.parametrize("name", SENSOR_CFGS.keys())
 def test_view_size_from_intrinsics(sensors, name):
-    cam_cfg = CAMERA_CFGS[name]
+    cam_cfg = SENSOR_CFGS[name].sensor_camera_cfg
     width_px, height_px = cam_cfg.resolution
-    view_w, view_h = _intrinsics_view(sensors[name], cam_cfg)
+    view_w, view_h = _intrinsics_view(sensors[name])
     print(
-        f"\n[{name}] intrinsics: view at focus distance = {view_w * 1000:.3f} x {view_h * 1000:.3f} mm"
+        f"\n[{name}] intrinsics: view at gel surface = {view_w * 1000:.3f} x {view_h * 1000:.3f} mm"
         f" (cfg {cam_cfg.view_width_m * 1000:.3f} x {cam_cfg.view_height_m * 1000:.3f} mm),"
         f" mm/px = {view_w * 1000 / width_px:.4f} x {view_h * 1000 / height_px:.4f}"
     )
@@ -229,9 +286,10 @@ def test_view_size_from_intrinsics(sensors, name):
     assert view_h == pytest.approx(cam_cfg.view_height_m, rel=REL_TOL_INTRINSICS), "view height"
 
 
-@pytest.mark.parametrize("name", CAMERA_CFGS.keys())
+@pytest.mark.parametrize("name", SENSOR_CFGS.keys())
 def test_view_size_rendered(sensors, name):
-    cam_cfg = CAMERA_CFGS[name]
+    cfg = SENSOR_CFGS[name]
+    cam_cfg = cfg.sensor_camera_cfg
     width_px, height_px = cam_cfg.resolution
     far = cam_cfg.clipping_range_m[1]
 
@@ -245,13 +303,13 @@ def test_view_size_rendered(sensors, name):
         rows = torch.nonzero(hit.any(dim=1)).flatten().float()
 
         meas_w_px, meas_h_px = len(cols), len(rows)
-        # target spans TARGET_FRACTION of the view at the focus distance -> appears larger by focus / d when closer
-        scale = cam_cfg.focus_distance_m / _target_distance(cam_cfg)
+        # target spans TARGET_FRACTION of the view at the gel surface -> appears larger by surface / d when closer
+        scale = _focus_distance(cfg) / _target_distance(cfg)
         exp_w_px, exp_h_px = TARGET_FRACTION * scale * width_px, TARGET_FRACTION * scale * height_px
         center_col, center_row = (cols.min() + cols.max()).item() / 2, (rows.min() + rows.max()).item() / 2
         target_depth = depth[env_id][hit].median().item()
 
-        # physical view size at the focus distance implied by the rendering
+        # physical view size at the gel surface implied by the rendering
         view_w = TARGET_FRACTION * cam_cfg.view_width_m * scale * width_px / meas_w_px
         view_h = TARGET_FRACTION * cam_cfg.view_height_m * scale * height_px / meas_h_px
         if env_id == 0:
@@ -283,7 +341,7 @@ def test_view_size_rendered(sensors, name):
         assert meas_h_px == pytest.approx(exp_h_px, abs=PX_TOL), f"env {env_id}: rendered height"
         assert center_col == pytest.approx((width_px - 1) / 2, abs=PX_TOL), f"env {env_id}: horizontal center"
         assert center_row == pytest.approx((height_px - 1) / 2, abs=PX_TOL), f"env {env_id}: vertical center"
-        assert target_depth == pytest.approx(_target_distance(cam_cfg), abs=DEPTH_TOL_M), f"env {env_id}: depth"
+        assert target_depth == pytest.approx(_target_distance(cfg), abs=DEPTH_TOL_M), f"env {env_id}: depth"
 
 
 if __name__ == "__main__":

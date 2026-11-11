@@ -28,6 +28,25 @@ class GelSightSensorCfg(SensorBaseCfg):
     case_dimensions: Dimensions = Dimensions()
     gelpad_dimensions: Dimensions = Dimensions()
 
+    gelpad_underside_to_camera_distance_m: float = 0.024
+    """Distance from the sensor camera to the underside of the gelpad, along the viewing direction (in meters).
+
+    Together with ``gelpad_dimensions.height`` this places the undeformed gel surface in front of the camera
+    (see :meth:`get_gel_surface_to_camera_distance_m`). The height map is measured relative to that surface.
+
+    Defaults to 0.024 for the GelSight Mini (camera at the bottom of the case, 24 mm below the gelpad).
+    """
+
+    # a method, not a property: configclass tries to assign inherited properties in subclasses (e.g. preset cfgs)
+    def get_gel_surface_to_camera_distance_m(self) -> float:
+        """Distance from the sensor camera to the undeformed gel surface (in meters).
+
+        ``gelpad_underside_to_camera_distance_m + gelpad_dimensions.height``. The sensor camera's far clipping plane
+        must be at or behind it. The camera view (``view_width_m`` x ``view_height_m``) is defined at this distance:
+        the camera apertures are computed from it, and it is also passed to USD as the camera's focus distance.
+        """
+        return self.gelpad_underside_to_camera_distance_m + self.gelpad_dimensions.height
+
     max_indentation_depth: float = 0.0
     """The maximum indentation depth in [m].
     
@@ -43,6 +62,12 @@ class GelSightSensorCfg(SensorBaseCfg):
         resolution: tuple[int, int] = (32, 24)
         data_types: list[str] = ["depth"]
         clipping_range_m: tuple[float, float] = (0.024, 0.028)
+        """Near and far clipping plane of the sensor camera (in meters).
+
+        Only limits what is rendered; the gel geometry is defined by
+        :attr:`GelSightSensorCfg.gelpad_underside_to_camera_distance_m` and ``gelpad_dimensions``. The far plane must be
+        at or behind the gel surface, otherwise the undeformed gel reads as indented.
+        """
         update_latest_camera_pose: bool = False
 
         camera_pos_offset: tuple[float, float, float] = (0.0000, -0.0001, 0.0)
@@ -81,7 +106,8 @@ class GelSightSensorCfg(SensorBaseCfg):
         """Focal length of the sensor camera (in centimeters).
 
         Does not change what the camera sees: the apertures are computed as
-        ``view_size * focal_length / focus_distance_m``, so the view at the focus distance is always
+        ``view_size * focal_length / gel_surface_distance`` (see
+        :meth:`GelSightSensorCfg.get_gel_surface_to_camera_distance_m`), so the view at the gel surface is always
         ``view_width_m`` x ``view_height_m`` (set via ``mm_per_pixel`` and ``reference_img_res``).
 
         To compare simulated tactile images of known indenters with real ones, use
@@ -89,15 +115,9 @@ class GelSightSensorCfg(SensorBaseCfg):
         checks the camera view.
         """
 
-        focus_distance_m: float = 0.024 + 0.004
-        """Distance from camera to focus plane (in meters). 
-        
-        Determines where the FOV of the sensor camera is.
-        Should be at highest point of the gelpad (e.g. for GsMini thats 2.5cm due to sensor case height + gelpad height 4mm)"""
-
         @property
         def view_width_m(self) -> float:
-            """Physical width of the camera view at ``focus_distance_m`` (in meters).
+            """Physical width of the camera view at the undeformed gel surface (in meters).
 
             Computed as ``reference_img_res[0] * mm_per_pixel``, i.e. the area of the real (already border-cropped)
             tactile image. No border cropping is applied in simulation: the camera renders the cropped view directly.
@@ -106,7 +126,7 @@ class GelSightSensorCfg(SensorBaseCfg):
 
         @property
         def view_height_m(self) -> float:
-            """Physical height of the camera view at ``focus_distance_m`` (in meters).
+            """Physical height of the camera view at the undeformed gel surface (in meters).
 
             Computed as ``reference_img_res[1] * mm_per_pixel`` (same scale as the width, i.e. square pixels).
             The simulated camera ``resolution`` should have the same aspect ratio as ``reference_img_res``,
