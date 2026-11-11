@@ -39,7 +39,9 @@ from tacex import GelSightSensor, GelSightSensorCfg
 from tacex.simulation_approaches.fots import FOTSMarkerSimulator
 from tacex.simulation_approaches.gpu_taxim import TaximSimulator
 from tacex.simulation_approaches.pix2pix import Pix2PixSimulator
+from tacex.simulation_approaches.tacsl.tacsl_sim import TacSLSimulator  # not via the package: no silent ImportError
 
+from tacex_assets.sensors.gelsight_mini.gsmini_tacsl import GELSIGHT_MINI_TACSL_CFG
 from tacex_assets.sensors.gelsight_mini import (
     GELSIGHT_MINI_PIX2PIX_CFG,
     GELSIGHT_MINI_TAXIM_CFG,
@@ -92,6 +94,7 @@ def _cfg(base_cfg: GelSightSensorCfg, group: str, **overrides) -> GelSightSensor
 SENSOR_CFGS: dict[str, GelSightSensorCfg] = {
     "taxim": _cfg(GELSIGHT_MINI_TAXIM_CFG, "taxim", data_types=["tactile_rgb", "height_map"]),
     "pix2pix": _cfg(GELSIGHT_MINI_PIX2PIX_CFG, "pix2pix", data_types=["tactile_rgb", "height_map"]),
+    "tacsl": _cfg(GELSIGHT_MINI_TACSL_CFG, "tacsl", data_types=["tactile_rgb", "height_map"]),
     "fots": _cfg(
         GELSIGHT_MINI_TAXIM_FOTS_CFG,
         "fots",
@@ -100,7 +103,7 @@ SENSOR_CFGS: dict[str, GelSightSensorCfg] = {
     ),
 }
 
-OPTICAL_APPROACHES = {"taxim": TaximSimulator, "pix2pix": Pix2PixSimulator}
+OPTICAL_APPROACHES = {"taxim": TaximSimulator, "pix2pix": Pix2PixSimulator, "tacsl": TacSLSimulator}
 
 
 """

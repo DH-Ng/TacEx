@@ -47,11 +47,6 @@ class TaximSimulator(GelSightSimulator):
         It is used for shifting the height map for the Taxim simulation.
         """
 
-        self.tactile_rgb_img = torch.zeros(
-            (self.sensor._num_envs, self.cfg.tactile_img_res[1], self.cfg.tactile_img_res[0], 3),
-            device=self._device,
-        )
-
         # torch backend is required: this wrapper (and FOTS) operate on torch tensors
         self._taxim: Taxim = Taxim(
             calib_folder=calib_folder, backend="torch", device=self._device, params=self.cfg.taxim_parameters
@@ -69,16 +64,34 @@ class TaximSimulator(GelSightSimulator):
         # last dim should be channels for isaac
         self.background_img = self.background_img.movedim(0, 2)
 
-        # use background as initial tactile_rgb_img
-        self.tactile_rgb_img[:] = self.background_img
-
         # if camera resolution is different than the tactile RGB res, scale img
         self.img_res = self.cfg.tactile_img_res
 
-    def optical_simulation(self):
-        """Returns simulation output of Taxim optical simulation.
+        # no-contact image (written into the output by reset): the simulation of an undeformed gel, i.e. a zero height
+        # map without indentation (rendering is independent per env, so one env suffices)
+        w, h = self.cfg.tactile_img_res
+        self._rest_img = self._render(
+            torch.zeros((1, h, w), device=self._device), torch.zeros(1, device=self._device)
+        )[0]
 
-        Images have the shape (num_envs, height, width, channels) and values in range [0, 255].
+    def get_output_shape(self, data_type: str) -> tuple[int, ...]:
+        if data_type != "tactile_rgb":
+            return super().get_output_shape(data_type)
+        return (self.cfg.tactile_img_res[1], self.cfg.tactile_img_res[0], 3)
+
+    def _render(self, height_map: torch.Tensor, press_depth: torch.Tensor) -> torch.Tensor:
+        """Taxim images (N, height, width, 3) for height maps (N, height, width) at the tactile image resolution."""
+        return self._taxim.render_direct(
+            height_map,
+            with_shadow=self.cfg.with_shadow,
+            press_depth=press_depth,
+            orig_hm_fmt=False,
+        ).movedim(1, 3)  # *255).type(torch.uint8)
+
+    def optical_simulation(self):
+        """Simulates the Taxim tactile images into the sensor's ``tactile_rgb`` buffer.
+
+        Images have the shape (num_envs, height, width, channels).
         """
         height_map = self.sensor._data.output["height_map"]
 
@@ -99,14 +112,8 @@ class TaximSimulator(GelSightSimulator):
         #         orig_hm_fmt=False,
         #     ).movedim(1, 3) #*255).type(torch.uint8)
 
-        self.tactile_rgb_img[:] = self._taxim.render_direct(
-            height_map[:],
-            with_shadow=self.cfg.with_shadow,
-            press_depth=self.sensor._indentation_depth,
-            orig_hm_fmt=False,
-        ).movedim(1, 3)  # *255).type(torch.uint8)
-
-        return self.tactile_rgb_img
+        out = self._output_buffers["tactile_rgb"]
+        out[:] = self._render(height_map[:], self.sensor._indentation_depth).to(out.device)
 
     def compute_indentation_depth(self):
         height_map = self.sensor._data.output["height_map"]
@@ -124,7 +131,7 @@ class TaximSimulator(GelSightSimulator):
         return self._indentation_depth
 
     def reset(self, env_ids: Sequence[int] | None = None):
-        """Sets the background tactile rgb image (i.e., no-contact) to the given env_ids.
+        """Writes the no-contact tactile image (simulated undeformed gel) into the env_ids rows of the output.
 
         Assumes that sensor is in no-contact (users responsibility)."""
 
@@ -132,7 +139,9 @@ class TaximSimulator(GelSightSimulator):
             env_ids = self.sensor._ALL_INDICES
 
         self._indentation_depth[env_ids] = 0.0
-        self.tactile_rgb_img[env_ids] = self.background_img
+        out = self._output_buffers.get("tactile_rgb")
+        if out is not None:
+            out[env_ids] = self._rest_img.to(out.device)
 
     def _set_debug_vis_impl(self, debug_vis: bool):
         """Creates an USD attribute for the sensor asset, which can visualize the tactile image.

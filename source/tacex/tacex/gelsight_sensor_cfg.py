@@ -153,13 +153,25 @@ class GelSightSensorCfg(SensorBaseCfg):
         - dim = 2: marker pos (x,y) in the image (x = width, y = height)
     - camera_depth: depth image from the sensor camera
     - camera_rgb: rgb image from the sensor camera
+    - force_field: per-point contact forces on the gelpad surface (requires ``force_field_sim_cfg``).
+        Dict of tensors, keys and shapes defined by the force field simulator (e.g. TacSL:
+        ``points_pos_w`` (num_envs, P, 3), ``penetration_depth`` (num_envs, P), ``normal_force`` (num_envs, P),
+        ``shear_force`` (num_envs, P, 2)).
     """
 
-    optical_sim_cfg: GelSightSimulatorCfg = None  # freely choose what simulation class, but can also be left None
+    optical_sim_cfg: GelSightSimulatorCfg | None = (
+        None  # freely choose what simulation class, but can also be left None
+    )
     """Cfg class of the optical simulator you want to use."""
 
-    marker_motion_sim_cfg: GelSightSimulatorCfg = None
+    marker_motion_sim_cfg: GelSightSimulatorCfg | None = None
     """Cfg class of the marker motion simulator you want to use."""
+
+    force_field_sim_cfg: GelSightSimulatorCfg | None = None
+    """Cfg class of the force field simulator you want to use (e.g. TacSL).
+
+    If it names the same simulation class as another slot, the existing simulator instance is reused.
+    """
 
     compute_indentation_depth_class: Literal["optical_sim", "marker_motion_sim", "default"] = "default"
     """Defines which approach is used for computing the indentation depth.

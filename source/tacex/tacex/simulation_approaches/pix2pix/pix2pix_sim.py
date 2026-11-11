@@ -111,13 +111,23 @@ class Pix2PixSimulator(GelSightSimulator):
             self.generator_model.cuda()
         self.generator_model.eval()  # - somehow worse image simulation with eval mode -> due to skip connections disabled
 
-        self.tactile_rgb_img = torch.zeros(
-            (self.sensor._num_envs, self.cfg.tactile_img_res[1], self.cfg.tactile_img_res[0], 3),
-            device=self._device,
-        )
+        # no-contact image (written into the output by reset): the network output for an undeformed gel, i.e. a zero
+        # height map at the camera resolution (eval mode: independent per env, so one env suffices)
+        cam_h, cam_w = self.sensor._data.output["height_map"].shape[1:]
+        self._rest_img = self._render(torch.zeros((1, cam_h, cam_w), device=self.sensor._device))[0]
+
+    def get_output_shape(self, data_type: str) -> tuple[int, ...]:
+        if data_type != "tactile_rgb":
+            return super().get_output_shape(data_type)
+        return (self.cfg.tactile_img_res[1], self.cfg.tactile_img_res[0], 3)
 
     def optical_simulation(self):
-        height_map = self.sensor._data.output["height_map"]
+        """Simulates the tactile images into the sensor's ``tactile_rgb`` buffer (num_envs, height, width, 3)."""
+        out = self._output_buffers["tactile_rgb"]
+        out[:] = self._render(self.sensor._data.output["height_map"]).to(out.device)
+
+    def _render(self, height_map: torch.Tensor) -> torch.Tensor:
+        """Tactile images (N, height, width, 3) in [0, 1] for height maps (N, cam height, cam width) in mm."""
         # up/downscale height map if camera res different than tactile img res
         # if (height_map.shape[1], height_map.shape[2]) != (self.config["img_height"], self.config["img_width"]):
         #     height_map = F.resize(height_map, (self.config["img_height"], self.config["img_width"]))
@@ -182,13 +192,13 @@ class Pix2PixSimulator(GelSightSimulator):
         # test = cv2.cvtColor(test, cv2.COLOR_BGR2RGB)
         # cv2.imwrite("test.png", test)
 
-        self.tactile_rgb_img[:] = pix2pix_output
-        return self.tactile_rgb_img
+        return pix2pix_output
 
     def reset(self, env_ids: Sequence[int] | None = None):
-        """Pix2Pix is stateless: the no-contact image is produced by the sensor calling
-        :meth:`optical_simulation` with the zeroed height map of ``env_ids``."""
-        pass
+        """Stateless: writes the no-contact image into the env_ids rows of the output."""
+        out = self._output_buffers.get("tactile_rgb")
+        if out is not None:
+            out[slice(None) if env_ids is None else env_ids] = self._rest_img.to(out.device)
 
     # def __process_initial_frame(self, f0: torch.Tensor):
     #     """

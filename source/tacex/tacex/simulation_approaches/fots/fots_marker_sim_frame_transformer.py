@@ -87,17 +87,8 @@ class FOTSMarkerFrameTransformerSimulator(GelSightSimulator):
         # if camera resolution is different than the tactile RGB res, scale img
         self.img_res = self.cfg.tactile_img_res
 
-        # create buffers
-        self.marker_data = torch.zeros(
-            (self.sensor._num_envs, 2, self.cfg.marker_params.num_markers, 2), device=self._device
-        )
-        """Marker flow data. Shape is [num_envs, 2, num_markers, 2]
-
-        dim=1: [initial, current] marker positions
-        dim=3: [x,y] values of the markers in the image of the sensor.
-        """
-        # set initial marker pos
-        self.marker_data[:, 0] = torch.tensor(self.init_marker_pos, device=self._device)
+        # initial marker positions (num_markers, 2), written into the output by reset
+        self._init_marker_pos_t = torch.tensor(self.init_marker_pos, dtype=torch.float32)
 
         self.sensor._data.output["traj"] = []
         for _ in range(self.sensor._num_envs):
@@ -112,7 +103,15 @@ class FOTSMarkerFrameTransformerSimulator(GelSightSimulator):
         # for visualization of the markers
         self.patch_array_dict = copy.deepcopy(generate_patch_array())
 
+    def get_output_shape(self, data_type: str) -> tuple[int, ...]:
+        if data_type != "marker_motion":
+            return super().get_output_shape(data_type)
+        return (2, self.cfg.marker_params.num_markers, 2)
+
     def marker_motion_simulation(self):
+        """Simulates the marker positions into the sensor's ``marker_motion`` buffer (num_envs, 2, num_markers, 2):
+        dim 1 = [initial, current] marker positions, last dim = [x, y] position in the tactile image."""
+        out = self._output_buffers["marker_motion"]
         self._indentation_depth = self.sensor._indentation_depth
         height_map = self.sensor._data.output[
             "height_map"
@@ -173,9 +172,7 @@ class FOTSMarkerFrameTransformerSimulator(GelSightSimulator):
                 marker_y_pos = self.marker_motion_sim.init_marker_y_pos
 
             marker_pos = np.stack((marker_x_pos, marker_y_pos), axis=-1).reshape(-1, 2)
-            self.marker_data[env_id, 1] = torch.tensor(marker_pos, device=self._device)
-
-        return self.marker_data
+            out[env_id, 1] = torch.tensor(marker_pos, device=out.device)
 
     # def compute_indentation_depth(self):
     #     self.height_map = self.height_map / 1000 # convert height map from mm to meter
@@ -203,10 +200,14 @@ class FOTSMarkerFrameTransformerSimulator(GelSightSimulator):
         env_ids = torch.as_tensor(env_ids, dtype=torch.long).cpu()
         for env_id in env_ids.tolist():
             self.sensor._data.output["traj"][env_id] = []
-        env_ids = env_ids.to(self._device)
-        self.theta[env_ids] = 0.0
-        # current marker pos = initial marker pos
-        self.marker_data[env_ids, 1] = self.marker_data[env_ids, 0]
+        self.theta[env_ids.to(self.theta.device)] = 0.0
+        # initial and current marker pos = initial marker pos
+        out = self._output_buffers.get("marker_motion")
+        if out is not None:
+            init_pos = self._init_marker_pos_t.to(out.device)
+            out_ids = env_ids.to(out.device)
+            out[out_ids, 0] = init_pos
+            out[out_ids, 1] = init_pos
 
     def _set_debug_vis_impl(self, debug_vis: bool):
         """Creates an USD attribute for the sensor asset, which can visualize the tactile image.

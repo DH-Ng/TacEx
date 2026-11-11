@@ -28,6 +28,7 @@ from .simulation_approaches.gelsight_simulator import GelSightSimulator
 
 if TYPE_CHECKING:
     from .gelsight_sensor_cfg import GelSightSensorCfg
+    from .simulation_approaches.gelsight_simulator_cfg import GelSightSimulatorCfg
 
 logger = logging.getLogger(__name__)
 
@@ -53,6 +54,7 @@ class GelSightSensor(SensorBase):
         # simulation approaches for simulating GelSight sensor output
         self.optical_simulator: GelSightSimulator = None
         self.marker_motion_simulator: GelSightSimulator = None
+        self.force_field_simulator: GelSightSimulator = None
         self.compute_indentation_depth_func = None
 
         # Create empty variables for storing output data
@@ -63,24 +65,10 @@ class GelSightSensor(SensorBase):
         self._is_spawned = False
 
         # initialize classes for GelSight simulation approaches for simulating GelSight sensor output
-        if self.cfg.optical_sim_cfg is not None:
-            # initialize class we set in the cfg class of the sim approach
-            self.optical_simulator = self.cfg.optical_sim_cfg.simulation_approach_class(
-                sensor=self,
-                cfg=self.cfg.optical_sim_cfg,
-            )
-
-        if self.cfg.marker_motion_sim_cfg is not None:
-            if (self.optical_simulator is not None) and (
-                self.cfg.optical_sim_cfg.simulation_approach_class
-                == self.cfg.marker_motion_sim_cfg.simulation_approach_class
-            ):
-                # if same class for optical and marker sim, then use same obj
-                self.marker_motion_simulator = self.optical_simulator
-            else:
-                self.marker_motion_simulator = self.cfg.marker_motion_sim_cfg.simulation_approach_class(
-                    sensor=self, cfg=self.cfg.marker_motion_sim_cfg
-                )
+        # (a slot whose cfg names an already created simulation class reuses that instance)
+        self.optical_simulator = self._get_or_create_simulator(self.cfg.optical_sim_cfg)
+        self.marker_motion_simulator = self._get_or_create_simulator(self.cfg.marker_motion_sim_cfg)
+        self.force_field_simulator = self._get_or_create_simulator(self.cfg.force_field_sim_cfg)
 
         # set how the indentation depth should be computed
         if (self.cfg.compute_indentation_depth_class) == "optical_sim" and (self.optical_simulator is not None):
@@ -103,7 +91,28 @@ class GelSightSensor(SensorBase):
         if "marker_motion" in self._data.output and self.cfg.marker_motion_sim_cfg is None:
             raise RuntimeError("Output [marker_motion] not possible with given config: marker_motion = None")
 
+        if "force_field" in self._data.output and self.cfg.force_field_sim_cfg is None:
+            raise RuntimeError("Output [force_field] not possible with given config: force_field_sim_cfg = None")
+
         self._check_camera_aspect_ratio()
+
+    def _get_or_create_simulator(self, sim_cfg: GelSightSimulatorCfg | None) -> GelSightSimulator | None:
+        """Returns the simulator for a cfg slot, reusing an existing instance of the same simulation class."""
+        if sim_cfg is None:
+            return None
+        for simulator in (self.optical_simulator, self.marker_motion_simulator, self.force_field_simulator):
+            if simulator is not None and type(simulator) is sim_cfg.simulation_approach_class:
+                return simulator
+        return sim_cfg.simulation_approach_class(sensor=self, cfg=sim_cfg)
+
+    @property
+    def simulators(self) -> list[GelSightSimulator]:
+        """The distinct simulators of this sensor (a simulator used for several outputs appears once)."""
+        unique = []
+        for simulator in (self.optical_simulator, self.marker_motion_simulator, self.force_field_simulator):
+            if simulator is not None and all(simulator is not s for s in unique):
+                unique.append(simulator)
+        return unique
 
     def _check_camera_aspect_ratio(self):
         """Ensures the sensor camera has the aspect ratio of the real tactile image (``reference_img_res``).
@@ -221,34 +230,39 @@ class GelSightSensor(SensorBase):
         if "camera_depth" in self._data.output:
             self._data.output["camera_depth"][env_ids] = 0
 
-        # simulate optical/marker output, but without indentation (only the rows of env_ids are written)
-        if (self.optical_simulator is not None) and ("tactile_rgb" in self._data.output):
-            self.optical_simulator.reset(env_ids)
-            self._copy_sim_output_into_data_buffer("tactile_rgb", self.optical_simulator.optical_simulation(), env_ids)
+        # reset every simulator once (one instance can serve several outputs). Each writes the no-contact state into
+        # the env_ids rows of its output buffers (no re-simulation, other envs stay untouched).
+        for simulator in self.simulators:
+            simulator.reset(env_ids)
 
         if (self.marker_motion_simulator is not None) and ("marker_motion" in self._data.output):
-            # skip second reset if optical and marker simulator are the same instance
-            if self.marker_motion_simulator is not self.optical_simulator:
-                self.marker_motion_simulator.reset(env_ids)
-            self._copy_sim_output_into_data_buffer(
-                "marker_motion", self.marker_motion_simulator.marker_motion_simulation(), env_ids
-            )
             # (yy_init_pos, xx_init_pos), i.e. along height x width of tactile img
             self._data.output["init_marker_pos"] = ([0], [0])
 
         # Reset the frame count
         self._frame[env_ids] = 0
 
-    def _copy_sim_output_into_data_buffer(self, key: str, sim_output: torch.Tensor, env_ids: Sequence[int]):
-        """Copies the rows ``env_ids`` of a simulator output into the (preallocated) output buffer ``key``.
+    def _simulator_outputs(self) -> list[tuple[str, GelSightSimulator]]:
+        """Requested simulator outputs and the simulator that produces each of them."""
+        outputs = []
+        for data_type, simulator in (
+            ("tactile_rgb", self.optical_simulator),
+            ("marker_motion", self.marker_motion_simulator),
+            ("force_field", self.force_field_simulator),
+        ):
+            if simulator is not None and data_type in self.cfg.data_types:
+                outputs.append((data_type, simulator))
+        return outputs
 
-        Copying (instead of reassigning) keeps the buffer identity stable and leaves other envs untouched.
-        Handles simulators that run on a different device than the sensor.
-        """
-        buffer = self._data.output[key]
-        src_ids = torch.as_tensor(env_ids, device=sim_output.device, dtype=torch.long)
-        dst_ids = torch.as_tensor(env_ids, device=buffer.device, dtype=torch.long)
-        buffer[dst_ids] = sim_output[src_ids].to(device=buffer.device, dtype=buffer.dtype)
+    def _allocate_simulator_output(self, data_type: str, simulator: GelSightSimulator):
+        """Allocates the output buffer of ``data_type`` on the sensor's device and hands it to its simulator."""
+        shape = simulator.get_output_shape(data_type)
+        if isinstance(shape, dict):  # e.g. force_field: one tensor per key
+            buffer = {key: torch.zeros((self._num_envs, *s), device=self._device) for key, s in shape.items()}
+        else:
+            buffer = torch.zeros((self._num_envs, *shape), device=self._device)
+        self._data.output[data_type] = buffer
+        simulator.set_output_buffer(data_type, buffer)
 
     def compute_indentation_depth(self):
         """Computes the indentation depth by takin the minimum value of the height map.
@@ -320,34 +334,17 @@ class GelSightSensor(SensorBase):
             self._data.output["camera_rgb"] = torch.zeros(
                 (self._num_envs, self.camera_resolution[1], self.camera_resolution[0], 3), device=self.cfg.device
             )
-        if "tactile_rgb" in self.cfg.data_types:
-            self._data.output["tactile_rgb"] = torch.zeros(
-                (
-                    self._num_envs,
-                    self.cfg.optical_sim_cfg.tactile_img_res[1],
-                    self.cfg.optical_sim_cfg.tactile_img_res[0],
-                    3,
-                ),
-                device=self.cfg.device,
-            )
-        if "marker_motion" in self.cfg.data_types:
-            self._data.output["marker_motion"] = torch.zeros(
-                (
-                    self._num_envs,
-                    2,
-                    self.cfg.marker_motion_sim_cfg.marker_params.num_markers,
-                    2,  # two, because each marker at (row,col) has position value (y,x)
-                ),
-                device=self.cfg.device,
-            )
         # Initialize sim approaches
-        # NOTE: important, that this happens after output data buffers were initialized, because the simulator classes
-        # write directly into the buffers.
-        if self.optical_simulator is not None:
-            self.optical_simulator._initialize_impl()
+        # NOTE: important, that this happens after the height map buffer was created, because the simulators read it.
+        # Each simulator is initialized once, even if it serves several outputs.
+        for simulator in self.simulators:
+            simulator._initialize_impl()
 
-        if self.marker_motion_simulator is not None:
-            self.marker_motion_simulator._initialize_impl()
+        # The sensor owns the simulator outputs: allocate them on the sensor's device (shapes from the simulators, which
+        # may depend on their initialization, e.g. the number of force field points) and hand them over. The
+        # simulators write into them in place; the no-contact state is written by reset() below.
+        for data_type, simulator in self._simulator_outputs():
+            self._allocate_simulator_output(data_type, simulator)
 
         # Create all env_ids buffer
         self._ALL_INDICES = torch.arange(self._num_envs, device=self._device, dtype=torch.long)
@@ -378,28 +375,44 @@ class GelSightSensor(SensorBase):
 
         self._frame[env_ids] += 1
 
-        # -- update camera buffer
+        # -- update camera data
         if self.camera is not None:
             self.camera._timestamp = self._timestamp
             self.camera.update(dt=0.0, force_recompute=True)  # time comes from the parent sensor (synced above)
+
+            if "camera_depth" in self._data.output:
+                self._get_camera_depth()
+
+            if "camera_rgb" in self._data.output:
+                self._data.output["camera_rgb"][:] = self.camera.data.output["rgb"]
 
         if self.compute_indentation_depth_func is not None:
             # get height map and indentation depth data
             self._get_height_map()
             self._indentation_depth[:] = self.compute_indentation_depth_func()
 
-        if "camera_depth" in self._data.output:
-            self._get_camera_depth()
-
-        if "camera_rgb" in self._data.output:
-            self._data.output["camera_rgb"][:] = self.camera.data.output["rgb"]
-
+        # the simulators write into the sensor's output buffers in place (see _allocate_simulator_output)
         if (self.optical_simulator is not None) and ("tactile_rgb" in self.cfg.data_types):
-            # self.optical_simulator.height_map = self._data.output["height_map"]
-            self._data.output["tactile_rgb"][:] = self.optical_simulator.optical_simulation()
+            self.optical_simulator.optical_simulation()
 
         if (self.marker_motion_simulator is not None) and ("marker_motion" in self.cfg.data_types):
-            self._data.output["marker_motion"][:] = self.marker_motion_simulator.marker_motion_simulation()
+            self.marker_motion_simulator.marker_motion_simulation()
+
+        if (self.force_field_simulator is not None) and ("force_field" in self.cfg.data_types):
+            self.force_field_simulator.force_field_simulation()
+
+    def _simulators_with_requested_outputs(self) -> list[GelSightSimulator]:
+        """Distinct simulators that produce at least one of the requested outputs (for debug visualization)."""
+        requested = []
+        for simulator, data_type in (
+            (self.optical_simulator, "tactile_rgb"),
+            (self.marker_motion_simulator, "marker_motion"),
+            (self.force_field_simulator, "force_field"),
+        ):
+            if simulator is not None and data_type in self.cfg.data_types:
+                if all(simulator is not s for s in requested):
+                    requested.append(simulator)
+        return requested
 
     def _set_debug_vis_impl(self, debug_vis: bool):
         # we actually set the debug_vis in _initialize_impl, since we need the _prim_view, which
@@ -442,6 +455,9 @@ class GelSightSensor(SensorBase):
                 if "marker_motion" in self.cfg.data_types:
                     attr = prim.CreateAttribute("debug_marker_motion", Sdf.ValueTypeNames.Bool)
                     attr.Set(False)
+                if "force_field" in self.cfg.data_types:
+                    attr = prim.CreateAttribute("debug_force_field", Sdf.ValueTypeNames.Bool)
+                    attr.Set(False)
 
             if not hasattr(self, "_windows"):
                 # dict of windows that show the simulated tactile images, if the attribute of the sensor asset is turned on
@@ -458,11 +474,8 @@ class GelSightSensor(SensorBase):
                     self._windows["height_map"] = {}
                     self._img_providers["height_map"] = {}
 
-            if "tactile_rgb" in self.cfg.data_types:
-                self.optical_simulator._set_debug_vis_impl(debug_vis)
-
-            if "marker_motion" in self.cfg.data_types:
-                self.marker_motion_simulator._set_debug_vis_impl(debug_vis)
+            for simulator in self._simulators_with_requested_outputs():
+                simulator._set_debug_vis_impl(debug_vis)
 
             self._debug_vis_is_initialized = True
 
@@ -591,11 +604,8 @@ class GelSightSensor(SensorBase):
                     self._windows["height_map"].pop(str(i)).destroy()
                     self._img_providers["height_map"].pop(str(i)).destroy()
 
-        if "tactile_rgb" in self.cfg.data_types:
-            self.optical_simulator._debug_vis_callback(event)
-
-        if "marker_motion" in self.cfg.data_types:
-            self.marker_motion_simulator._debug_vis_callback(event)
+        for simulator in self._simulators_with_requested_outputs():
+            simulator._debug_vis_callback(event)
 
     """
     Private Helper methods

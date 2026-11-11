@@ -63,33 +63,35 @@ class ManiSkillSimulator(GelSightSimulator):
 
         self.marker_motion_sim._gen_marker_grid()
 
-        # create buffers
-        self.marker_data = torch.zeros(
-            (self.sensor._num_envs, 2, self.cfg.marker_params.num_markers, 2), device=self._device
-        )
-        """Marker flow data. Shape is [num_envs, 2, num_markers, 2]
-
-        dim=1: [initial, current] marker positions
-        dim=3: [x,y] values of the markers
-        """
-
         # for visualization of the markers
         self.patch_array_dict = copy.deepcopy(generate_patch_array())
 
+    def get_output_shape(self, data_type: str) -> tuple[int, ...]:
+        if data_type != "marker_motion":
+            return super().get_output_shape(data_type)
+        return (2, self.cfg.marker_params.num_markers, 2)
+
     def marker_motion_simulation(self):
+        """Simulates the marker flow into the sensor's ``marker_motion`` buffer (num_envs, 2, num_markers, 2):
+        dim 1 = [initial, current] marker positions, last dim = [x, y]. Only env 0 so far."""
         # update camera data
         # self._ALL_INDICES = torch.arange(self.sensor._num_envs, device=self._device, dtype=torch.long)
         # self.camera._update_poses(self._ALL_INDICES) # doesnt update time sampled buffers
         marker_flow = self.marker_motion_sim.gen_marker_flow()
         # todo do it properly for multi env, currently marker flow has shape [2, num_markers, 2] and we want [num_envs, 2, num_markers, 2]
-        self.marker_data[0] = marker_flow
-        return self.marker_data
+        out = self._output_buffers["marker_motion"]
+        out[0] = marker_flow.to(out.device) if torch.is_tensor(marker_flow) else torch.as_tensor(marker_flow)
 
     def reset(self, env_ids: Sequence[int] | None = None):
         if env_ids is None:
             env_ids = range(self._num_envs)
         env_ids = torch.as_tensor(env_ids, dtype=torch.long, device=self._indentation_depth.device)
         self._indentation_depth[env_ids] = 0.0
+        # only env 0 is simulated so far: its output is the current marker flow (as with the former re-simulation on
+        # reset); the other rows stay zero
+        out = self._output_buffers.get("marker_motion")
+        if out is not None and bool((env_ids == 0).any()):
+            self.marker_motion_simulation()
         # self.init_marker_pos = (self.marker_motion_sim.init_marker_x_pos, self.marker_motion_sim.init_marker_y_pos)
 
     def _set_debug_vis_impl(self, debug_vis: bool):
