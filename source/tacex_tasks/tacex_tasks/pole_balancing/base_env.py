@@ -172,7 +172,7 @@ class PoleBalancingEnvCfg(DirectRLEnvCfg):
         sensor_camera_cfg=GeneralGelSightMiniCfg.SensorCameraCfg(
             prim_name="Camera",
             update_period=0,
-            resolution=(32, 32),
+            resolution=(32, 24),  # 4:3 like the real image (obs = camera depth)
             data_types=["depth"],
             clipping_range_m=(0.024, 0.034),
         ),
@@ -235,7 +235,7 @@ class PoleBalancingEnvCfg(DirectRLEnvCfg):
     action_space = 6  # we use relative task_space actions: (dx, dy, dz, droll, dpitch) -> dyaw is omitted
     observation_space = {
         "proprio_obs": 14,  # 16, # 3 for ee pos, 2 for orient (roll, pitch), 2 for init goal-pos (x,y), 5 for actions
-        "vision_obs": [32, 32, 1],  # from tactile sensor
+        "vision_obs": [24, 32, 1],  # (H, W, C) = camera depth from the tactile sensor at sensor_camera_cfg.resolution
     }
     state_space = 0
     action_scale = 0.05  # [cm]

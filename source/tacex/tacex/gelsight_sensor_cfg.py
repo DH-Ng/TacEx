@@ -56,15 +56,34 @@ class GelSightSensorCfg(SensorBaseCfg):
         camera_rot_offset: tuple[float, float, float, float] = (0.0, 1.0, 0.0, 0.0)
         """Quaternion rotation (w, x, y, z) w.r.t. the parent frame. Defaults to (0.0, 1.0, 0.0, 0.0)."""
 
+        mm_per_pixel: float = 0.0634
+        """Scale of the real tactile RGB image in mm/pixel, measured on an image with resolution ``reference_img_res``.
+
+        Together with ``reference_img_res`` this defines the physical area the sensor camera sees
+        (see ``view_width_m``/``view_height_m``).
+
+        Defaults to 0.0634 - the GelSight Mini value for the 320x240 image after cropping 15% from each border
+        (gsrobotics README, measured with a ruler; same value for both axes).
+
+        To measure it yourself, press an object with known dimensions (e.g. a ruler with fine engraved marks or a
+        precise grid) onto the gel, capture the image with the same crop/resize as used for the real sensor and divide a
+        large known distance (in mm) by its length in pixels. Measure along both axes and near the image center.
+        """
+
+        reference_img_res: tuple[int, int] = (320, 240)
+        """Resolution (width, height) of the real tactile image for which ``mm_per_pixel`` was measured.
+
+        Independent of the simulated camera ``resolution``: the physical view stays the same,
+        whatever resolution is rendered.
+        """
+
         focal_length_cm: float = 1.0
         """Focal length of the sensor camera (in centimeters).
         
         Determines the "zoom" in the image, i.e. how big objects appear. 
         Value should be set so that focus_distance and focal_length combination
         leads to appropriate indentation area of known indenters.
-        E.g. 2mm cylinder with pixmm value 0.0634 mm/pix should lead to an tactile rgb image 
-        with an sphere of radius 2/0.0634 = 32 pix). 
-
+ 
         You can use the `taxim_shape_touch.py` script to try out different values.
 
         Note: This value is not used to compute horizontal/vertical aperture.
@@ -76,19 +95,24 @@ class GelSightSensorCfg(SensorBaseCfg):
         Determines where the FOV of the sensor camera is.
         Should be at highest point of the gelpad (e.g. for GsMini thats 2.5cm due to sensor case height + gelpad height 4mm)"""
 
-        view_width_m = 0.02525 * (1 - 0.15)
-        """Physical width of the camera view (in meters).
-        
-        Reduced by 15% to crop borders as with the real GelSight Mini.
-        Original reference width: 0.0186m.
-        """
+        @property
+        def view_width_m(self) -> float:
+            """Physical width of the camera view at ``focus_distance_m`` (in meters).
 
-        view_height_m = 0.02075 * (1 - 0.15)
-        """Physical height of the camera view (in meters). 
-        
-        Reduced by 15% to crop borders as with the real GelSight Mini
-        Original reference height: 0.0143m
-        """
+            Computed as ``reference_img_res[0] * mm_per_pixel``, i.e. the area of the real (already border-cropped)
+            tactile image. No border cropping is applied in simulation: the camera renders the cropped view directly.
+            """
+            return self.reference_img_res[0] * self.mm_per_pixel / 1000.0
+
+        @property
+        def view_height_m(self) -> float:
+            """Physical height of the camera view at ``focus_distance_m`` (in meters).
+
+            Computed as ``reference_img_res[1] * mm_per_pixel`` (same scale as the width, i.e. square pixels).
+            The simulated camera ``resolution`` should have the same aspect ratio as ``reference_img_res``,
+            otherwise the renderer derives the height from the width and the resolution aspect.
+            """
+            return self.reference_img_res[1] * self.mm_per_pixel / 1000.0
 
     sensor_camera_cfg: SensorCameraCfg = SensorCameraCfg()
 

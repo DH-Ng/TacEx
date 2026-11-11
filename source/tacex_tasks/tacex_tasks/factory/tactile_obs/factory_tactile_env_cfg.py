@@ -57,11 +57,9 @@ class ObsRandCfg:
 @configclass
 class FactoryTactileEnvCfg(FactoryIKJointControlEnvCfg):
     debug_vis = True
-    
+
     # num_*: will be overwritten to correspond to obs_order, state_order.
-    observation_space = (
-        21 + 9
-    )  # state observation + vision CNN embedding (3 keypoints with 3 points = 9 values)
+    observation_space = 21 + 9  # state observation + vision CNN embedding (3 keypoints with 3 points = 9 values)
     state_space = (
         72 + 9 + 9
     )  # asymetric states + vision CNN embedding + groundtruth of the CNN embedding (= the keypoints)
@@ -102,9 +100,9 @@ class FactoryTactileEnvCfg(FactoryIKJointControlEnvCfg):
         sensor_camera_cfg=GELSIGHT_MINI_TAXIM_CFG.SensorCameraCfg(
             prim_name="Camera",
             update_period=0,
-            resolution=(32, 32),
+            resolution=(32, 24),  # 4:3 like the real image; tactile_img_res sets the output shape
             data_types=["depth"],
-            clipping_range=(0.024, 0.034),
+            clipping_range_m=(0.024, 0.034),
         ),
         device="cuda",
         debug_vis=True,  # for rendering sensor output in the gui
@@ -124,9 +122,7 @@ class FactoryTactileEnvCfg(FactoryIKJointControlEnvCfg):
 
     tactile_rgb_feature_extractor = TactileRGBFeatureExtractorCfg(
         write_image_to_file=False,
-        save_step_frequency=int(
-            episode_length_s / (1 / 120)
-        ),  # save after each episode
+        save_step_frequency=int(episode_length_s / (1 / 120)),  # save after each episode
     )
 
 

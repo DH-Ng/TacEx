@@ -99,6 +99,27 @@ class GelSightSensor(SensorBase):
         if "marker_motion" in self._data.output and self.cfg.marker_motion_sim_cfg is None:
             raise RuntimeError("Output [marker_motion] not possible with given config: marker_motion = None")
 
+        self._check_camera_aspect_ratio()
+
+    def _check_camera_aspect_ratio(self):
+        """Ensures the sensor camera has the aspect ratio of the real tactile image (``reference_img_res``).
+
+        The renderer uses square pixels: with another aspect ratio the view height follows from the view width and
+        the resolution aspect, so the camera would not see the configured physical area (``view_height_m``).
+        A different output shape is fine, but has to be set via the simulation approach (e.g. ``tactile_img_res``),
+        which resizes the rendered height map.
+        """
+        cam_w, cam_h = self.cfg.sensor_camera_cfg.resolution
+        ref_w, ref_h = self.cfg.sensor_camera_cfg.reference_img_res
+        expected_h = cam_w * ref_h / ref_w
+        if abs(cam_h - expected_h) > 1.0:  # tolerance for integer rounding, e.g. 43x32 for 4:3
+            raise ValueError(
+                f"Sensor camera resolution {cam_w}x{cam_h} must have the aspect ratio of reference_img_res"
+                f" {ref_w}x{ref_h} (expected height ~{expected_h:.1f} px for width {cam_w}). Otherwise the camera"
+                " does not see the configured physical view. To get a different output shape, set the resolution"
+                " of the simulation approach (e.g. tactile_img_res) instead."
+            )
+
     def __del__(self):
         """Unsubscribes from callbacks."""
         # unsubscribe callbacks
@@ -644,22 +665,28 @@ class GelSightSensor(SensorBase):
             pass
 
     def _create_tiled_camera(self) -> TiledCamera:
-        # delete existing camera prim
         prim_path = self.cfg.prim_path + f"/{self.cfg.sensor_camera_cfg.prim_name}"
+        # delete existing camera prim
         # sim_utils.delete_prim(prim_path)
 
-        # compute camera parameters for desired field-of-view
-        fov_width = self.cfg.sensor_camera_cfg.fov_width
-        fov_height = self.cfg.sensor_camera_cfg.fov_height
-        # convert into cm
-        fov_width *= 100.0
-        fov_height *= 100.0
+        if self.cfg.sensor_camera_cfg.update_period != self.cfg.update_period:
+            logger.warning(
+                f"Sensor camera configuration update period ({self.cfg.sensor_camera_cfg.update_period}) is not equal to sensor"
+                f" update period ({self.cfg.update_period}), changing camera update period to match sensor update perod."
+            )
+            self.cfg.sensor_camera_cfg.update_period = self.cfg.update_period
 
-        # use a fixed focal_length value to compute horizontal and vertical aperture
-        # this way we can easily try out different focal length values to adjust the zoom.
-        focal_length = 1
-        horizontal_aperture = fov_width * focal_length / (self.cfg.sensor_camera_cfg.focus_distance * 100)
-        vertical_aperture = fov_height * focal_length / (self.cfg.sensor_camera_cfg.focus_distance * 100)
+        # The physical width/height of the viewable area at the focus distance (in meters).
+        view_width_m = self.cfg.sensor_camera_cfg.view_width_m
+        view_height_m = self.cfg.sensor_camera_cfg.view_height_m
+        focus_dist_m = self.cfg.sensor_camera_cfg.focus_distance_m
+
+        focal_length = self.cfg.sensor_camera_cfg.focal_length_cm
+
+        # Calculate aperture using the pinhole camera ratio:
+        # aperture / focal_length = view_width / focus_distance
+        horizontal_aperture = (view_width_m * focal_length) / focus_dist_m
+        vertical_aperture = (view_height_m * focal_length) / focus_dist_m
 
         self.camera_cfg: TiledCameraCfg = TiledCameraCfg(
             prim_path=prim_path,
@@ -672,14 +699,14 @@ class GelSightSensor(SensorBase):
             width=self.cfg.sensor_camera_cfg.resolution[0],
             height=self.cfg.sensor_camera_cfg.resolution[1],
             data_types=self.cfg.sensor_camera_cfg.data_types,
-            update_latest_camera_pose=self.cfg.sensor_camera_cfg.update_latest_camera_pose,  # needed for FEM based marker sim
+            update_latest_camera_pose=self.cfg.sensor_camera_cfg.update_latest_camera_pose,  # True is needed for FEM based marker sim
             spawn=sim_utils.PinholeCameraCfg(
                 # use user-defined focal length to set proper zoom factor
-                focal_length=self.cfg.sensor_camera_cfg.focal_length,
-                focus_distance=self.cfg.sensor_camera_cfg.focus_distance,
+                focal_length=focal_length,
+                focus_distance=focus_dist_m,
                 horizontal_aperture=horizontal_aperture,
                 vertical_aperture=vertical_aperture,
-                clipping_range=self.cfg.sensor_camera_cfg.clipping_range,
+                clipping_range=self.cfg.sensor_camera_cfg.clipping_range_m,
             ),
             depth_clipping_behavior="max",
         )

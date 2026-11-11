@@ -164,7 +164,7 @@ class BeamTwistEnvCfg(DirectRLEnvCfg):
         sensor_camera_cfg=GELSIGHT_MINI_TAXIM_CFG.SensorCameraCfg(
             prim_name="Camera",
             update_period=0,
-            resolution=(32, 32),
+            resolution=(32, 24),  # 4:3 like the real image; tactile_img_res sets the output shape
             data_types=["depth"],
             clipping_range_m=(0.024, 0.034),
         ),
@@ -185,7 +185,7 @@ class BeamTwistEnvCfg(DirectRLEnvCfg):
         sensor_camera_cfg=GELSIGHT_MINI_TAXIM_CFG.SensorCameraCfg(
             prim_name="Camera",
             update_period=0,
-            resolution=(32, 32),
+            resolution=(32, 24),  # 4:3 like the real image; tactile_img_res sets the output shape
             data_types=["depth"],
             clipping_range_m=(0.024, 0.034),
         ),
