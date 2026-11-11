@@ -29,6 +29,8 @@ from .simulation_approaches.gelsight_simulator import GelSightSimulator
 if TYPE_CHECKING:
     from .gelsight_sensor_cfg import GelSightSensorCfg
 
+logger = logging.getLogger(__name__)
+
 
 class GelSightSensor(SensorBase):
     cfg: GelSightSensorCfg
@@ -171,7 +173,7 @@ class GelSightSensor(SensorBase):
     def indentation_depth(self):
         """How deep objects are inside the gel pad of the sensor.
 
-        Units: [mm]
+        Units are in millimeter.
         """
         return self._indentation_depth
 
@@ -218,18 +220,20 @@ class GelSightSensor(SensorBase):
         if "camera_depth" in self._data.output:
             self._data.output["camera_depth"][env_ids] = 0
 
-        # simulate optical/marker output, but without indentation
+        # simulate optical/marker output, but without indentation (only the rows of env_ids are written)
         if (self.optical_simulator is not None) and ("tactile_rgb" in self._data.output):
-            self._data.output["tactile_rgb"][:] = self.optical_simulator.optical_simulation()
-            self.optical_simulator.reset()
+            self.optical_simulator.reset(env_ids)
+            self._copy_sim_output_into_data_buffer("tactile_rgb", self.optical_simulator.optical_simulation(), env_ids)
 
         if (self.marker_motion_simulator is not None) and ("marker_motion" in self._data.output):
-            # height_map_shifted = self.taxim._get_shifted_height_map(self._indentation_depth, self._data.output["height_map"])
-            self._data.output["marker_motion"][:] = self.marker_motion_simulator.marker_motion_simulation()
+            # skip second reset if optical and marker simulator are the same instance
+            if self.marker_motion_simulator is not self.optical_simulator:
+                self.marker_motion_simulator.reset(env_ids)
+            self._copy_sim_output_into_data_buffer(
+                "marker_motion", self.marker_motion_simulator.marker_motion_simulation(), env_ids
+            )
             # (yy_init_pos, xx_init_pos), i.e. along height x width of tactile img
             self._data.output["init_marker_pos"] = ([0], [0])
-
-            self.marker_motion_simulator.reset()
 
         # Reset the frame count
         self._frame[env_ids] = 0
@@ -306,13 +310,6 @@ class GelSightSensor(SensorBase):
         #         raise RuntimeError("Initializing the camera failed! Please provide a valid argument for `prim_path`.")
         #     sensor_prim_path = self.prim_path
 
-        # initialize sim approaches
-        if self.optical_simulator is not None:
-            self.optical_simulator._initialize_impl()
-
-        if self.marker_motion_simulator is not None:
-            self.marker_motion_simulator._initialize_impl()
-
         # create buffers for output
         if "camera_depth" in self.cfg.data_types:
             self._data.output["camera_depth"] = torch.zeros(
@@ -342,16 +339,24 @@ class GelSightSensor(SensorBase):
                 ),
                 device=self.cfg.device,
             )
+        # Initialize sim approaches
+        # NOTE: important, that this happens after output data buffers were initialized, because the simulator classes
+        # write directly into the buffers.
+        if self.optical_simulator is not None:
+            self.optical_simulator._initialize_impl()
+
+        if self.marker_motion_simulator is not None:
+            self.marker_motion_simulator._initialize_impl()
 
         # Create all env_ids buffer
         self._ALL_INDICES = torch.arange(self._num_envs, device=self._device, dtype=torch.long)
         # Create frame count buffer
         self._frame = torch.zeros(self._num_envs, device=self._device, dtype=torch.long)
 
-        # reset internal buffers
+        # Reset internal buffers
         self.reset()
 
-        # create debug visualization
+        # Create debug visualization
         self._initialize_debug_vis(self._initialize_debug_vis_flag)
 
         # todo print init data
@@ -375,7 +380,7 @@ class GelSightSensor(SensorBase):
         # -- update camera buffer
         if self.camera is not None:
             self.camera._timestamp = self._timestamp
-            self.camera.update(dt=0, force_recompute=True)
+            self.camera.update(dt=0.0, force_recompute=True)  # time comes from the parent sensor (synced above)
 
         if self.compute_indentation_depth_func is not None:
             # get height map and indentation depth data
@@ -636,14 +641,14 @@ class GelSightSensor(SensorBase):
                 :, :, :, 0
             ]  # tiled camera gives us data with shape (num_cameras, height, width, num_channels),
             # clip camera values that are = inf
-            depth_output[torch.isinf(depth_output)] = self.cfg.sensor_camera_cfg.clipping_range[1]
+            depth_output[torch.isinf(depth_output)] = self.cfg.sensor_camera_cfg.clipping_range_m[1]
 
             # add a channel to the depth image for debug_vis
             self._data.output["camera_depth"] = depth_output[:, :, :, None]
 
             # normalize the depth image in clipping range
-            normalized = (self._data.output["camera_depth"] - self.cfg.sensor_camera_cfg.clipping_range[0]) / (
-                self.cfg.sensor_camera_cfg.clipping_range[1] - self.cfg.sensor_camera_cfg.clipping_range[0]
+            normalized = (self._data.output["camera_depth"] - self.cfg.sensor_camera_cfg.clipping_range_m[0]) / (
+                self.cfg.sensor_camera_cfg.clipping_range_m[1] - self.cfg.sensor_camera_cfg.clipping_range_m[0]
             )
             normalized = (normalized * 255).type(dtype=torch.uint8)
             self._data.output["camera_depth"] = normalized
@@ -659,10 +664,10 @@ class GelSightSensor(SensorBase):
             ]  # tiled camera gives us data with shape (num_cameras, height, width, num_channels),
             # clip camera values that are = inf
             self._data.output["height_map"][torch.isinf(self._data.output["height_map"])] = (
-                self.cfg.sensor_camera_cfg.clipping_range[1]
+                self.cfg.sensor_camera_cfg.clipping_range_m[1]
             )
             # transform camera depth values to values in gelpad range, i.e. [0, gelpad_height]
-            self._data.output["height_map"] -= self.cfg.sensor_camera_cfg.clipping_range[0]
+            self._data.output["height_map"] -= self.cfg.sensor_camera_cfg.clipping_range_m[0]
             # height_map == 0 should mean that no indentation, min(height_map) == biggest indentation
             self._data.output["height_map"] -= self.cfg.gelpad_dimensions.height
 
