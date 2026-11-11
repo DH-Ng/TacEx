@@ -6,8 +6,11 @@
 """Shared test utilities for Isaac Lab environments."""
 
 import gymnasium as gym
+import gc
 import inspect
 import os
+import shutil
+import tempfile
 import torch
 
 import carb
@@ -194,6 +197,10 @@ def _check_random_actions(
         env_cfg = parse_env_cfg(task_name, device=device, num_envs=num_envs)
         # set config args
         env_cfg.sim.create_stage_in_memory = create_stage_in_memory
+        # isolated log dir: some envs write (and load the latest) checkpoints there, e.g. the factory tactile
+        # feature extractor. Sharing a dir between envs/runs loads incompatible checkpoints.
+        if hasattr(env_cfg, "log_dir"):
+            env_cfg.log_dir = tempfile.mkdtemp(prefix="tacex_env_test_")
         if disable_clone_in_fabric:
             env_cfg.scene.clone_in_fabric = False
 
@@ -213,9 +220,15 @@ def _check_random_actions(
         # try to close environment on exception
         if "env" in locals() and hasattr(env, "_is_closed"):
             env.close()
+        elif hasattr(e, "obj") and hasattr(e.obj, "_is_closed"):
+            e.obj.close()
         else:
-            if hasattr(e, "obj") and hasattr(e.obj, "_is_closed"):
-                e.obj.close()
+            # The env failed inside its __init__ (e.g. missing asset), so no env object exists to close.
+            # Release the simulation context it created; otherwise the next test's env hangs on it.
+            _clear_simulation_context()
+        if "env_cfg" in locals():
+            _remove_log_dir(env_cfg)
+        _release_gpu_memory(task_name)
         pytest.fail(f"Failed to set-up the environment for task {task_name}. Error: {e}")
 
     # disable control on stop
@@ -262,6 +275,44 @@ def _check_random_actions(
 
     # close environment
     env.close()
+    _remove_log_dir(env_cfg)
+    _release_gpu_memory(task_name)
+
+
+def _remove_log_dir(env_cfg):
+    """Deletes the temporary log dir created for the test env (see ``_check_random_actions``)."""
+    log_dir = getattr(env_cfg, "log_dir", None)
+    if log_dir and os.path.basename(log_dir).startswith("tacex_env_test_"):
+        shutil.rmtree(log_dir, ignore_errors=True)
+
+
+def _release_gpu_memory(task_name: str = ""):
+    """Frees GPU memory left over by a closed env, so the next env (PhysX/RTX) can allocate it.
+
+    Many envs run in one process. Without this, tensors freed by a closed env stay reserved by PyTorch's caching
+    allocator (and reference cycles keep some alive), and PhysX fails to allocate GPU memory for later envs.
+    """
+    gc.collect()
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+        free, total = torch.cuda.mem_get_info()
+        print(
+            f">>> GPU memory after closing {task_name}: {(total - free) / 2**30:.2f} / {total / 2**30:.2f} GiB used,"
+            f" torch reserved {torch.cuda.memory_reserved() / 2**30:.2f} GiB"
+        )
+
+
+def _clear_simulation_context():
+    """Stops and clears a (leftover) simulation context singleton, mirroring what ``DirectRLEnv.close`` does."""
+    from isaaclab.sim import SimulationContext
+
+    sim = SimulationContext.instance()
+    if sim is None:
+        return
+    sim._app_control_on_stop_handle = None  # don't shut down the app on stop
+    sim.stop()
+    sim.clear_all_callbacks()
+    sim.clear_instance()
 
 
 def _check_valid_tensor(data: torch.Tensor | dict) -> bool:

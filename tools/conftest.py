@@ -184,7 +184,7 @@ def run_individual_tests(test_files, workspace_root, isaacsim_ci):
 
             # Write timeout report
             report_file = f"tests/test-reports-{str(file_name)}.xml"
-            timeout_report.write(report_file)
+            timeout_report.write(report_file, pretty=True)
 
             test_status[test_file] = {
                 "errors": 1,
@@ -225,7 +225,7 @@ def run_individual_tests(test_files, workspace_root, isaacsim_ci):
                     suite.name = suite_name
 
             # Write the updated report back
-            report.write(report_file)
+            report.write(report_file, pretty=True)
 
             # Parse the integer values with None handling
             errors = int(report.errors) if report.errors is not None else 0
@@ -373,7 +373,7 @@ def pytest_sessionstart(session):
     result_file = os.environ.get("TEST_RESULT_FILE", "full_report.xml")
     full_report_path = f"tests/{result_file}"
     print(f"Using result file: {result_file}")
-    full_report.write(full_report_path)
+    full_report.write(full_report_path, pretty=True)
     print("~~~~~~~~~~~~ Report written to", full_report_path)
 
     # print test status in a nice table

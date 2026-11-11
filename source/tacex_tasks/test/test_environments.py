@@ -5,36 +5,17 @@
 #
 # SPDX-License-Identifier: BSD-3-Clause
 
-"""Launch Isaac Sim Simulator first."""
+"""Runs every (non-factory, non-UIPC) TacEx env with random actions and checks for valid signals.
 
-import sys
-
-# Import pinocchio in the main script to force the use of the dependencies installed by IsaacLab and not the one installed by Isaac Sim
-# pinocchio is required by the Pink IK controller
-if sys.platform != "win32":
-    import pinocchio  # noqa: F401
-
-from isaaclab.app import AppLauncher
-
-# launch the simulator
-# app_launcher = AppLauncher(headless=True, enable_cameras=True)  #NOTE: with headlessOTrue, our camera envs don't seem to work
-app_launcher = AppLauncher(
-    headless=False, enable_cameras=True
-)  # ! camera env's fail tests with this inside the docker container (dunno why)
-simulation_app = app_launcher.app
-
-
-"""Rest everything follows."""
+Each task runs in its own Isaac Sim process (see ``isolated_env_utils.py``), so this file does not launch Isaac.
+Set ``TACEX_TEST_HEADLESS=0`` to watch the envs in the GUI.
+"""
 
 import pytest
-from env_test_utils import _run_environments, setup_environment
-
-# import isaaclab_tasks  # noqa: F401
-import tacex_tasks  # noqa: F401
+from isolated_env_utils import NUM_ENVS, check_task, list_tasks
 
 
-@pytest.mark.parametrize("num_envs, device", [(32, "cuda"), (1, "cuda")])
-@pytest.mark.parametrize("task_name", setup_environment(include_play=False, factory_envs=False, multi_agent=False))
-def test_environments(task_name, num_envs, device):
-    # run environments without stage in memory
-    _run_environments(task_name, device, num_envs, create_stage_in_memory=False)
+@pytest.mark.parametrize("num_envs", NUM_ENVS)
+@pytest.mark.parametrize("task_name", list_tasks(factory=False))
+def test_environments(task_name, num_envs):
+    check_task(task_name, num_envs)
