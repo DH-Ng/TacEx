@@ -79,14 +79,14 @@ class GelSightSensorCfg(SensorBaseCfg):
 
         focal_length_cm: float = 1.0
         """Focal length of the sensor camera (in centimeters).
-        
-        Determines the "zoom" in the image, i.e. how big objects appear. 
-        Value should be set so that focus_distance and focal_length combination
-        leads to appropriate indentation area of known indenters.
- 
-        You can use the `taxim_shape_touch.py` script to try out different values.
 
-        Note: This value is not used to compute horizontal/vertical aperture.
+        Does not change what the camera sees: the apertures are computed as
+        ``view_size * focal_length / focus_distance_m``, so the view at the focus distance is always
+        ``view_width_m`` x ``view_height_m`` (set via ``mm_per_pixel`` and ``reference_img_res``).
+
+        To compare simulated tactile images of known indenters with real ones, use
+        ``scripts/demos/shape_touch/taxim_parameter_playground.py``; ``source/tacex/test/test_sensor_camera.py``
+        checks the camera view.
         """
 
         focus_distance_m: float = 0.024 + 0.004

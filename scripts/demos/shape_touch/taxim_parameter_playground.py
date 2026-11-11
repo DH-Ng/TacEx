@@ -1,6 +1,6 @@
 """Collecting tactile data of the shapes from https://danfergo.github.io/gelsight-simulation/.
 
-Use
+This script can be used to play around with the parameters of the Taxim simulation.
 """
 
 from __future__ import annotations
@@ -926,7 +926,7 @@ class ShapeTouchEnvCfg(DirectRLEnvCfg):
             update_period=0,
             resolution=(320, 240),
             data_types=["depth"],
-            clipping_range=(0.024, 0.034),
+            clipping_range_m=(0.024, 0.034),
         ),
         device="cuda",
         debug_vis=True,  # for being able to see sensor output in the gui
