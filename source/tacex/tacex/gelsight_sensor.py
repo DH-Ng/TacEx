@@ -4,16 +4,17 @@ import numpy as np
 import torch
 from collections.abc import Sequence
 from typing import TYPE_CHECKING
+import logging
 
 import cv2
 import omni.kit.commands
 import omni.usd
-from isaacsim.core.prims import XFormPrim
 import isaacsim.core.utils.prims as prims_utils
 from pxr import Sdf
 
 from isaaclab.sensors import SensorBase, TiledCamera, TiledCameraCfg
 import isaaclab.sim as sim_utils
+from isaaclab.sim.views import XformPrimView
 
 from .gelsight_sensor_data import GelSightSensorData
 from .simulation_approaches.gelsight_simulator import GelSightSimulator
@@ -266,8 +267,12 @@ class GelSightSensor(SensorBase):
         # Initialize parent class
         super()._initialize_impl()
 
-        self._prim_view = XFormPrim(prim_paths_expr=self.cfg.prim_path, name=f"{self.cfg.prim_path}", usd=False)
-        self._prim_view.initialize()
+        # NOTE: use Isaac Lab's view, not isaacsim.core.prims.XFormPrim. The Isaac Sim view registers a prim-deletion
+        # callback that cannot be deregistered; once the view is dropped, the next prim deletion (e.g. the camera's
+        # annotator detach on env close) hits a dead weakref and Kit terminates.
+        self._prim_view = XformPrimView(
+            self.cfg.prim_path, device=self._device, validate_xform_ops=False, stage=self.stage
+        )
         # Check that sizes are correct
         if self._prim_view.count != self._num_envs:
             raise RuntimeError(
@@ -734,8 +739,8 @@ class GelSightSensor(SensorBase):
         # set all existing views to None to invalidate them
         self._prim_view = None
 
-        self.camera._invalidate_initialize_callback(event)
-        self.camera.__del__()
+        if self.camera is not None:
+            self.camera = None
 
         if hasattr(self, "_windows"):
             self._windows = None

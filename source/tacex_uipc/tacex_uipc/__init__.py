@@ -15,5 +15,8 @@ from .objects import (
 )
 from .sim import UipcSim, UipcSimCfg
 
-# Register UI extensions.
-from .ui_extension import *  # noqa: F403
+# Register UI extensions (GUI only: headless apps lack isaacsim.gui / debug_draw, which the extension needs).
+try:
+    from .ui_extension import *  # noqa: F403
+except ImportError:
+    pass

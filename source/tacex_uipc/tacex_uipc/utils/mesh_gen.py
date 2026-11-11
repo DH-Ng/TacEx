@@ -1,11 +1,9 @@
 # import pymesh
 # from meshpy.tet import MeshInfo, build, Options
-from isaacsim.util.debug_draw import _debug_draw
 from omni.physx.scripts import deformableUtils
 from pxr import Sdf, Usd, UsdGeom, Vt, Gf
 import omni.usd
 
-draw = _debug_draw.acquire_debug_draw_interface()
 
 import numpy as np
 import random

@@ -23,6 +23,17 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
+def _has_gui() -> bool:
+    """Whether the app has a GUI (local or streamed); reads Isaac Lab's simulation context if one exists."""
+    from isaaclab.sim import SimulationContext as LabSimulationContext
+
+    sim = LabSimulationContext.instance()
+    if sim is not None and hasattr(sim, "has_gui"):
+        return sim.has_gui()
+    # no simulation context yet: fall back to whether the GUI components (used for the window styling) are loaded
+    return omni.kit.app.get_app().get_extension_manager().is_extension_enabled("isaacsim.gui.components")
+
+
 class ExtraVisualizerWindow:
     def __init__(self, num_env, window_name: str = "VisualizerWindow"):
         """Initialize the window.
@@ -167,18 +178,27 @@ class DirectLiveVisualizer(ManagerLiveVisualizer):
         self._viewer_env_idx = 0
         self._vis_frame: omni.ui.Frame
 
-        if parent_window is None:
-            # create a window
-            self._vis_window: omni.ui.Window = ExtraVisualizerWindow(self.num_envs, f"{visualizer_name} Window")
-        else:
-            self._vis_window: omni.ui.Window = parent_window
-
         # evaluate chosen terms if no terms provided - >use all available.
         self._term_visualizers = {}
         self.terms: dict[str, torch.tensor] = {}
         self.terms_names: dict[str, list[str]] = {}
 
+        # Without a GUI (headless), omni.ui windows and the isaacsim.gui styling are not available. The visualizer
+        # then becomes a no-op: envs can still write into `terms`, but nothing is created or drawn.
+        self._has_gui = _has_gui()
+        self._vis_window: omni.ui.Window | None = None
+        if not self._has_gui:
+            return
+
+        if parent_window is None:
+            # create a window
+            self._vis_window = ExtraVisualizerWindow(self.num_envs, f"{visualizer_name} Window")
+        else:
+            self._vis_window = parent_window
+
     def create_visualizer(self):
+        if not self._has_gui:
+            return
         with self._vis_window.ui_window_elements["debug_frame"]:
             with self._vis_window.ui_window_elements["debug_vstack"]:
                 self._vis_window._create_debug_vis_ui_element(self.visualizer_name, self)
@@ -204,6 +224,8 @@ class DirectLiveVisualizer(ManagerLiveVisualizer):
         Args:
             debug_vis: Whether to enable or disable debug visualization.
         """
+        if not self._has_gui:
+            return
 
         if not hasattr(self, "_vis_frame"):
             raise RuntimeError("No frame set for debug visualization.")

@@ -63,7 +63,8 @@ class FactoryTactileEnv(FactoryIKJointControlEnv):
         self.feature_extractor = TactileRGBFeatureExtractor(
             self.cfg.tactile_rgb_feature_extractor,
             self.device,
-            f"{self.cfg.log_dir}/feature_extractor",
+            # None -> extractor uses its default dir (otherwise the path becomes "None/feature_extractor" in the cwd)
+            f"{self.cfg.log_dir}/feature_extractor" if self.cfg.log_dir is not None else None,
         )
 
         # keypoints buffer
