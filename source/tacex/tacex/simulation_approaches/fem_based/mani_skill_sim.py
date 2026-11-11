@@ -4,6 +4,7 @@ import copy
 import math
 import numpy as np
 import torch
+from collections.abc import Sequence
 from typing import TYPE_CHECKING
 
 import cv2
@@ -84,8 +85,11 @@ class ManiSkillSimulator(GelSightSimulator):
         self.marker_data[0] = marker_flow
         return self.marker_data
 
-    def reset(self):
-        self._indentation_depth = torch.zeros((self._num_envs), device=self._device)
+    def reset(self, env_ids: Sequence[int] | None = None):
+        if env_ids is None:
+            env_ids = range(self._num_envs)
+        env_ids = torch.as_tensor(env_ids, dtype=torch.long, device=self._indentation_depth.device)
+        self._indentation_depth[env_ids] = 0.0
         # self.init_marker_pos = (self.marker_motion_sim.init_marker_x_pos, self.marker_motion_sim.init_marker_y_pos)
 
     def _set_debug_vis_impl(self, debug_vis: bool):
@@ -253,7 +257,7 @@ class ManiSkillSimulator(GelSightSimulator):
         https://github.com/chuanyune/ManiSkill-ViTac2025/blob/a3d7df54bca9a2e57f34b37be3a3df36dc218915/Track_1/envs/tactile_sensor_sapienipc.py
 
         Args:
-            marker_uv: Marker flow of a sensor. Shape is (2, num_markers, 2).
+            marker_uv: Marker flow of a sensor. Shape is (num_markers, 2).
             marker_size: The size of the markers in the image. Defaults to 3.
             img_w: Width of the tactile image. Defaults to 320.
             img_h: Height of the tactile image. Defaults to 240.

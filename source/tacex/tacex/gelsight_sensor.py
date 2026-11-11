@@ -233,6 +233,17 @@ class GelSightSensor(SensorBase):
         # Reset the frame count
         self._frame[env_ids] = 0
 
+    def _copy_sim_output_into_data_buffer(self, key: str, sim_output: torch.Tensor, env_ids: Sequence[int]):
+        """Copies the rows ``env_ids`` of a simulator output into the (preallocated) output buffer ``key``.
+
+        Copying (instead of reassigning) keeps the buffer identity stable and leaves other envs untouched.
+        Handles simulators that run on a different device than the sensor.
+        """
+        buffer = self._data.output[key]
+        src_ids = torch.as_tensor(env_ids, device=sim_output.device, dtype=torch.long)
+        dst_ids = torch.as_tensor(env_ids, device=buffer.device, dtype=torch.long)
+        buffer[dst_ids] = sim_output[src_ids].to(device=buffer.device, dtype=buffer.dtype)
+
     def compute_indentation_depth(self):
         """Computes the indentation depth by takin the minimum value of the height map.
 

@@ -4,6 +4,7 @@ import copy
 import math
 import numpy as np
 import torch
+from collections.abc import Sequence
 from typing import TYPE_CHECKING
 
 import cv2
@@ -196,9 +197,16 @@ class FOTSMarkerFrameTransformerSimulator(GelSightSimulator):
 
     #     return self._indentation_depth
 
-    def reset(self):
-        self._indentation_depth = torch.zeros((self._num_envs), device=self._device)
-        self.init_marker_pos = (self.marker_motion_sim.init_marker_x_pos, self.marker_motion_sim.init_marker_y_pos)
+    def reset(self, env_ids: Sequence[int] | None = None):
+        if env_ids is None:
+            env_ids = range(self._num_envs)
+        env_ids = torch.as_tensor(env_ids, dtype=torch.long).cpu()
+        for env_id in env_ids.tolist():
+            self.sensor._data.output["traj"][env_id] = []
+        env_ids = env_ids.to(self._device)
+        self.theta[env_ids] = 0.0
+        # current marker pos = initial marker pos
+        self.marker_data[env_ids, 1] = self.marker_data[env_ids, 0]
 
     def _set_debug_vis_impl(self, debug_vis: bool):
         """Creates an USD attribute for the sensor asset, which can visualize the tactile image.

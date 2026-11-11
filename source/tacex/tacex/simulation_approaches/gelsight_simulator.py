@@ -10,6 +10,8 @@ from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
+    from collections.abc import Sequence
+
     from ..gelsight_sensor import GelSightSensor
     from ..simulation_approaches.gelsight_simulator_cfg import GelSightSimulatorCfg
 
@@ -51,7 +53,17 @@ class GelSightSimulator(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def reset(self):
+    def reset(self, env_ids: Sequence[int] | None = None):
+        """Resets the internal state of the simulator for the given environments.
+
+        Args:
+            env_ids: Environment indices to reset. If None, all environments are reset.
+
+        Note:
+            Only the state of ``env_ids`` may be modified. The sensor calls the simulation method
+            afterwards (with zeroed height map/indentation for ``env_ids``) and copies only the
+            rows of ``env_ids`` into its output buffers.
+        """
         raise NotImplementedError
 
     """

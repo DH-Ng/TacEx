@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import numpy as np
 import torch
+from collections.abc import Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -51,7 +52,10 @@ class TaximSimulator(GelSightSimulator):
             device=self._device,
         )
 
-        self._taxim: Taxim = Taxim(calib_folder=calib_folder, device=self._device, params=self.cfg.taxim_parameters)
+        # torch backend is required: this wrapper (and FOTS) operate on torch tensors
+        self._taxim: Taxim = Taxim(
+            calib_folder=calib_folder, backend="torch", device=self._device, params=self.cfg.taxim_parameters
+        )
 
         # -- NOTE: Taxim sim uses (channels, height, width) format
 
@@ -119,9 +123,16 @@ class TaximSimulator(GelSightSimulator):
         self._indentation_depth[:] = -height_map.amin((1, 2))
         return self._indentation_depth
 
-    def reset(self):
-        self._indentation_depth = torch.zeros((self._num_envs), device=self._device)
-        self.tactile_rgb_img[:] = self.background_img
+    def reset(self, env_ids: Sequence[int] | None = None):
+        """Sets the background tactile rgb image (i.e., no-contact) to the given env_ids.
+
+        Assumes that sensor is in no-contact (users responsibility)."""
+
+        if env_ids is None:
+            env_ids = self.sensor._ALL_INDICES
+
+        self._indentation_depth[env_ids] = 0.0
+        self.tactile_rgb_img[env_ids] = self.background_img
 
     def _set_debug_vis_impl(self, debug_vis: bool):
         """Creates an USD attribute for the sensor asset, which can visualize the tactile image.

@@ -9,6 +9,7 @@ import copy
 import math
 import numpy as np
 import torch
+from collections.abc import Sequence
 from typing import TYPE_CHECKING
 from pathlib import Path
 import json
@@ -184,32 +185,10 @@ class Pix2PixSimulator(GelSightSimulator):
         self.tactile_rgb_img[:] = pix2pix_output
         return self.tactile_rgb_img
 
-    def reset(self):
-        height_map = torch.zeros(
-            self._num_envs,
-            1,
-            self.config["img_height"],
-            self.config["img_width"],
-            device=self._device,
-        )
-        # add 1 color channel for gray scale
-        # test -> resize height map to match input format used for training
-        # height_map = F.resize(height_map, (512, 512))
-        # height_map = height_map.reshape((self._num_envs, 1, height_map.shape[1], height_map.shape[2]))
-
-        with torch.no_grad():
-            pix2pix_output = self.generator_model(height_map)
-
-        if (pix2pix_output.shape[1], pix2pix_output.shape[2]) != (
-            self.cfg.tactile_img_res[1],
-            self.cfg.tactile_img_res[0],
-        ):
-            pix2pix_output = F.resize(pix2pix_output, [self.cfg.tactile_img_res[1], self.cfg.tactile_img_res[0]])
-
-        # move color channel to last dim
-        pix2pix_output = torch.movedim(pix2pix_output, 1, 3)
-
-        self.tactile_rgb_img[:] = pix2pix_output  # .detach()
+    def reset(self, env_ids: Sequence[int] | None = None):
+        """Pix2Pix is stateless: the no-contact image is produced by the sensor calling
+        :meth:`optical_simulation` with the zeroed height map of ``env_ids``."""
+        pass
 
     # def __process_initial_frame(self, f0: torch.Tensor):
     #     """
