@@ -1,0 +1,62 @@
+"""Live visualization for the UIPC scene tests.
+
+Set ``TACEX_TEST_DEBUG_VIS=1`` to watch a test in the Isaac Sim GUI instead of running headless:
+
+    TACEX_TEST_DEBUG_VIS=1 python -m pytest source/tacex_uipc/test/render_mesh/test_render_mesh_voxel.py -v -s
+
+With the flag, the tests
+- launch the GUI (not headless) and render every simulation step,
+- add a dome light and point the viewport camera at the scene,
+- enable ``debug_vis`` of the UIPC objects (e.g. simulation mesh wireframe, carrier mesh),
+- keep the window open after the run for ``TACEX_TEST_DEBUG_VIS_HOLD`` seconds (default 10) or until it is closed.
+
+Must be importable before the Isaac Sim app is launched (only standard library imports at module level).
+"""
+
+from __future__ import annotations
+
+import os
+import time
+
+DEBUG_VIS: bool = os.environ.get("TACEX_TEST_DEBUG_VIS", "0").strip().lower() in ("1", "true", "yes", "on")
+"""Whether the tests run with live visualization."""
+
+HOLD_S: float = float(os.environ.get("TACEX_TEST_DEBUG_VIS_HOLD", "10"))
+"""Seconds the window stays open after the run (live visualization only)."""
+
+
+def launch_app():
+    """Launches the Isaac Sim app: GUI with ``TACEX_TEST_DEBUG_VIS``, headless otherwise."""
+    from isaaclab.app import AppLauncher
+
+    # cameras: loads omni.ui, which tacex_uipc imports
+    return AppLauncher(headless=not DEBUG_VIS, enable_cameras=True).app
+
+
+def setup_view(sim, eye: tuple[float, float, float], target: tuple[float, float, float]):
+    """Adds a light and points the viewport camera at the scene (live visualization only)."""
+    if not DEBUG_VIS:
+        return
+    import isaaclab.sim as sim_utils
+
+    light_cfg = sim_utils.DomeLightCfg(intensity=2000.0, color=(1.0, 1.0, 1.0))
+    light_cfg.func("/World/DebugVisLight", light_cfg)
+    sim.set_camera_view(eye, target)
+
+
+def step(sim):
+    """Steps the simulation; renders the step with live visualization."""
+    sim.step(render=DEBUG_VIS)
+
+
+def hold(sim):
+    """Keeps rendering the final state for ``HOLD_S`` seconds or until the window is closed (live visualization)."""
+    if not DEBUG_VIS:
+        return
+    import omni.kit.app
+
+    app = omni.kit.app.get_app()
+    print(f"[debug vis] holding the final state for {HOLD_S:.0f} s (close the window to continue).", flush=True)
+    t_end = time.time() + HOLD_S
+    while app.is_running() and time.time() < t_end:
+        sim.render()
