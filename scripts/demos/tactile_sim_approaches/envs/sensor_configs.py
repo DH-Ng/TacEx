@@ -43,6 +43,9 @@ from tacex_assets.sensors.gelsight_mini import (
 from tacex.simulation_approaches.fots import FOTSMarkerSimulatorCfg
 from tacex.simulation_approaches.gpu_taxim import TaximSimulatorCfg
 from tacex.simulation_approaches.fem_based import ManiSkillSimulatorCfg
+from tacex.simulation_approaches.tacsl import TacSLForceFieldCfg
+
+from tacex_assets.sensors.gelsight_mini.gsmini_tacsl import GELSIGHT_MINI_TACSL_CFG, GELSIGHT_MINI_TACSL_SIM_CFG
 
 TAXIM_CFG = GELSIGHT_MINI_TAXIM_CFG.replace(
     prim_path="/World/envs/env_.*/Robot/gelsight_mini_case",
@@ -156,4 +159,34 @@ TAXIM_FEM_CFG = GELSIGHT_MINI_TAXIM_FEM_CFG.replace(
     compute_indentation_depth_class="optical_sim",
     device="cuda",
     data_types=["tactile_rgb", "marker_motion"],
+)
+
+# TacSL: optical (Taxim-style rendering of the height map) + force field (SDF penalty forces on the gelpad)
+# The ball needs an SDF collision mesh for the force field, see envs/ball_roll_tacsl_env.py.
+TACSL_SIM_CFG = GELSIGHT_MINI_TACSL_SIM_CFG.replace(
+    force_field=TacSLForceFieldCfg(
+        elastomer_prim_path_expr="/World/envs/env_.*/Robot/gelsight_mini_gelpad",
+        contact_object_prim_path_expr="/World/envs/env_.*/ball",
+        contact_normal_local=(0.0, 0.0, 1.0),  # gelpad mesh spans local z 0..4 mm, contact surface at +z
+        tactile_array_size=(20, 25),
+        tactile_margin=0.002,
+    ),
+)
+
+TACSL_CFG = GELSIGHT_MINI_TACSL_CFG.replace(
+    prim_path="/World/envs/env_.*/Robot/gelsight_mini_case",
+    sensor_camera_cfg=GELSIGHT_MINI_TACSL_CFG.SensorCameraCfg(
+        prim_name="Camera",
+        update_period=0,
+        resolution=(320, 240),
+        data_types=["depth"],
+        clipping_range_m=(0.024, 0.029),
+    ),
+    update_period=0.01,
+    optical_sim_cfg=TACSL_SIM_CFG,
+    marker_motion_sim_cfg=None,
+    force_field_sim_cfg=TACSL_SIM_CFG,  # same cfg object -> one TacSL simulator for both outputs
+    compute_indentation_depth_class="default",
+    device="cuda",
+    data_types=["tactile_rgb", "force_field"],
 )
