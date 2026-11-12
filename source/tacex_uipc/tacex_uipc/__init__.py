@@ -2,6 +2,7 @@ from .envs import UipcInteractiveScene, UipcRLEnv
 from .objects import (
     UipcObject,
     UipcObjectCfg,
+    RenderMeshCfg,
     UipcConstraint,
     UipcConstraintCfg,
     UipcDeformableObject,

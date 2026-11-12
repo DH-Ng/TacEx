@@ -290,9 +290,8 @@ class FemBasedMarkerSim:
         marker_pts = marker_pts[marker_on_surface]
 
         # extract faces of the mesh surface
-        triangles = np.array(usdrt.UsdGeom.Mesh(self.gelpad_obj.fabric_prim).GetFaceVertexIndicesAttr().Get()).reshape(
-            -1, 3
-        )
+        # simulation surface triangles (the render mesh may have a different topology, see `RenderMeshCfg`)
+        triangles = self.gelpad_obj.sim_surf_triangles
         f_centers = []
         for tri in triangles:
             vertices = surface_pts[tri]

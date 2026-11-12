@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import datetime
 import pathlib
 
+import omni.log
 import omni.usd
 import usdrt
 import usdrt.Usd
@@ -48,10 +50,13 @@ class UipcSimCfg:
     "quiet" = do not export mesh
     """
 
-    workspace: str = str(pathlib.Path().resolve())
-    """Path to directory where the libuipc files (e.g. systems.json) should be saved.
+    workspace: str | None = None
+    """Directory for the libuipc workspace files (e.g. ``systems.json``, ``sanity_check/``, frames of
+    :meth:`UipcSim.save_frame`).
 
-    Defaults to current working directory.
+    If ``None`` (default), a new directory ``logs/uipc/<YYYY-mm-dd_HH-MM-SS>`` in the current working directory is
+    created for every :class:`UipcSim` (suffix ``_1``, ``_2``, ... if it exists already). Set it explicitly to replay
+    frames saved in a previous run (:meth:`UipcSim.replay_frame`). The resolved path is :attr:`UipcSim.workspace`.
     """
 
     logger_level: str = "Error"
@@ -154,9 +159,11 @@ class UipcSim:
         elif self.cfg.logger_level == "Info":
             Logger.set_level(Logger.Info)
 
-        pathlib.Path(self.cfg.workspace).mkdir(parents=True, exist_ok=True)
+        self.workspace: str = self._resolve_workspace()
+        """Directory of the libuipc workspace files (see :attr:`UipcSimCfg.workspace`)."""
+        omni.log.info(f"UIPC workspace: {self.workspace}")
 
-        self.engine: Engine = Engine(backend_name=self.cfg.device, workspace=self.cfg.workspace)
+        self.engine: Engine = Engine(backend_name=self.cfg.device, workspace=self.workspace)
         self.world: World = World(self.engine)
 
         # update uipc default config with our config
@@ -211,6 +218,8 @@ class UipcSim:
         self._surf_vertex_offsets = [0]
 
         self._fabric_meshes = []
+        # index in `_fabric_meshes` -> uipc object with a separate render mesh (see `RenderMeshCfg`)
+        self._render_mesh_owners: dict[int, UipcObject] = {}
         self.uipc_objects: list[UipcObject] = []
 
         self.stage = usdrt.Usd.Stage.Attach(omni.usd.get_context().get_stage_id())
@@ -225,9 +234,37 @@ class UipcSim:
             self._debug_vis_handle.unsubscribe()
             self._debug_vis_handle = None
 
+    def _resolve_workspace(self) -> str:
+        """Creates the workspace directory: the configured one, or a new ``logs/uipc/<timestamp>`` directory."""
+        if self.cfg.workspace is not None:
+            workspace = pathlib.Path(self.cfg.workspace).expanduser().resolve()
+            workspace.mkdir(parents=True, exist_ok=True)
+            return str(workspace)
+
+        root = pathlib.Path.cwd() / "logs" / "uipc"
+        root.mkdir(parents=True, exist_ok=True)
+        stamp = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+        # unique per UipcSim: mkdir(exist_ok=False) is atomic, so parallel runs never share a directory
+        for i in range(1000):
+            workspace = root / (stamp if i == 0 else f"{stamp}_{i}")
+            try:
+                workspace.mkdir()
+                return str(workspace)
+            except FileExistsError:
+                continue
+        raise RuntimeError(f"Could not create a UIPC workspace directory in {root}.")
+
     def setup_sim(self):
         self.world.init(self.scene)
         self.world.retrieve()
+
+        # embed separate render meshes into their simulation meshes (rest configuration as seen by uipc)
+        if self._render_mesh_owners:
+            all_surf_points = self.sio.simplicial_surface(2).positions().view().reshape(-1, 3)
+            for i, owner in self._render_mesh_owners.items():
+                owner.init_render_mesh_mapping(
+                    all_surf_points[self._surf_vertex_offsets[i] : self._surf_vertex_offsets[i + 1]]
+                )
 
         # initialize callbacks
         self.isaac_sim: sim_utils.SimulationContext = sim_utils.SimulationContext.instance()
@@ -259,6 +296,11 @@ class UipcSim:
         # triangles = self.sio.simplicial_surface(2).triangles().topo().view()
         for i, fabric_prim in enumerate(self._fabric_meshes):
             trimesh_points = all_trimesh_points[self._surf_vertex_offsets[i] : self._surf_vertex_offsets[i + 1]]
+            owner = self._render_mesh_owners.get(i)
+            if owner is not None:
+                # separate render mesh: reconstruct render vertices from the embedding in the simulation mesh
+                owner.update_sim_mesh_vis(trimesh_points)
+                trimesh_points = owner.compute_render_points(trimesh_points)
 
             fabric_mesh_points = fabric_prim.GetAttribute("points")
             fabric_mesh_points.Set(usdrt.Vt.Vec3fArray(trimesh_points))

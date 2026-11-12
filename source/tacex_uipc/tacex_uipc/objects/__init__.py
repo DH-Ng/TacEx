@@ -2,4 +2,4 @@
 from .constraints import UipcConstraint, UipcConstraintCfg, UipcIsaacAttachments, UipcIsaacAttachmentsCfg
 from .deformable import UipcDeformableObject, UipcDeformableObjectCfg, UipcDeformableObjectData
 from .rigid import UipcRigidObject, UipcRigidObjectCfg, UipcRigidObjectData
-from .uipc_object import UipcObject, UipcObjectCfg
+from .uipc_object import RenderMeshCfg, UipcObject, UipcObjectCfg

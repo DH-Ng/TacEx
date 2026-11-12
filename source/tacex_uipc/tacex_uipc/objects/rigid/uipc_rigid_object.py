@@ -45,7 +45,7 @@ import isaaclab.utils.math as math_utils
 wp.init()
 
 
-from tacex_uipc.utils import MeshGenerator, TetMeshCfg
+from tacex_uipc.utils import MeshGenerator, TetMeshCfg, VoxelTetMeshCfg
 
 from ..uipc_object import UipcObject
 from .uipc_rigid_object_data import UipcRigidObjectData
@@ -190,7 +190,7 @@ class UipcRigidObject(UipcObject):
                 )
         else:
             mesh_gen = MeshGenerator(config=self.cfg.mesh_cfg)
-            if type(self.cfg.mesh_cfg) is TetMeshCfg:
+            if isinstance(self.cfg.mesh_cfg, (TetMeshCfg, VoxelTetMeshCfg)):
                 tet_points, tet_indices, surf_points, surf_indices = (
                     mesh_gen.generate_tet_mesh_for_prim(self._usd_geom_mesh)
                 )
@@ -204,10 +204,6 @@ class UipcRigidObject(UipcObject):
         scale = np.array(
             Gf.Vec3d(*(v.GetLength() for v in tf_world.ExtractRotationMatrix()))
         )
-
-        # workaround for bug with kinematic objects -> somehow mesh is scaled additionally/twice?
-        if self.cfg.constitution_cfg.kinematic:
-            scale = [1, 1, 1]
 
         scale_mat = np.array(
             [
@@ -240,7 +236,11 @@ class UipcRigidObject(UipcObject):
         t.translate(translation)
         t.rotate(Quaternion(np.array(rotation)))
 
-        trans_view[0] = np.array(tf_world).T.copy()
+        # the scale is already applied to the tet points -> body transform is rotation + translation only
+        # (a scaled transform would scale the mesh twice; for dynamic bodies the ABD energy then relaxes the scale)
+        body_tf = np.array(tf_world).T.copy()
+        body_tf[:3, :3] /= scale[None, :]
+        trans_view[0] = body_tf
 
         # uipc_mesh = self.uipc_meshes[0] #todo code properly cloned envs (i.e. for instanced objects?)
 
@@ -261,6 +261,15 @@ class UipcRigidObject(UipcObject):
         default_element.apply_to(uipc_mesh)
 
         return uipc_mesh
+
+    def _sim_nodal_positions_w(self) -> np.ndarray:
+        """Current positions of all tet mesh vertices in world frame.
+
+        ABD geometry positions are stored in the body frame, the body pose is the instance transform.
+        """
+        geo = self._uipc_sim.scene.geometries().find(self.obj_id)[0].geometry()
+        tf = np.asarray(geo.transforms().view()[0]).reshape(4, 4)
+        return geo.positions().view().reshape(-1, 3) @ tf[:3, :3].T + tf[:3, 3]
 
     def _initialize_impl(self):
         # log information the uipc body
