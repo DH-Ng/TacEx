@@ -52,9 +52,9 @@ class GelSightSensor(SensorBase):
         self._indentation_depth: torch.tensor = None
 
         # simulation approaches for simulating GelSight sensor output
-        self.optical_simulator: GelSightSimulator = None
-        self.marker_motion_simulator: GelSightSimulator = None
-        self.force_field_simulator: GelSightSimulator = None
+        self.optical_simulator: GelSightSimulator | None = None
+        self.marker_motion_simulator: GelSightSimulator | None = None
+        self.force_field_simulator: GelSightSimulator | None = None
         self.compute_indentation_depth_func = None
 
         # Create empty variables for storing output data
@@ -81,9 +81,6 @@ class GelSightSensor(SensorBase):
             # use default implementation
             self.compute_indentation_depth_func = self.compute_indentation_depth
 
-        self._set_debug_vis_flag = False
-        self._debug_vis_is_initialized = False
-
         # check if desired output is possible with given config:
         if "tactile_rgb" in self._data.output and self.cfg.optical_sim_cfg is None:
             raise RuntimeError("Output [tactile_rgb] not possible with given config: optical_sim_cfg = None]")
@@ -95,6 +92,9 @@ class GelSightSensor(SensorBase):
             raise RuntimeError("Output [force_field] not possible with given config: force_field_sim_cfg = None")
 
         self._check_camera_aspect_ratio()
+
+        self._set_debug_vis_flag = False
+        self._debug_vis_is_initialized = False
 
     def _get_or_create_simulator(self, sim_cfg: GelSightSimulatorCfg | None) -> GelSightSimulator | None:
         """Returns the simulator for a cfg slot, reusing an existing instance of the same simulation class."""
@@ -108,11 +108,11 @@ class GelSightSensor(SensorBase):
     @property
     def simulators(self) -> list[GelSightSimulator]:
         """The distinct simulators of this sensor (a simulator used for several outputs appears once)."""
-        unique = []
+        unique_simulator = []
         for simulator in (self.optical_simulator, self.marker_motion_simulator, self.force_field_simulator):
-            if simulator is not None and all(simulator is not s for s in unique):
-                unique.append(simulator)
-        return unique
+            if simulator is not None and all(simulator is not s for s in unique_simulator):
+                unique_simulator.append(simulator)
+        return unique_simulator
 
     def _check_camera_aspect_ratio(self):
         """Ensures the sensor camera has the aspect ratio of the real tactile image (``reference_img_res``).
