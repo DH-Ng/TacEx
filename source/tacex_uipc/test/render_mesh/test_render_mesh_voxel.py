@@ -27,7 +27,7 @@ from tacex_uipc.utils import VoxelTetMeshCfg
 
 DT = 0.01
 NUM_STEPS = 60
-GEL_Z = 0.005  # above the ground by more than one gel voxel (the conservative cage sticks out of the USD mesh)
+GEL_Z = 0.001  # the cage's bottom lies on the gel's bottom face (grid aligned with the bounding box minimum)
 BALL_Z = 0.03
 BALL_DIAMETER = 0.01
 
@@ -123,7 +123,7 @@ def test_ball_render_rigid_and_true_size(result):
     a, b = result["rest"]["ball"], result["final"]["ball"]
     # render mesh keeps the size of the USD ball (not of the larger voxel cage)
     np.testing.assert_allclose(np.ptp(a, 0), BALL_DIAMETER, rtol=1e-3)
-    assert np.ptp(result["rest_surf"]["ball"], 0).min() > BALL_DIAMETER
+    assert np.ptp(result["rest_surf"]["ball"], 0).min() >= BALL_DIAMETER - 1e-9  # the cage encloses the ball
     ca, cb = a.mean(0), b.mean(0)
     U, _, Vt = np.linalg.svd((a - ca).T @ (b - cb))
     d = np.sign(np.linalg.det(Vt.T @ U.T))

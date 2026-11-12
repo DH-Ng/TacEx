@@ -69,6 +69,68 @@ def _query_surface(points: np.ndarray, surf_points: np.ndarray, triangles: np.nd
     return sign.numpy(), dist.numpy().astype(np.float64), closest.numpy().astype(np.float64)
 
 
+def _triangle_box_overlap(v0, v1, v2, half: float) -> np.ndarray:
+    """Separating axis test (Akenine-Moeller) of triangles against axis-aligned boxes centered at the origin.
+
+    Args:
+        v0, v1, v2: Triangle vertices relative to the box centers. Shape (N, 3) each.
+        half: Half edge length of the boxes. Use a slightly shrunk box to not count touching as overlap.
+
+    Returns:
+        Boolean overlap per triangle-box pair. Shape (N,).
+    """
+    v = np.stack([v0, v1, v2], axis=1)  # (N, 3, 3)
+    # 1) box face normals (= triangle AABB vs box)
+    overlap = (v.min(1) <= half).all(1) & (v.max(1) >= -half).all(1)
+    # 2) triangle normal
+    e = np.stack([v1 - v0, v2 - v1, v0 - v2], axis=1)  # (N, 3, 3)
+    n = np.cross(e[:, 0], e[:, 1])
+    overlap &= np.abs(np.einsum("ij,ij->i", n, v0)) <= half * np.abs(n).sum(1)
+    # 3) cross products of the triangle edges with the box axes
+    for i in range(3):
+        for j in range(3):
+            axis = np.zeros(3)
+            axis[j] = 1.0
+            a = np.cross(e[:, i], axis)  # (N, 3)
+            p = np.einsum("nkj,nj->nk", v, a)  # projections of the 3 vertices
+            r = half * np.abs(a).sum(1)
+            overlap &= (p.min(1) <= r) & (p.max(1) >= -r)
+    return overlap
+
+
+def _surface_voxels(points, triangles, origin, h, dims, chunk_pairs: int = 2_000_000) -> np.ndarray:
+    """Flat indices of the voxels intersected by the surface triangles (touching only does not count)."""
+    tri = points[triangles]  # (F, 3, 3)
+    imin = np.clip(np.floor((tri.min(1) - origin) / h).astype(np.int64), 0, dims - 1)
+    imax = np.clip(np.floor((tri.max(1) - origin) / h).astype(np.int64), 0, dims - 1)
+    sizes = imax - imin + 1
+    counts = sizes.prod(1)
+    half = 0.5 * h * (1.0 - 1e-6)
+    hits = []
+    start = 0
+    while start < tri.shape[0]:
+        # chunk over triangles so that the number of (triangle, voxel) pairs stays bounded
+        end = start + 1
+        total = counts[start]
+        while end < tri.shape[0] and total + counts[end] <= chunk_pairs:
+            total += counts[end]
+            end += 1
+        c = counts[start:end]
+        t_idx = np.repeat(np.arange(start, end), c)
+        local = np.arange(c.sum()) - np.repeat(np.cumsum(c) - c, c)
+        sz = sizes[t_idx]
+        ix = local // (sz[:, 1] * sz[:, 2])
+        rem = local % (sz[:, 1] * sz[:, 2])
+        vox = imin[t_idx] + np.stack([ix, rem // sz[:, 2], rem % sz[:, 2]], axis=1)
+        center = origin + (vox + 0.5) * h
+        t = tri[t_idx]
+        mask = _triangle_box_overlap(t[:, 0] - center, t[:, 1] - center, t[:, 2] - center, half)
+        vox = vox[mask]
+        hits.append((vox[:, 0] * dims[1] + vox[:, 1]) * dims[2] + vox[:, 2])
+        start = end
+    return np.unique(np.concatenate(hits)) if hits else np.zeros(0, dtype=np.int64)
+
+
 def tet_volumes(points: np.ndarray, tets: np.ndarray) -> np.ndarray:
     """Signed volumes of the tetrahedra."""
     a, b, c, d = (points[tets[:, i]] for i in range(4))
@@ -101,8 +163,9 @@ def voxel_tet_mesh(
         triangles: Surface mesh triangles. Shape (F, 3).
         voxel_size: Edge length of a voxel (same unit as ``points``). If ``None``, it is derived from ``resolution``.
         resolution: Number of voxels along the longest bounding box axis (used if ``voxel_size`` is ``None``).
-        conservative: Keep all voxels touching the surface (tet mesh encloses the input surface). Otherwise only
-            voxels whose center lies inside the surface are kept.
+        conservative: Keep all voxels intersecting the surface (exact triangle-box test), so the tet mesh encloses
+            the input surface with at most one voxel of overshoot. Otherwise only voxels whose center lies inside the
+            surface are kept.
         snap_to_surface: Move the boundary vertices onto the input surface. A vertex is only moved as far as no
             adjacent tet gets smaller than ``min_volume_ratio`` of a regular voxel tet. Reduces the staircase of the
             contact surface, but the tet mesh does no longer enclose the input surface completely.
@@ -123,17 +186,19 @@ def voxel_tet_mesh(
     if h <= 0:
         raise ValueError("Voxel size must be positive.")
 
-    # grid (padded by one voxel), centered around the bounding box
-    dims = np.ceil(extent / h).astype(np.int64) + 2
-    origin = (lo + hi) / 2.0 - dims * h / 2.0
+    # grid (padded by one voxel), aligned with the bounding box minimum: the min faces of the bounding box (and both
+    # faces along the longest axis with `resolution`) lie on grid planes, so flat boundary faces add no extra layer
+    dims = np.ceil(extent / h - 1e-9).astype(np.int64) + 2
+    origin = lo - h
     ijk = np.stack(np.meshgrid(*(np.arange(n) for n in dims), indexing="ij"), -1).reshape(-1, 3)
     centers = origin + (ijk + 0.5) * h
 
-    sign, dist, _ = _query_surface(centers, points, triangles, device)
+    sign, _, _ = _query_surface(centers, points, triangles, device)
     keep = sign < 0
     if conservative:
-        # a voxel intersecting the surface has its center within half a voxel diagonal of the surface
-        keep |= dist <= 0.5 * np.sqrt(3.0) * h * (1.0 + 1e-6)
+        # + every voxel that intersects the surface (exact triangle-box test, touching does not count)
+        flat = (ijk[:, 0] * dims[1] + ijk[:, 1]) * dims[2] + ijk[:, 2]
+        keep |= np.isin(flat, _surface_voxels(points, triangles, origin, h, dims))
     ijk = ijk[keep]
     if ijk.shape[0] == 0:
         raise RuntimeError("Voxelization is empty, decrease the voxel size.")

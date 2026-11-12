@@ -101,7 +101,7 @@ def test_inside_only_smaller(sphere):
 
 def test_voxel_size_vs_resolution(sphere):
     pts, tris = sphere
-    h = 0.02 / 5  # diameter / 5
+    h = float(np.ptp(pts, 0).max()) / 5  # longest extent / resolution
     a = vtm.voxel_tet_mesh(pts, tris, resolution=5)
     b = vtm.voxel_tet_mesh(pts, tris, voxel_size=h)
     np.testing.assert_allclose(a[0], b[0])
@@ -111,6 +111,38 @@ def test_voxel_size_vs_resolution(sphere):
     assert np.isclose(np.abs(edges).max(), h)
     # finer resolution -> more tets
     assert vtm.voxel_tet_mesh(pts, tris, resolution=10)[1].shape[0] > a[1].shape[0]
+
+
+def _box(size):
+    """Closed, outward oriented box with min corner at the origin."""
+    c = np.array([[x, y, z] for x in (0.0, size[0]) for y in (0.0, size[1]) for z in (0.0, size[2])])
+    t = np.array([0, 1, 3, 0, 3, 2, 4, 6, 7, 4, 7, 5, 0, 4, 5, 0, 5, 1, 2, 3, 7, 2, 7, 6, 0, 2, 6, 0, 6, 4,
+                  1, 5, 7, 1, 7, 3]).reshape(-1, 3)  # fmt: skip
+    return c, t
+
+
+def test_box_on_grid_exact(sphere):
+    """A box whose extents are multiples of the voxel size is voxelized exactly (no extra layer of voxels)."""
+    pts, tris = _box((0.024, 0.018, 0.006))
+    tp, tets, sp, st = vtm.voxel_tet_mesh(pts, tris, resolution=4)  # h = 6 mm -> 4 x 3 x 1 voxels
+    _check_valid(tp, tets, sp, st)
+    np.testing.assert_allclose(tp.min(0), pts.min(0), atol=1e-12)
+    np.testing.assert_allclose(tp.max(0), pts.max(0), atol=1e-12)
+    assert tets.shape[0] == 4 * 3 * 1 * 6
+
+
+def test_flat_box_overshoot_below_one_voxel():
+    """Gel-like flat box: the conservative cage overshoots by less than one voxel, and not at all at the min faces."""
+    size = np.array([0.0253, 0.0207, 0.0041])
+    pts, tris = _box(size)
+    tp, tets, sp, st = vtm.voxel_tet_mesh(pts, tris, resolution=12)
+    h = size.max() / 12
+    _check_valid(tp, tets, sp, st)
+    assert _inside_tets(pts, tp, tets).all()
+    np.testing.assert_allclose(tp.min(0), 0.0, atol=1e-12)  # min faces lie on grid planes
+    overshoot = tp.max(0) - size
+    assert (overshoot >= -1e-12).all() and (overshoot < h).all()
+    assert np.isclose(overshoot[0], 0.0, atol=1e-12)  # longest axis: both faces on grid planes
 
 
 def test_snap_to_surface(sphere):
