@@ -1,4 +1,5 @@
 from __future__ import annotations
+from source.tacex.tacex.simulation_approaches.gelsight_simulator import GelSightSimulator
 
 import numpy as np
 import torch
@@ -82,13 +83,13 @@ class GelSightSensor(SensorBase):
             self.compute_indentation_depth_func = self.compute_indentation_depth
 
         # check if desired output is possible with given config:
-        if "tactile_rgb" in self._data.output and self.cfg.optical_sim_cfg is None:
+        if "tactile_rgb" in self.cfg.data_types and self.cfg.optical_sim_cfg is None:
             raise RuntimeError("Output [tactile_rgb] not possible with given config: optical_sim_cfg = None]")
 
-        if "marker_motion" in self._data.output and self.cfg.marker_motion_sim_cfg is None:
+        if "marker_motion" in self.cfg.data_types and self.cfg.marker_motion_sim_cfg is None:
             raise RuntimeError("Output [marker_motion] not possible with given config: marker_motion = None")
 
-        if "force_field" in self._data.output and self.cfg.force_field_sim_cfg is None:
+        if "force_field" in self.cfg.data_types and self.cfg.force_field_sim_cfg is None:
             raise RuntimeError("Output [force_field] not possible with given config: force_field_sim_cfg = None")
 
         self._check_camera_aspect_ratio()
@@ -227,7 +228,7 @@ class GelSightSensor(SensorBase):
         #     #TODO should I compute press depth after interpolation or before?
         #     self._data.output["height_map"] = resized
 
-        if "camera_depth" in self._data.output:
+        if "camera_depth" in self.cfg.data_types:
             self._data.output["camera_depth"][env_ids] = 0
 
         # reset every simulator once (one instance can serve several outputs). Each writes the no-contact state into
@@ -235,15 +236,20 @@ class GelSightSensor(SensorBase):
         for simulator in self.simulators:
             simulator.reset(env_ids)
 
-        if (self.marker_motion_simulator is not None) and ("marker_motion" in self._data.output):
+        if (self.marker_motion_simulator is not None) and ("marker_motion" in self.cfg.data_types):
             # (yy_init_pos, xx_init_pos), i.e. along height x width of tactile img
             self._data.output["init_marker_pos"] = ([0], [0])
 
         # Reset the frame count
         self._frame[env_ids] = 0
 
-    def _simulator_outputs(self) -> list[tuple[str, GelSightSimulator]]:
-        """Requested simulator outputs and the simulator that produces each of them."""
+    def _requested_simulated_outputs(self) -> list[tuple[str, GelSightSimulator]]:
+        """Requested outputs that a simulation approach produces, as ``(data_type, simulator)`` pairs.
+
+        ``data_type`` is the output's name (``tactile_rgb``, ``marker_motion`` or ``force_field``, if listed in
+        ``cfg.data_types``), not its buffer; the buffers are in ``self._data.output[data_type]``. Camera-based outputs
+        (``height_map``, ``camera_depth``, ``camera_rgb``) are not included.
+        """
         outputs = []
         for data_type, simulator in (
             ("tactile_rgb", self.optical_simulator),
@@ -265,7 +271,7 @@ class GelSightSensor(SensorBase):
         simulator.set_output_buffer(data_type, buffer)
 
     def compute_indentation_depth(self):
-        """Computes the indentation depth by takin the minimum value of the height map.
+        """Computes the indentation depth by taking the minimum value of the height map.
 
         The height map format is as follow:
         - value 0 is at the gelpad's highest point (= no indentation)
@@ -343,7 +349,7 @@ class GelSightSensor(SensorBase):
         # The sensor owns the simulator outputs: allocate them on the sensor's device (shapes from the simulators, which
         # may depend on their initialization, e.g. the number of force field points) and hand them over. The
         # simulators write into them in place; the no-contact state is written by reset() below.
-        for data_type, simulator in self._simulator_outputs():
+        for data_type, simulator in self._requested_simulated_outputs():
             self._allocate_simulator_output(data_type, simulator)
 
         # Create all env_ids buffer
@@ -380,10 +386,10 @@ class GelSightSensor(SensorBase):
             self.camera._timestamp = self._timestamp
             self.camera.update(dt=0.0, force_recompute=True)  # time comes from the parent sensor (synced above)
 
-            if "camera_depth" in self._data.output:
+            if "camera_depth" in self.cfg.data_types:
                 self._get_camera_depth()
 
-            if "camera_rgb" in self._data.output:
+            if "camera_rgb" in self.cfg.data_types:
                 self._data.output["camera_rgb"][:] = self.camera.data.output["rgb"]
 
         if self.compute_indentation_depth_func is not None:
@@ -403,16 +409,8 @@ class GelSightSensor(SensorBase):
 
     def _simulators_with_requested_outputs(self) -> list[GelSightSimulator]:
         """Distinct simulators that produce at least one of the requested outputs (for debug visualization)."""
-        requested = []
-        for simulator, data_type in (
-            (self.optical_simulator, "tactile_rgb"),
-            (self.marker_motion_simulator, "marker_motion"),
-            (self.force_field_simulator, "force_field"),
-        ):
-            if simulator is not None and data_type in self.cfg.data_types:
-                if all(simulator is not s for s in requested):
-                    requested.append(simulator)
-        return requested
+        # dict keeps the order and deduplicates by identity (simulators do not override __eq__/__hash__)
+        return list[GelSightSimulator](dict.fromkeys(simulator for _, simulator in self._requested_simulated_outputs()))
 
     def _set_debug_vis_impl(self, debug_vis: bool):
         # we actually set the debug_vis in _initialize_impl, since we need the _prim_view, which
