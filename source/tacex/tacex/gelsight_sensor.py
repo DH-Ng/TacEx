@@ -1,5 +1,4 @@
 from __future__ import annotations
-from source.tacex.tacex.simulation_approaches.gelsight_simulator import GelSightSimulator
 
 import numpy as np
 import torch
