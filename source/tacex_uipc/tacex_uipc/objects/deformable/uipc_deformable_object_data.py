@@ -125,7 +125,7 @@ class UipcDeformableObjectData:
     @property
     def surf_nodal_pos_w(self):
         """Surface nodal positions in simulation world frame. Shape is (num_instances, max_sim_vertices_per_body, 3)."""
-        if self._nodal_pos_w.timestamp < self._sim_timestamp:
+        if self._surf_nodal_pos_w.timestamp < self._sim_timestamp:
             all_trimesh_points = self._uipc_sim.sio.simplicial_surface(2).positions().view().reshape(-1, 3)
             surf_points = all_trimesh_points[
                 self._uipc_sim._surf_vertex_offsets[
