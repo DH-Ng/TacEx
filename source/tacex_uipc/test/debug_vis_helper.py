@@ -34,13 +34,19 @@ def launch_app():
 
 
 def setup_view(sim, eye: tuple[float, float, float], target: tuple[float, float, float]):
-    """Adds a light and points the viewport camera at the scene (live visualization only)."""
+    """Adds lights and points the viewport camera at the scene (live visualization only).
+
+    A weak dome light (ambient, also the background) plus a directional light from above at the side for shading.
+    A bright dome light alone washes the scene out.
+    """
     if not DEBUG_VIS:
         return
     import isaaclab.sim as sim_utils
 
-    light_cfg = sim_utils.DomeLightCfg(intensity=2000.0, color=(1.0, 1.0, 1.0))
-    light_cfg.func("/World/DebugVisLight", light_cfg)
+    dome_cfg = sim_utils.DomeLightCfg(intensity=300.0, color=(1.0, 1.0, 1.0))
+    dome_cfg.func("/World/DebugVisLight", dome_cfg)
+    sun_cfg = sim_utils.DistantLightCfg(intensity=1500.0, angle=1.0)
+    sun_cfg.func("/World/DebugVisSun", sun_cfg, orientation=(0.8536, 0.3536, 0.3536, 0.1464))  # ~45 deg from above
     sim.set_camera_view(eye, target)
 
 
