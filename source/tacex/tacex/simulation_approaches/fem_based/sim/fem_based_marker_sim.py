@@ -17,10 +17,12 @@ import math
 import numpy as np
 import torch
 
+import omni.usd
 import usdrt
 import usdrt.UsdGeom
 from sklearn.neighbors import NearestNeighbors
 
+import isaaclab.sim as sim_utils
 import isaaclab.utils.math as math_utils
 
 from ....gelsight_sensor import GelSightSensor
@@ -28,6 +30,7 @@ from tacex_uipc.objects import UipcObject
 from tacex_uipc.sim import UipcSim
 
 from .utils.geometry import in_hull
+
 
 class FemBasedMarkerSim:
     def __init__(
@@ -44,18 +47,7 @@ class FemBasedMarkerSim:
         marker_lose_tracking_probability: float = 0.0,
         normalize: bool = False,
         num_markers: int = 128,
-        camera_focal_length_x: float = 6.70909926e03,
-        camera_focal_length_y: float = 6.70908555e03,
-        camera_optical_center_x: float = 1.37493298e02,
-        camera_optical_center_y: float = 1.23346390e02,
         camera_distort_coeff: float = 0.0,
-        # camera_params: tuple[float, float, float, float, float] = (
-        #     340,
-        #     325,
-        #     160,
-        #     125,
-        #     0.0,
-        # ),
         **kwargs,
     ):
         """
@@ -67,7 +59,9 @@ class FemBasedMarkerSim:
         param: loss_tracking_probability: the probability of losing tracking, appled to each marker
         param: normalize: whether to normalize the output marker flow
         param: marker_flow_size: the size of the output marker flow
-        param: camera_params: (fx, fy, cx, cy, distortion)
+
+        The camera intrinsics for projecting the markers into the tactile image are computed from the sensor config
+        (view size at the gel surface, gel surface distance) and the tactile image resolution.
         """
 
         self.gelpad_obj = uipc_gelpad
@@ -96,21 +90,17 @@ class FemBasedMarkerSim:
 
         # camera frame to gel center
         # NOTE: camera frame follows opencv coordinate system
-        self.camera_intrinsic = np.array(
-            [
-                [camera_focal_length_x, 0, camera_optical_center_x],
-                [0, camera_focal_length_y, camera_optical_center_y],
-                [0, 0, 1],
-            ],
-            dtype=np.float32,
-        )
+        self.camera_intrinsic = self.compute_camera_intrinsic(sensor, tactile_img_width, tactile_img_height)
+
         self.camera_distort_coeffs = np.array([camera_distort_coeff, 0, 0, 0, 0], dtype=np.float32)
 
         self.init_vertices_camera = self.get_vertices_camera()
         self.init_surface_vertices_gelpad = self.get_surface_vertices_world().clone()
 
-        self.init_surface_vertices_camera = self.get_surface_vertices_camera().clone()
-        self.reference_surface_vertices_camera = self.get_surface_vertices_camera().clone()
+        # undeformed gel surface in the camera frame, from consistent spawn poses: used to place the marker grid on the
+        # surface (_gen_marker_weight) and as reference for the marker motion (gen_marker_flow)
+        self.init_surface_vertices_camera = self.compute_rest_surface_vertices_camera()
+        self.reference_surface_vertices_camera = self.init_surface_vertices_camera.clone()
 
         # self.phong_shading_renderer = PhongShadingRenderer()
         self.curr_marker_pts = None
@@ -137,11 +127,13 @@ class FemBasedMarkerSim:
         v_cv = math_utils.transform_points(input_vertices, pos=cam_pos_w, quat=cam_quat_w)
         return v_cv
 
-    def transform_world_to_camera_frame(self, input_vertices):
+    def transform_world_to_camera_frame(self, input_vertices, cam_pos_w=None, cam_quat_w=None):
+        """World -> camera frame (ROS convention). Uses the current camera pose data unless a pose is given."""
         # self.camera._update_poses(self.camera._ALL_INDICES)
         # math_utils.convert_camera_frame_orientation_convention
-        cam_pos_w = self.camera._data.pos_w
-        cam_quat_w = self.camera._data.quat_w_ros
+        if cam_pos_w is None:
+            cam_pos_w = self.camera._data.pos_w
+            cam_quat_w = self.camera._data.quat_w_ros
         cam_quat_w_inv = math_utils.quat_inv(cam_quat_w)
 
         rot_inv = math_utils.matrix_from_quat(cam_quat_w_inv)
@@ -150,13 +142,13 @@ class FemBasedMarkerSim:
             rot_inv = rot_inv[None]  # (3, 3) -> (1, 3, 3)
 
         t_target = input_vertices - cam_pos_w
-        # convert to batched #todo fix it for multi env
+        # convert to batched #todo fix for multi env
         t_target = t_target[None, :, :]  # (N, 3) -> (N, 1, 3)
 
         rot_inv = rot_inv.to(t_target.dtype)
         v_cv = torch.matmul(rot_inv, t_target.transpose_(1, 2))
         v_cv = v_cv.transpose_(1, 2)
-        # todo fix it for multi env
+        # todo fix for multi env
         v_cv = v_cv[0]
         return v_cv
 
@@ -191,6 +183,39 @@ class FemBasedMarkerSim:
 
     def set_reference_surface_vertices_camera(self):
         self.reference_surface_vertices_camera = self.get_surface_vertices_camera().clone()
+
+    def compute_rest_surface_vertices_camera(self) -> torch.Tensor:
+        """Undeformed gel surface in the camera frame, from the spawn poses of gel and camera.
+
+        The current poses are not usable here: during initialization the camera pose data still holds the spawn pose,
+        while the gelpad may already follow the physics pose of the sensor case (attachment), which shifts the
+        reference (and the marker grid) in the image. The spawn poses of gel (UIPC rest geometry) and camera (USD)
+        come from the same USD hierarchy, so they are consistent at any time.
+        """
+        # surface vertices are copies of tet node positions -> map each surface vertex to its node
+        nodes_now = self.get_vertices_world().reshape(-1, 3).cpu().numpy()
+        surf_now = self.get_surface_vertices_world().reshape(-1, 3).cpu().numpy()
+        dist, node_idx = NearestNeighbors(n_neighbors=1).fit(nodes_now).kneighbors(surf_now)
+        if dist.max() > 1e-6:
+            raise RuntimeError(f"Gel surface vertices do not coincide with tet nodes (max distance {dist.max()} m).")
+
+        # rest (spawn) positions of these nodes
+        _, geo_slot_rest = self.uipc_sim.scene.geometries().find(self.gelpad_obj.obj_id)
+        nodes_rest = np.asarray(geo_slot_rest.geometry().positions().view()).reshape(-1, 3)
+        surf_rest = torch.tensor(nodes_rest[node_idx[:, 0]], device=self.camera._device, dtype=torch.float32)
+
+        # spawn pose of the camera (USD), in ROS convention like the camera data
+        cam_prim = sim_utils.find_matching_prims(self.camera.cfg.prim_path)[0]
+        tf = omni.usd.get_world_transform_matrix(cam_prim)
+        q = tf.ExtractRotation().GetQuaternion()
+        cam_pos = torch.tensor([list(tf.ExtractTranslation())], device=self.camera._device, dtype=torch.float32)
+        cam_quat_opengl = torch.tensor(
+            [[q.GetReal(), *q.GetImaginary()]], device=self.camera._device, dtype=torch.float32
+        )
+        cam_quat_ros = math_utils.convert_camera_frame_orientation_convention(
+            cam_quat_opengl, origin="opengl", target="ros"
+        )
+        return self.transform_world_to_camera_frame(surf_rest, cam_pos_w=cam_pos, cam_quat_w=cam_quat_ros)
 
     def _gen_marker_grid(self):
         marker_interval = (self.marker_interval_range[1] - self.marker_interval_range[0]) * np.random.rand(1)[
@@ -335,6 +360,26 @@ class FemBasedMarkerSim:
 
         return marker_pts_surface_idx, marker_pts_surface_weight
 
+    @staticmethod
+    def compute_camera_intrinsic(sensor: GelSightSensor, img_width: int, img_height: int) -> np.ndarray:
+        """Pinhole intrinsics (3, 3) of the sensor camera for an image of ``img_width`` x ``img_height`` pixels.
+
+        Same geometry as the sensor camera (see ``GelSightSensor._create_tiled_camera``): the view
+        ``view_width_m`` x ``view_height_m`` is defined at the undeformed gel surface, so
+        ``fx = img_width * d / view_width_m`` with ``d`` = gel surface distance (likewise ``fy``). The principal point
+        is the image center (``img_width / 2``, ``img_height / 2``), as for the Isaac Lab camera.
+        """
+        cam_cfg = sensor.cfg.sensor_camera_cfg
+        d = sensor.cfg.get_gel_surface_to_camera_distance_m()
+        return np.array(
+            [
+                [img_width * d / cam_cfg.view_width_m, 0, img_width / 2],
+                [0, img_height * d / cam_cfg.view_height_m, img_height / 2],
+                [0, 0, 1],
+            ],
+            dtype=np.float32,
+        )
+
     def gen_marker_uv(self, marker_pts):
         # marker_uv = cv2.projectPoints(
         #     marker_pts,
@@ -377,9 +422,9 @@ class FemBasedMarkerSim:
         marker_mask = np.logical_and.reduce(
             [
                 init_marker_uv[:, 0] > 5,
-                init_marker_uv[:, 0] < self.tactile_img_height,
+                init_marker_uv[:, 0] < self.tactile_img_width,  # u: image x (columns)
                 init_marker_uv[:, 1] > 5,
-                init_marker_uv[:, 1] < self.tactile_img_width,
+                init_marker_uv[:, 1] < self.tactile_img_height,  # v: image y (rows)
             ]
         )
         marker_flow = np.stack([init_marker_uv, curr_marker_uv], axis=0)
@@ -408,47 +453,3 @@ class FemBasedMarkerSim:
         ret = torch.tensor(ret, device="cuda:0")
         self.curr_marker_uv = curr_marker_uv
         return ret
-
-    # def get_marker_img(self):
-    #     curr_marker_uv = self.curr_marker_uv
-    #     curr_marker_img = self.draw_markers(curr_marker_uv)
-    #     # cv2.imwrite("curr_marker_img.png", curr_marker_img)
-    #     return curr_marker_img
-
-    # def gen_rgb_image(self):
-    #     # generate RGB image from depth
-    #     depth = self._gen_depth()
-    #     rgb = self.phong_shading_renderer.generate(depth)
-    #     rgb = rgb.astype(np.float64)
-
-    #     # generate markers
-    #     marker_grid = self._gen_marker_grid()
-    #     marker_pts_surface_idx, marker_pts_surface_weight = self._gen_marker_weight(
-    #         marker_grid
-    #     )
-    #     curr_marker_pts = (
-    #         self.get_surface_vertices_in_camera_frame()[marker_pts_surface_idx]
-    #         * marker_pts_surface_weight[..., None]
-    #     ).sum(1)
-    #     curr_marker_uv = self.gen_marker_uv(curr_marker_pts)
-
-    #     curr_marker = self.draw_marker(curr_marker_uv)
-    #     rgb = rgb.astype(np.float64)
-    #     rgb *= np.dstack([curr_marker.astype(np.float64) / 255] * 3)
-    #     rgb = rgb.astype(np.uint8)
-    #     return rgb
-
-    # def _gen_depth(self):
-    #     # hide the gel to get the depth of the object in contact
-    #     self.render_component.disable()
-    #     self.cam_entity.set_pose(cv2ex2pose(self.get_camera_pose()))
-    #     self.scene.update_render()
-    #     ipc_update_render_all(self.scene)
-    #     self.cam.take_picture()
-    #     position = self.cam.get_picture("Position")  # [H, W, 4]
-    #     depth = -position[..., 2]  # float in meter
-    #     fem_smooth_sigma = 2
-    #     depth = gaussian_filter(depth, fem_smooth_sigma)
-    #     self.render_component.enable()
-
-    #     return depth

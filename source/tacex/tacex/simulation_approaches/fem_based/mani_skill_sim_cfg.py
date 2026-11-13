@@ -30,14 +30,6 @@ class ManiSkillSimulatorCfg(GelSightSimulatorCfg):
 
     marker_flow_size: int = 128
 
-    camera_params: tuple[float, float, float, float, float] = (
-        340,
-        325,
-        160,
-        125,
-        0.0,
-    )
-
     tactile_img_res: tuple = (320, 240)
     """Resolution of the Tactile Image.
 

@@ -88,11 +88,13 @@ class ManiSkillSimulator(GelSightSimulator):
             env_ids = range(self._num_envs)
         env_ids = torch.as_tensor(env_ids, dtype=torch.long, device=self._indentation_depth.device)
         self._indentation_depth[env_ids] = 0.0
-        # only env 0 is simulated so far: its output is the current marker flow (as with the former re-simulation on
-        # reset); the other rows stay zero
+        # no-contact state: current marker positions = initial ones. Only env 0 is simulated so far; the initial
+        # positions come from the undeformed reference surface, independent of the (possibly not yet updated) camera
+        # pose. The other rows stay zero.
         out = self._output_buffers.get("marker_motion")
         if out is not None and bool((env_ids == 0).any()):
             self.marker_motion_simulation()
+            out[0, 1] = out[0, 0]
         # self.init_marker_pos = (self.marker_motion_sim.init_marker_x_pos, self.marker_motion_sim.init_marker_y_pos)
 
     def _set_debug_vis_impl(self, debug_vis: bool):

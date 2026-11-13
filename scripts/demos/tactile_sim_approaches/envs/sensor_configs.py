@@ -147,13 +147,6 @@ TAXIM_FEM_CFG = GELSIGHT_MINI_TAXIM_FEM_CFG.replace(
         marker_lose_tracking_probability=0.0,
         normalize=False,
         marker_flow_size=128,
-        camera_params=(
-            340,
-            325,
-            160,
-            125,
-            0.0,
-        ),
         tactile_img_res=(320, 240),
     ),
     compute_indentation_depth_class="optical_sim",
