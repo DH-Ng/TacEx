@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import inspect
 import numpy as np
+import re
 import torch
 import weakref
 from typing import TYPE_CHECKING
@@ -21,6 +22,8 @@ from isaaclab.assets import Articulation, RigidObject
 from isaaclab.utils import configclass
 from isaaclab.utils.math import transform_points
 
+from tacex_uipc.utils.debug_draw import DebugDraw
+
 from .uipc_constraints import UipcConstraint, UipcConstraintCfg
 
 if TYPE_CHECKING:
@@ -30,9 +33,7 @@ if TYPE_CHECKING:
 @configclass
 class UipcIsaacAttachmentsCfg(UipcConstraintCfg):
     debug_vis: bool = False
-    """Draw attachment offsets and aim_position via IsaacSim's _debug_draw api.
-
-    """
+    """Draw the attachment targets (aim positions) and lines to the attached body's center (``DebugDraw``)."""
 
     body_name: str | None = None
     """Name of the body in the rigid object that should be used for the attachment.
@@ -540,54 +541,26 @@ class UipcIsaacAttachments(UipcConstraint):
         self._is_initialized = False
 
     def _set_debug_vis_impl(self, debug_vis: bool):
-        if debug_vis:
-            try:
-                from isaacsim.util.debug_draw import _debug_draw
-
-                self._draw = _debug_draw.acquire_debug_draw_interface()
-            except ImportError:
-                import warnings
-
-                warnings.warn("_debug_draw failed to import", ImportWarning)
-                self._draw = None
-                print("No debug_vis for attachment. Reason: Cannot import _debug_draw")
+        if debug_vis and getattr(self, "_draw", None) is None:
+            name = re.sub(r"[^A-Za-z0-9_]", "_", self.uipc_object.cfg.prim_path.strip("/"))
+            self._draw = DebugDraw(f"/Visuals/UipcAttachments/{name}", point_radius=3e-4, color=(1.0, 0.0, 0.0))
+        if getattr(self, "_draw", None) is not None:
+            self._draw.set_visibility(debug_vis)
 
     def _debug_vis_callback(self, event):
-        """Draws the attachment data (attachment points and lines) in the Isaac GUI.
-
-        The method uses the debug_draw_interface from `from isaacsim.util.debug_draw import _debug_draw` to
-        draw the points and lines.
-
-        Keep in mind that this means significant performance drops when a lot is drawn.
-
-        """
+        """Draws the attachment data (attachment targets and lines to the body center), see :class:`DebugDraw`."""
         if self._aim_positions.shape[0] == 0 or not self._is_initialized:
             return
 
         # self._compute_aim_positions()
 
-        # need to clean up drawn shapes here, if the uipc simulation does not do it, which is the case
-        # if no debug_vis is used in uipc_sim
-        if not self.uipc_object.uipc_sim.cfg.debug_vis:
-            self._draw.clear_points()
-            self._draw.clear_lines()
-
-        # drawing with the debug method leads to render delay
-        self._draw.draw_points(
-            self._aim_positions,
-            [(255, 0, 0, 0.5)] * self._aim_positions.shape[0],
-            [60] * self._aim_positions.shape[0],
-        )  # the new positions
-        # pose = self.isaaclab_rigid_object.data.body_state_w[:, self.rigid_body_id, 0:7].clone()
+        self._draw.clear()
+        aim = np.asarray(self._aim_positions)
+        self._draw.draw_points(aim)  # the target positions of the attached vertices
         pose = self.obj_pose.clone()
-
         for i in range(self._num_instances):
+            # lines from the attached body's center to the targets
             obj_center = pose[i, 0, 0:3].cpu().numpy()
-            # self._draw.clear_points()
-            # print("Obj_center_debug ", obj_center)
-            # draw.draw_points([obj_center], [(255,255,0,0.5)]*obj_center.shape[0], [50]*obj_center.shape[0]) # the new positions
-            # print("")
-            for j in range(i, self._num_instances * self.num_attachment_points_per_obj):
-                self._draw.draw_lines(
-                    [obj_center], [self._aim_positions[j]], [(255, 255, 0, 0.5)], [10]
-                )
+            targets = aim[i : self._num_instances * self.num_attachment_points_per_obj]
+            starts = np.repeat(obj_center[None], targets.shape[0], axis=0)
+            self._draw.draw_lines(starts, targets, colors=(1.0, 1.0, 0.0))

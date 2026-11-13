@@ -1,7 +1,7 @@
 import omni.ext
-from isaacsim.util.debug_draw import _debug_draw
 
 draw = None
+"""DebugDraw of the extension (created on startup)."""
 
 # import omni.usd
 from omni.physx import get_physx_interface
@@ -16,7 +16,7 @@ from isaacsim.gui.components.ui_utils import *
 import omni.ui as ui
 
 from tacex_uipc.objects.constraints import UipcIsaacAttachments
-from tacex_uipc.utils import MeshGenerator, TetMeshCfg
+from tacex_uipc.utils import DebugDraw, MeshGenerator, TetMeshCfg
 from tacex_uipc.utils.create_surf_triangle_vis_material import (
     assign_material_to_mesh_with_usd,
     create_surf_tri_vis_material,
@@ -36,7 +36,7 @@ class TacexIPCExtension(omni.ext.IExt):
         print("[tacex_uipc] startup")
 
         global draw
-        draw = _debug_draw.acquire_debug_draw_interface()
+        draw = DebugDraw("/Visuals/TacexUipcExtension", point_radius=3e-4, line_width=1e-4)
 
         self._window = omni.ui.Window(
             "TacEx UIPC Extension",
@@ -266,38 +266,21 @@ def get_stage_id():
 
 
 def _draw_tets(all_vertices, tet_indices):
+    """Draws the edges of the tets."""
     draw.clear_lines()
-
-    # first draw the tet mesh nodes
-    # draw.draw_points(all_vertices, [(255,0,0,1)]*len(all_vertices), [10]*len(all_vertices))
-
-    # connect nodes according to tet_indices
-    color = [(125, 0, 0, 0.5)]
-    line_size = 20
-    for i in range(0, len(tet_indices), 4):
-        tet_points_idx = tet_indices[i : i + 4]
-        tet_points = [all_vertices[i] for i in tet_points_idx]
-        # draw.draw_points(tet_points, [(255,0,0,1)]*len(all_vertices), [line_size]*len(all_vertices))
-        draw.draw_lines(
-            [tet_points[0]] * 3, tet_points[1:], color * 3, [line_size] * 3
-        )  # draw from point 0 to every other point (3 times 0, cause line from 0 to the other 3 points)
-        draw.draw_lines([tet_points[1]] * 2, tet_points[2:], color * 2, [line_size] * 2)
-        draw.draw_lines([tet_points[2]], [tet_points[3]], color, [line_size])  # draw line between the other 2 points
+    vertices = np.asarray(all_vertices, dtype=np.float64).reshape(-1, 3)
+    tets = np.asarray(tet_indices).reshape(-1, 4)
+    edges = tets[:, [[0, 1], [0, 2], [0, 3], [1, 2], [1, 3], [2, 3]]].reshape(-1, 2)
+    draw.draw_lines(vertices[edges[:, 0]], vertices[edges[:, 1]], colors=(0.5, 0.0, 0.0))
 
 
 def _draw_surface_trimesh(all_vertices, tet_surf_indices):
-    color = [(0, 0, 125, 0.5)]
-    point_size = 15
-    line_size = 20
-    # draw surface mesh
-    for i in range(0, len(tet_surf_indices), 3):
-        tri_points_idx = tet_surf_indices[i : i + 3]
-        tri_points = [all_vertices[j] for j in tri_points_idx]
-        draw.draw_lines(
-            [tri_points[0]] * 2, tri_points[1:], color * 2, [line_size] * 2
-        )  # draw from point 0 to every other point (3 times 0, cause line from 0 to the other 3 points)
-        draw.draw_lines([tri_points[1]] * 1, tri_points[2:], color * 1, [line_size] * 1)
-        draw.draw_points(tri_points, [(255, 255, 255, 1)] * len(tri_points), [point_size] * len(tri_points))
+    """Draws the edges and vertices of the surface triangles."""
+    vertices = np.asarray(all_vertices, dtype=np.float64).reshape(-1, 3)
+    tris = np.asarray(tet_surf_indices).reshape(-1, 3)
+    edges = tris[:, [[0, 1], [0, 2], [1, 2]]].reshape(-1, 2)
+    draw.draw_lines(vertices[edges[:, 0]], vertices[edges[:, 1]], colors=(0.0, 0.0, 0.5))
+    draw.draw_points(vertices[np.unique(tris)], colors=(1.0, 1.0, 1.0))
 
 
 def _create_tet_data_attributes(path, tet_points, tet_indices, tet_surf_points, tet_surf_indices):
@@ -389,15 +372,9 @@ def _create_attachment(paths):
     _create_attachment_data_attributes(tet_mesh_path, attachment_offsets, idx)
 
     # draw attachment data
-    draw.draw_points(
-        attachment_points_positions,
-        [(255, 0, 0, 0.5)] * attachment_points_positions.shape[0],
-        [30] * attachment_points_positions.shape[0],
-    )  # the new positions
-    obj_center = obj_pos
-
-    for j in range(0, attachment_points_positions.shape[0]):
-        draw.draw_lines([obj_center], [attachment_points_positions[j, :]], [(255, 255, 0, 0.5)], [10])
+    draw.draw_points(attachment_points_positions, colors=(1.0, 0.0, 0.0))  # the attachment points
+    centers = np.repeat(np.asarray(obj_pos, dtype=np.float64).reshape(1, 3), len(attachment_points_positions), axis=0)
+    draw.draw_lines(centers, attachment_points_positions, colors=(1.0, 1.0, 0.0))
 
     get_physx_interface().release_physics_objects()
 

@@ -21,15 +21,9 @@ from tacex_uipc import (
 from tacex_uipc.objects import UipcDeformableObject, UipcDeformableObjectCfg, UipcRigidObject, UipcRigidObjectCfg
 from tacex_uipc.utils import TetMeshCfg
 
-try:
-    from isaacsim.util.debug_draw import _debug_draw
+from tacex_uipc.utils import DebugDraw
 
-    draw = _debug_draw.acquire_debug_draw_interface()
-except ImportError:
-    import warnings
-
-    warnings.warn("_debug_draw failed to import", ImportWarning)
-    draw = None
+draw = DebugDraw("/Visuals/BallRollingUipcTexture")
 
 from .ball_rolling_physx_rigid import PhysXRigidEnv, PhysXRigidEnvCfg
 
@@ -192,7 +186,7 @@ class UipcTexturedEnv(PhysXRigidEnv):
         draw.clear_points()
         points = ball_pos.cpu().numpy()
 
-        draw.draw_points(points, [(255, 0, 255, 0.5)] * points.shape[0], [30] * points.shape[0])
+        draw.draw_points(points, colors=(1.0, 0.0, 1.0), sizes=1e-3)
 
         # change goal
         if (self.step_count + 1) % self.num_step_goal_change == 0:

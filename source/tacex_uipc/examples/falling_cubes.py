@@ -30,9 +30,6 @@ simulation_app.set_setting("/app/useFabricSceneDelegate", True)
 import pathlib
 
 import isaacsim.core.utils.prims as prims_utils
-from isaacsim.util.debug_draw import _debug_draw
-
-draw = _debug_draw.acquire_debug_draw_interface()
 
 import random
 

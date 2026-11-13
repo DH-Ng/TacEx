@@ -23,16 +23,6 @@ from tacex_uipc import (
 from tacex_uipc.objects import UipcDeformableObject, UipcDeformableObjectCfg, UipcRigidObject, UipcRigidObjectCfg
 from tacex_uipc.utils import TetMeshCfg
 
-try:
-    from isaacsim.util.debug_draw import _debug_draw
-
-    draw = _debug_draw.acquire_debug_draw_interface()
-except ImportError:
-    import warnings
-
-    warnings.warn("_debug_draw failed to import", ImportWarning)
-    draw = None
-
 from .ball_rolling_physx_rigid import PhysXRigidEnv, PhysXRigidEnvCfg
 
 

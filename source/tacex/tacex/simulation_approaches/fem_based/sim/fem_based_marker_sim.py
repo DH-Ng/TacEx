@@ -29,17 +29,6 @@ from tacex_uipc.sim import UipcSim
 
 from .utils.geometry import in_hull
 
-try:
-    from isaacsim.util.debug_draw import _debug_draw
-
-    draw = _debug_draw.acquire_debug_draw_interface()
-except ImportError:
-    import warnings
-
-    warnings.warn("_debug_draw failed to import", ImportWarning)
-    draw = None
-
-
 class FemBasedMarkerSim:
     def __init__(
         self,

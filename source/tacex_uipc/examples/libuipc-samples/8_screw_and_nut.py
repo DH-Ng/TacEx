@@ -40,15 +40,6 @@ from isaaclab.utils.timer import Timer
 
 from tacex_uipc import UipcSim, UipcSimCfg
 
-try:
-    from isaacsim.util.debug_draw import _debug_draw
-
-    draw = _debug_draw.acquire_debug_draw_interface()
-except ImportError:
-    import warnings
-
-    warnings.warn("_debug_draw failed to import", ImportWarning)
-    draw = None
 
 
 def setup_base_scene(sim: sim_utils.SimulationContext):
@@ -189,7 +180,7 @@ def main():
             with Timer("[INFO]: Time taken for rendering", name="render_update"):
                 uipc_sim.update_render_meshes()
                 # remove drawn point from uipc_sim debug mode
-                draw.clear_points()
+                uipc_sim._debug_draw.clear_points()
 
                 sim.render()
             total_uipc_render_time += Timer.get_timer_info("render_update")

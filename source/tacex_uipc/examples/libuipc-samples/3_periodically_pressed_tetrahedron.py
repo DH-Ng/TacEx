@@ -40,15 +40,9 @@ from uipc.unit import MPa
 import isaaclab.sim as sim_utils
 from isaaclab.utils.timer import Timer
 
-try:
-    from isaacsim.util.debug_draw import _debug_draw
+from tacex_uipc.utils import DebugDraw
 
-    draw = _debug_draw.acquire_debug_draw_interface()
-except ImportError:
-    import warnings
-
-    warnings.warn("_debug_draw failed to import", ImportWarning)
-    draw = None
+draw = DebugDraw("/Visuals/PeriodicallyPressedTetrahedron")
 
 from tacex_uipc import UipcSim, UipcSimCfg
 
@@ -115,11 +109,7 @@ def setup_libuipc_scene(scene):
 
         draw.clear_points()
         points = np.array(aim_position_view)
-        draw.draw_points(
-            points,
-            [(255, 0, 0, 0.5)] * points.shape[0],
-            [30] * points.shape[0],
-        )  # the new positions
+        draw.draw_points(points, colors=(1.0, 0.0, 0.0), sizes=0.02)  # the new positions
         # obj_center = obj_position[0]
 
     animator.insert(tet_object, animate_tet)

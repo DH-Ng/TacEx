@@ -23,17 +23,6 @@ import torch
 from scipy.linalg import svd
 import scipy.sparse as sp
 
-try:
-    from isaacsim.util.debug_draw import _debug_draw
-
-    draw = _debug_draw.acquire_debug_draw_interface()
-except ImportError:
-    import warnings
-
-    warnings.warn("_debug_draw failed to import", ImportWarning)
-    draw = None
-
-
 def create_ramp_image(ramp_path=None, width=256, height=4):
     """Create a horizontal gradient image: left=blue, middle=green, right=red.
 
@@ -334,6 +323,10 @@ def start_deformation_updater(mesh: UsdGeom.Mesh, primvar_name="deformValue"):
     if rest_pts is None:
         raise RuntimeError("Rest positions not found; call prepare_deform_primvar first")
 
+    from .debug_draw import DebugDraw
+
+    draw = DebugDraw(f"/Visuals/DeformationUpdater{str(mesh.GetPath()).replace('/', '_')}")
+
     def _tick(event):
         if not omni.timeline.get_timeline_interface().is_playing():
             return
@@ -363,8 +356,8 @@ def start_deformation_updater(mesh: UsdGeom.Mesh, primvar_name="deformValue"):
 
         # draw current mesh points
         draw.clear_points()
-        draw.draw_points(cur_pts, [(0, 255, 0, 0.5)] * cur_pts.shape[0], [50] * cur_pts.shape[0])
-        draw.draw_points([np.mean(cur_pts, axis=0)], [(0, 255, 0, 1.0)], [50])
+        draw.draw_points(cur_pts, colors=(0.0, 1.0, 0.0))
+        draw.draw_points([np.mean(cur_pts, axis=0)], colors=(0.0, 1.0, 0.0), sizes=2 * draw.point_radius)
 
         # # draw the transformed rest point pos
         # # rest_points_aligned = rest_pts

@@ -12,16 +12,6 @@ from isaacsim.core.prims import XFormPrim
 import isaacsim.core.utils.prims as prims_utils
 from pxr import Gf, UsdGeom, UsdPhysics, Sdf, Usd
 
-try:
-    from isaacsim.util.debug_draw import _debug_draw
-
-    draw = _debug_draw.acquire_debug_draw_interface()
-except ImportError:
-    import warnings
-
-    warnings.warn("_debug_draw failed to import", ImportWarning)
-    draw = None
-
 import numpy as np
 import torch
 import warp as wp

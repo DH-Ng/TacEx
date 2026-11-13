@@ -2,17 +2,6 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-try:
-    from isaacsim.util.debug_draw import _debug_draw
-
-    draw = _debug_draw.acquire_debug_draw_interface()
-except ImportError:
-    import warnings
-
-    warnings.warn("_debug_draw failed to import", ImportWarning)
-    draw = None
-
-
 import warp as wp
 
 from isaaclab.utils import configclass

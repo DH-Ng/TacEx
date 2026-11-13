@@ -12,16 +12,6 @@ from pxr import UsdGeom
 import isaaclab.sim as sim_utils
 from isaaclab.utils import configclass
 
-try:
-    from isaacsim.util.debug_draw import _debug_draw
-
-    draw = _debug_draw.acquire_debug_draw_interface()
-except ImportError:
-    import warnings
-
-    warnings.warn("_debug_draw failed to import", ImportWarning)
-    draw = None
-
 import numpy as np
 
 from uipc import Logger, Timer
@@ -30,7 +20,7 @@ from uipc.geometry import extract_surface, ground
 from uipc.unit import GPa
 
 from tacex_uipc.objects import UipcObject
-from tacex_uipc.utils import MeshGenerator, add_barycentric_primvar, create_surf_tri_vis_material
+from tacex_uipc.utils import DebugDraw, MeshGenerator, add_barycentric_primvar, create_surf_tri_vis_material
 
 
 @configclass
@@ -224,6 +214,9 @@ class UipcSim:
 
         self.stage = usdrt.Usd.Stage.Attach(omni.usd.get_context().get_stage_id())
 
+        # debug drawing (cfg.debug_vis), prims are created on first use
+        self._debug_draw = DebugDraw("/Visuals/UipcSim", point_radius=2e-4, color=(1.0, 0.0, 1.0))
+
         # for updating render meshes
         self.sio = SceneIO(self.scene)
 
@@ -317,9 +310,9 @@ class UipcSim:
             #         # draw.draw_lines([tet_points[1]] * 1, tet_points[2:], color * 1, [10] * 1)
 
         if self.cfg.debug_vis:
-            draw.clear_points()
-            points = np.array(all_trimesh_points)
-            draw.draw_points(points, [(255, 0, 255, 0.5)] * points.shape[0], [30] * points.shape[0])
+            # all simulation surface vertices
+            self._debug_draw.clear_points()
+            self._debug_draw.draw_points(np.array(all_trimesh_points))
 
         # if self.isaac_sim is not None:
         #     # additional render call to somewhat mitigate render delay

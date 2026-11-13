@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import re
+
 import inspect
 import weakref
 from collections.abc import Callable
@@ -8,16 +10,6 @@ from typing import TYPE_CHECKING
 import omni
 
 import isaaclab.sim as sim_utils
-
-try:
-    from isaacsim.util.debug_draw import _debug_draw
-
-    draw = _debug_draw.acquire_debug_draw_interface()
-except ImportError:
-    import warnings
-
-    warnings.warn("_debug_draw failed to import", ImportWarning)
-    draw = None
 
 from uipc import Animation
 
@@ -196,17 +188,13 @@ class UipcConstraint:
         self._is_initialized = False
 
     def _set_debug_vis_impl(self, debug_vis: bool):
-        if debug_vis:
-            try:
-                from isaacsim.util.debug_draw import _debug_draw
+        if debug_vis and getattr(self, "_draw", None) is None:
+            from tacex_uipc.utils.debug_draw import DebugDraw
 
-                self._draw = _debug_draw.acquire_debug_draw_interface()
-            except ImportError:
-                import warnings
-
-                warnings.warn("_debug_draw failed to import", ImportWarning)
-                self._draw = None
-                print("No debug_vis for attachment. Reason: Cannot import _debug_draw")
+            name = re.sub(r"[^A-Za-z0-9_]", "_", self.uipc_object.cfg.prim_path.strip("/"))
+            self._draw = DebugDraw(f"/Visuals/UipcConstraints/{name}", point_radius=3e-4, color=(1.0, 0.0, 0.0))
+        if getattr(self, "_draw", None) is not None:
+            self._draw.set_visibility(debug_vis)
 
     # def _debug_vis_callback(self, event):
     #     if self.aim_positions.shape[0] == 0:

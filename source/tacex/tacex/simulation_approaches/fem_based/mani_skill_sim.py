@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import copy
 import math
+import re
 import numpy as np
 import torch
 from collections.abc import Sequence
@@ -118,20 +119,17 @@ class ManiSkillSimulator(GelSightSimulator):
                     self._debug_windows = {}
                     self._debug_img_providers = {}
 
-                # for drawing current marker world positions in Isaac GUI
-                try:
-                    from isaacsim.util.debug_draw import _debug_draw
+            # current marker world positions as spheres (own prims below /Visuals, not visible in depth images)
+            if getattr(self, "_draw", None) is None:
+                from tacex_uipc.utils import DebugDraw
 
-                    self._draw = _debug_draw.acquire_debug_draw_interface()
-                except ImportError:
-                    import warnings
-
-                    warnings.warn("_debug_draw failed to import", ImportWarning)
-                    self._draw = None
-                    print("Cannot import '_debug_draw' module.")
-
-        else:
-            pass
+                name = re.sub(r"[^A-Za-z0-9_]", "_", self.sensor.cfg.prim_path.strip("/"))
+                self._draw = DebugDraw(
+                    f"/Visuals/GelSight/{name}/fem_markers", point_radius=1.5e-4, color=(1.0, 0.0, 0.0)
+                )
+            self._draw.set_visibility(True)
+        elif getattr(self, "_draw", None) is not None:
+            self._draw.set_visibility(False)
 
     def _debug_vis_callback(self, event):
         if self.sensor._prim_view is None:
@@ -193,23 +191,18 @@ class ManiSkillSimulator(GelSightSimulator):
                     self._debug_windows.pop(str(i)).destroy()
                     self._debug_img_providers.pop(str(i)).destroy()
 
-        # draw marker world positions in the Isaac GUI
-        if self.sensor.cfg.debug_vis:
-            if not self.gelpad_uipc.uipc_sim.cfg.debug_vis:
-                self._draw.clear_points()
-                self._draw.clear_lines()
-
-            # draw markers in sim world
-            curr_marker_pts_3d = (
-                self.marker_motion_sim.transform_camera_to_world_frame(
-                    torch.tensor(self.marker_motion_sim.curr_marker_pts, device="cuda:0", dtype=torch.float32)
-                )
-                .cpu()
-                .numpy()
+        # draw marker world positions (no markers before the first marker simulation)
+        if (
+            self.sensor.cfg.debug_vis
+            and getattr(self, "_draw", None) is not None
+            and self.marker_motion_sim.curr_marker_pts is not None
+        ):
+            curr_marker_pts_3d = self.marker_motion_sim.transform_camera_to_world_frame(
+                # same device as the camera pose used for the transform
+                torch.tensor(self.marker_motion_sim.curr_marker_pts, device=self.camera.device, dtype=torch.float32)
             )
-            self._draw.draw_points(
-                curr_marker_pts_3d, [(255, 0, 0, 0.5)] * curr_marker_pts_3d.shape[0], [30] * curr_marker_pts_3d.shape[0]
-            )
+            self._draw.clear_points()
+            self._draw.draw_points(curr_marker_pts_3d.cpu().numpy())
 
     def _create_marker_img(self, marker_data):
         """Visualization of marker flow like in the original FOTS simulation.

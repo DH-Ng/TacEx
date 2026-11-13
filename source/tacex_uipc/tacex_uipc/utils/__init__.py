@@ -10,6 +10,7 @@ from .create_deformation_vis_material import (
     create_deform_vis_material,
 )
 from .uipc_contact_info import ContactInfo
+from .debug_draw import DebugDraw
 
 import os
 

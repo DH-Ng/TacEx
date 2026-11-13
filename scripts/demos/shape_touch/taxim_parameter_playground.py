@@ -85,15 +85,9 @@ from isaacsim.gui.components.ui_utils import *
 import omni.ui as ui
 
 
-try:
-    from isaacsim.util.debug_draw import _debug_draw
+from tacex_uipc.utils import DebugDraw
 
-    draw = _debug_draw.acquire_debug_draw_interface()
-except ImportError:
-    import warnings
-
-    warnings.warn("_debug_draw failed to import", ImportWarning)
-    draw = None
+draw = DebugDraw("/Visuals/TaximParameterPlayground")
 
 INDENTER_FILE_PATHS = sorted(list(Path(f"{TACEX_ASSETS_DATA_DIR}/Props/tactile_test_shapes/").glob("*.usd")))
 
@@ -1207,7 +1201,7 @@ def run_data_collection(env: ShapeTouchEnv):
 
     draw.clear_points()
     points = np.array(calib_points_3d).flatten().reshape((-1, 3))
-    draw.draw_points(points, [(255, 0, 255, 0.5)] * points.shape[0], [30] * points.shape[0])
+    draw.draw_points(points, colors=(1.0, 0.0, 1.0))
 
     env.param_window.num_calib_point = calib_pattern.shape[0]
 

@@ -8,16 +8,6 @@ import omni.log
 import omni.usd
 from pxr import Gf, UsdGeom
 
-try:
-    from isaacsim.util.debug_draw import _debug_draw
-
-    draw = _debug_draw.acquire_debug_draw_interface()
-except ImportError:
-    import warnings
-
-    warnings.warn("_debug_draw failed to import", ImportWarning)
-    draw = None
-
 import numpy as np
 
 import warp as wp
