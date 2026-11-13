@@ -16,6 +16,7 @@ from isaacsim.gui.components.ui_utils import *
 import omni.ui as ui
 
 from tacex_uipc.objects.constraints import UipcIsaacAttachments
+from tacex_uipc.objects.constraints.geometric_attachment import compute_attachment_data_geometric
 from tacex_uipc.utils import DebugDraw, MeshGenerator, TetMeshCfg
 from tacex_uipc.utils.create_surf_triangle_vis_material import (
     assign_material_to_mesh_with_usd,
@@ -366,7 +367,7 @@ def _create_attachment(paths):
         pass
 
     attachment_offsets, idx, rigid_prims, attachment_points_positions, obj_pos = (
-        UipcIsaacAttachments.compute_attachment_data(isaac_mesh_path, world_tet_points, tet_indices)
+        compute_attachment_data_geometric(isaac_mesh_path, world_tet_points, tet_indices)  # same as the runtime default
     )
     _create_attachment_data_attributes(tet_mesh_path, attachment_offsets, idx)
 

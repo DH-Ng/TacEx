@@ -5,7 +5,7 @@ import numpy as np
 import re
 import torch
 import weakref
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal
 
 import omni
 from omni.physx import get_physx_interface, get_physx_scene_query_interface
@@ -24,6 +24,7 @@ from isaaclab.utils.math import transform_points
 
 from tacex_uipc.utils.debug_draw import DebugDraw
 
+from .geometric_attachment import compute_attachment_data_geometric
 from .uipc_constraints import UipcConstraint, UipcConstraintCfg
 
 if TYPE_CHECKING:
@@ -46,6 +47,15 @@ class UipcIsaacAttachmentsCfg(UipcConstraintCfg):
 
     Note: Precomputed attachment data is only valid if the corresponding precomputed tet mesh data exists.
     This means, that the uipc_object of the attachment class should also use precomputed data.
+    """
+
+    attachment_method: Literal["geometric", "physx_sweep"] = "geometric"
+    """How the attached UIPC vertices are found (when ``compute_attachment_data`` is True).
+
+    - ``geometric``: distance of the vertices to the body's collision shapes, computed from the USD stage
+      (:func:`compute_attachment_data_geometric`). Needs no PhysX scene queries.
+    - ``physx_sweep``: PhysX sphere sweeps (:meth:`UipcIsaacAttachments.compute_attachment_data`). Needs PhysX scene
+      queries (``SimulationCfg.enable_scene_query_support = True``, disabled by default in Isaac Lab).
     """
 
     attachment_points_radius: float = 5e-4
@@ -117,13 +127,20 @@ class UipcIsaacAttachments(UipcConstraint):
             mesh = self.uipc_object.uipc_meshes[0]
             tet_points_world = mesh.positions().view()[:, :, 0]
             tet_indices = mesh.tetrahedra().topo().view()[:, :, 0]
-            attachment_offsets, idx, rigid_prims, attachment_points_pos, obj_pos = (
-                self.compute_attachment_data(
-                    isaac_rigid_prim_path,
-                    tet_points_world,
-                    tet_indices,
-                    attachment_points_radius,
+            if self.cfg.attachment_method == "geometric":
+                compute = compute_attachment_data_geometric
+            elif self.cfg.attachment_method == "physx_sweep":
+                self._check_scene_queries_enabled()
+                compute = self.compute_attachment_data
+            else:
+                raise ValueError(
+                    f"Unknown attachment_method '{self.cfg.attachment_method}', expected 'geometric' or 'physx_sweep'."
                 )
+            attachment_offsets, idx, rigid_prims, attachment_points_pos, obj_pos = compute(
+                isaac_rigid_prim_path,
+                tet_points_world,
+                tet_indices,
+                attachment_points_radius,
             )
 
         # set attachment data
@@ -265,6 +282,16 @@ class UipcIsaacAttachments(UipcConstraint):
         return True
 
     @staticmethod
+    def _check_scene_queries_enabled():
+        """The PhysX sweep finds nothing without scene queries: fail early with a clear message."""
+        sim = sim_utils.SimulationContext.instance()
+        if sim is not None and not sim.cfg.enable_scene_query_support:
+            raise RuntimeError(
+                "UIPC x Isaac attachment with attachment_method='physx_sweep' needs PhysX scene queries: set"
+                " SimulationCfg.enable_scene_query_support = True, or use attachment_method='geometric'."
+            )
+
+    @staticmethod
     def compute_attachment_data(
         isaac_mesh_path, tet_points, tet_indices, sphere_radius=5e-4, max_dist=1e-5
     ):  # really small distances to prevent intersection with unwanted geometries
@@ -356,6 +383,14 @@ class UipcIsaacAttachments(UipcConstraint):
                     )[0]
                     offset = offset.cpu().numpy()
                     attachment_offsets.append(offset)
+
+        if len(idx) == 0:
+            raise RuntimeError(
+                f"UIPC x Isaac attachment: no UIPC vertex is within {sphere_radius} m of a collision shape of"
+                f" '{init_prim.GetPath()}', so the UIPC object would not be attached. Check that PhysX scene queries are"
+                " enabled (SimulationCfg.enable_scene_query_support = True, disabled by default in Isaac Lab),"
+                " that the body has enabled collision shapes, and that the UIPC mesh touches them."
+            )
 
         attachment_points_positions = np.array(attachment_points_positions).reshape(
             -1, 3
