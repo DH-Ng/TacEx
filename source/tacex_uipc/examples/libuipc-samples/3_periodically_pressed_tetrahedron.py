@@ -107,9 +107,8 @@ def setup_libuipc_scene(scene):
 
         aim_position_view[0] = rest_position_view[0] + Vector3.UnitY() * y
 
-        draw.clear_points()
         points = np.array(aim_position_view)
-        draw.draw_points(points, colors=(1.0, 0.0, 0.0), sizes=0.02)  # the new positions
+        draw.set_points(points, colors=(1.0, 0.0, 0.0), sizes=0.02)  # the new positions
         # obj_center = obj_position[0]
 
     animator.insert(tet_object, animate_tet)

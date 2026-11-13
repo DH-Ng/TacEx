@@ -4,7 +4,8 @@
 every other user has drawn, it is not available headless and does not show up in recordings.
 
 :class:`DebugDraw` keeps the same calls (``draw_points``, ``draw_lines``, ``clear_points``, ``clear_lines``) but draws
-into its own prims below ``prim_path`` (by convention under ``/Visuals``):
+into its own prims below ``prim_path`` (by convention under ``/Visuals``). For points/lines that move every frame, use
+``set_points`` / ``set_lines``: they replace the previous ones in one update (instead of clear + draw).
 
 - points: Isaac Lab :class:`~isaaclab.markers.VisualizationMarkers` (spheres), one marker set per color,
 - lines: one ``UsdGeom.BasisCurves`` prim (linear segments).
@@ -81,6 +82,7 @@ class DebugDraw:
         # points: color -> list of (positions (N, 3), radii (N,))
         self._points: dict[tuple, list[tuple[np.ndarray, np.ndarray]]] = {}
         self._markers: dict[tuple, object] = {}
+        self._counts: dict[tuple, int] = {}  # number of instances last written per color
         # lines: list of (starts (N, 3), ends (N, 3), colors (N, 3), widths (N,))
         self._lines: list[tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]] = []
         self._curves = None
@@ -97,15 +99,17 @@ class DebugDraw:
             colors: One color for all points or one per point. Defaults to :attr:`color`.
             sizes: Radius [m], one for all points or one per point. Defaults to :attr:`point_radius`.
         """
-        points = np.asarray(points, dtype=np.float64).reshape(-1, 3)
-        n = points.shape[0]
-        if n == 0:
-            return
-        colors = _expand_colors(colors, n, self.color)
-        radii = _expand_sizes(sizes, n, self.point_radius)
-        for color in dict.fromkeys(colors):
-            mask = np.array([c == color for c in colors])
-            self._points.setdefault(color, []).append((points[mask], radii[mask]))
+        for color in self._add_points(points, colors, sizes):
+            self._update_points(color)
+
+    def set_points(self, points, colors: Color | Sequence[Color] | None = None, sizes=None):
+        """Replaces all points of this instance (one update; use this for moving points instead of clear + draw).
+
+        Args: see :meth:`draw_points`.
+        """
+        self._points.clear()
+        touched = self._add_points(points, colors, sizes)
+        for color in dict.fromkeys([*self._markers, *touched]):
             self._update_points(color)
 
     def draw_lines(self, starts, ends, colors: Color | Sequence[Color] | None = None, sizes=None):
@@ -117,17 +121,18 @@ class DebugDraw:
             colors: One color for all lines or one per line. Defaults to :attr:`color`.
             sizes: Width [m], one for all lines or one per line. Defaults to :attr:`line_width`.
         """
-        starts = np.asarray(starts, dtype=np.float64).reshape(-1, 3)
-        ends = np.asarray(ends, dtype=np.float64).reshape(-1, 3)
-        n = starts.shape[0]
-        if n == 0:
-            return
-        if ends.shape[0] != n:
-            raise ValueError(f"Got {n} start but {ends.shape[0]} end points.")
-        colors = np.array(_expand_colors(colors, n, self.color))
-        widths = _expand_sizes(sizes, n, self.line_width)
-        self._lines.append((starts, ends, colors, widths))
-        self._update_lines()
+        if self._add_lines(starts, ends, colors, sizes):
+            self._update_lines()
+
+    def set_lines(self, starts, ends, colors: Color | Sequence[Color] | None = None, sizes=None):
+        """Replaces all lines of this instance (one update; use this for moving lines instead of clear + draw).
+
+        Args: see :meth:`draw_lines`.
+        """
+        self._lines.clear()
+        added = self._add_lines(starts, ends, colors, sizes)
+        if added or self._curves is not None:
+            self._update_lines()
 
     def clear_points(self):
         """Removes all points drawn by this instance."""
@@ -149,8 +154,11 @@ class DebugDraw:
     def set_visibility(self, visible: bool):
         """Shows/hides everything drawn by this instance (drawing while hidden is kept for later)."""
         self._visible = visible
-        for color in self._markers:
-            self._update_points(color)
+        for color, markers in self._markers.items():
+            if markers.is_visible() != visible:
+                markers.set_visibility(visible)
+            if visible:
+                self._update_points(color)  # catch up on what was drawn while hidden
         if self._curves is not None and self._curves.GetPrim().IsValid():
             from pxr import UsdGeom
 
@@ -160,6 +168,34 @@ class DebugDraw:
     """
     Internal helpers.
     """
+
+    def _add_points(self, points, colors, sizes) -> list[tuple]:
+        """Stores points (grouped by color), returns the colors that got points."""
+        points = np.asarray(points, dtype=np.float64).reshape(-1, 3)
+        n = points.shape[0]
+        if n == 0:
+            return []
+        colors = _expand_colors(colors, n, self.color)
+        radii = _expand_sizes(sizes, n, self.point_radius)
+        touched = list(dict.fromkeys(colors))
+        for color in touched:
+            mask = np.array([c == color for c in colors])
+            self._points.setdefault(color, []).append((points[mask], radii[mask]))
+        return touched
+
+    def _add_lines(self, starts, ends, colors, sizes) -> bool:
+        """Stores line segments, returns whether any were added."""
+        starts = np.asarray(starts, dtype=np.float64).reshape(-1, 3)
+        ends = np.asarray(ends, dtype=np.float64).reshape(-1, 3)
+        n = starts.shape[0]
+        if n == 0:
+            return False
+        if ends.shape[0] != n:
+            raise ValueError(f"Got {n} start but {ends.shape[0]} end points.")
+        colors = np.array(_expand_colors(colors, n, self.color))
+        widths = _expand_sizes(sizes, n, self.line_width)
+        self._lines.append((starts, ends, colors, widths))
+        return True
 
     def _update_points(self, color: tuple):
         from isaaclab.markers import VisualizationMarkers, VisualizationMarkersCfg
@@ -178,15 +214,25 @@ class DebugDraw:
                     },
                 )
             )
+            markers.set_visibility(self._visible)
             self._markers[color] = markers
+            self._counts.pop(color, None)
+        if not self._visible:
+            return  # written when shown again
         chunks = self._points.get(color, [])
-        # VisualizationMarkers cannot hold zero markers -> an empty set is hidden instead
-        markers.set_visibility(self._visible and bool(chunks))
-        if not (self._visible and chunks):
-            return
-        positions = np.concatenate([p for p, _ in chunks])
-        radii = np.concatenate([r for _, r in chunks])
-        markers.visualize(translations=positions, scales=np.repeat(radii[:, None], 3, axis=1))
+        positions = np.concatenate([p for p, _ in chunks]) if chunks else np.zeros((0, 3))
+        radii = np.concatenate([r for _, r in chunks]) if chunks else np.zeros(0)
+        # write the instancer directly instead of `VisualizationMarkers.visualize`: it does not accept zero markers,
+        # and clearing must not toggle the visibility (clear + draw every frame would make the prim blink)
+        from pxr import Vt
+
+        instancer = markers._instancer_manager
+        instancer.GetPositionsAttr().Set(Vt.Vec3fArray.FromNumpy(positions.astype(np.float32)))
+        instancer.GetScalesAttr().Set(Vt.Vec3fArray.FromNumpy(np.repeat(radii[:, None], 3, axis=1).astype(np.float32)))
+        n = positions.shape[0]
+        if self._counts.get(color) != n:
+            instancer.GetProtoIndicesAttr().Set(Vt.IntArray.FromNumpy(np.zeros(n, dtype=np.int32)))
+            self._counts[color] = n
 
     def _update_lines(self):
         from pxr import Sdf, UsdGeom, Vt

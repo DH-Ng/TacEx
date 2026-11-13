@@ -554,13 +554,13 @@ class UipcIsaacAttachments(UipcConstraint):
 
         # self._compute_aim_positions()
 
-        self._draw.clear()
         aim = np.asarray(self._aim_positions)
-        self._draw.draw_points(aim)  # the target positions of the attached vertices
-        pose = self.obj_pose.clone()
+        self._draw.set_points(aim)  # the target positions of the attached vertices
+        # lines from the attached body's center to the targets
+        centers = self.obj_pose[:, 0, 0:3].cpu().numpy()
+        starts, ends = [], []
         for i in range(self._num_instances):
-            # lines from the attached body's center to the targets
-            obj_center = pose[i, 0, 0:3].cpu().numpy()
             targets = aim[i : self._num_instances * self.num_attachment_points_per_obj]
-            starts = np.repeat(obj_center[None], targets.shape[0], axis=0)
-            self._draw.draw_lines(starts, targets, colors=(1.0, 1.0, 0.0))
+            starts.append(np.repeat(centers[i][None], targets.shape[0], axis=0))
+            ends.append(targets)
+        self._draw.set_lines(np.concatenate(starts), np.concatenate(ends), colors=(1.0, 1.0, 0.0))

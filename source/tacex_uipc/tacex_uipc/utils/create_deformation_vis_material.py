@@ -355,9 +355,9 @@ def start_deformation_updater(mesh: UsdGeom.Mesh, primvar_name="deformValue"):
         # print("test ", UsdGeom.PrimvarsAPI(mesh).GetPrimvar(f"{primvar_name}").Get())
 
         # draw current mesh points
-        draw.clear_points()
-        draw.draw_points(cur_pts, colors=(0.0, 1.0, 0.0))
-        draw.draw_points([np.mean(cur_pts, axis=0)], colors=(0.0, 1.0, 0.0), sizes=2 * draw.point_radius)
+        center = np.mean(cur_pts, axis=0, keepdims=True)
+        sizes = np.r_[np.full(len(cur_pts), draw.point_radius), 2 * draw.point_radius]  # center drawn bigger
+        draw.set_points(np.vstack([cur_pts, center]), colors=(0.0, 1.0, 0.0), sizes=sizes)
 
         # # draw the transformed rest point pos
         # # rest_points_aligned = rest_pts

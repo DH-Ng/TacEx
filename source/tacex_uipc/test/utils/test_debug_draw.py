@@ -59,10 +59,25 @@ def test_clear_only_affects_own_instance(sim):
     b.draw_points([[1, 1, 1]])
     a.clear_points()
     ia, ib = (next(iter(_instancer(f"/Visuals/TestDraw/{k}").values())) for k in "ab")
-    assert ia.ComputeVisibility() == UsdGeom.Tokens.invisible  # cleared (empty sets are hidden)
-    assert ib.ComputeVisibility() == UsdGeom.Tokens.inherited and _count(ib) == 1
+    assert _count(ia) == 0 and len(ia.GetProtoIndicesAttr().Get()) == 0
+    assert _count(ib) == 1
     a.draw_points([[2, 2, 2]])  # drawing after a clear starts from scratch
-    assert ia.ComputeVisibility() == UsdGeom.Tokens.inherited and _count(ia) == 1
+    assert _count(ia) == 1
+
+
+def test_clear_and_draw_does_not_toggle_visibility(sim):
+    """clear + draw every frame (like the FEM marker drawing) must not touch the visibility (prim blinks otherwise)."""
+    draw = DebugDraw("/Visuals/TestDraw/frames")
+    draw.draw_points([[0, 0, 0]])
+    instancer = next(iter(_instancer("/Visuals/TestDraw/frames").values()))
+    vis_attr = instancer.GetVisibilityAttr()
+    before = vis_attr.Get()
+    for k in range(5):
+        draw.clear_points()
+        assert vis_attr.Get() == before  # also not in between
+        draw.draw_points([[k, 0, 0], [k, 1, 0]])
+    assert vis_attr.Get() == before and instancer.ComputeVisibility() == UsdGeom.Tokens.inherited
+    assert _count(instancer) == 2 and len(instancer.GetScalesAttr().Get()) == 2
 
 
 def test_lines(sim):
@@ -96,3 +111,19 @@ def test_invalid_sizes(sim):
     draw = DebugDraw("/Visuals/TestDraw/invalid")
     with pytest.raises(ValueError):
         draw.draw_points([[0, 0, 0], [1, 1, 1]], sizes=[1, 2, 3])
+
+
+def test_set_replaces(sim):
+    """set_points / set_lines replace everything drawn before (moving points without clear + draw)."""
+    draw = DebugDraw("/Visuals/TestDraw/set")
+    draw.draw_points([[0, 0, 0], [1, 0, 0]], colors=(1.0, 0.0, 0.0))
+    draw.draw_points([[0, 1, 0]], colors=(0.0, 0.0, 1.0))
+    draw.set_points([[5, 5, 5]], colors=(1.0, 0.0, 0.0))  # replaces both colors
+    counts = {p: _count(i) for p, i in _instancer("/Visuals/TestDraw/set").items()}
+    assert sorted(counts.values()) == [0, 1]
+    draw.draw_lines([[0, 0, 0]], [[1, 1, 1]])
+    draw.set_lines([[0, 0, 0], [0, 0, 1]], [[1, 0, 0], [1, 0, 1]])
+    curves = UsdGeom.BasisCurves(sim_utils.get_current_stage().GetPrimAtPath("/Visuals/TestDraw/set/lines"))
+    assert len(curves.GetCurveVertexCountsAttr().Get()) == 2
+    draw.set_lines(np.zeros((0, 3)), np.zeros((0, 3)))  # empty -> no lines
+    assert len(curves.GetCurveVertexCountsAttr().Get()) == 0

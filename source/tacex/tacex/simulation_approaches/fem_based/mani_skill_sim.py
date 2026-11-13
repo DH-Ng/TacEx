@@ -201,8 +201,7 @@ class ManiSkillSimulator(GelSightSimulator):
                 # same device as the camera pose used for the transform
                 torch.tensor(self.marker_motion_sim.curr_marker_pts, device=self.camera.device, dtype=torch.float32)
             )
-            self._draw.clear_points()
-            self._draw.draw_points(curr_marker_pts_3d.cpu().numpy())
+            self._draw.set_points(curr_marker_pts_3d.cpu().numpy())
 
     def _create_marker_img(self, marker_data):
         """Visualization of marker flow like in the original FOTS simulation.

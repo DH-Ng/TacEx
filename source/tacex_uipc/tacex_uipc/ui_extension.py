@@ -267,11 +267,10 @@ def get_stage_id():
 
 def _draw_tets(all_vertices, tet_indices):
     """Draws the edges of the tets."""
-    draw.clear_lines()
     vertices = np.asarray(all_vertices, dtype=np.float64).reshape(-1, 3)
     tets = np.asarray(tet_indices).reshape(-1, 4)
     edges = tets[:, [[0, 1], [0, 2], [0, 3], [1, 2], [1, 3], [2, 3]]].reshape(-1, 2)
-    draw.draw_lines(vertices[edges[:, 0]], vertices[edges[:, 1]], colors=(0.5, 0.0, 0.0))
+    draw.set_lines(vertices[edges[:, 0]], vertices[edges[:, 1]], colors=(0.5, 0.0, 0.0))
 
 
 def _draw_surface_trimesh(all_vertices, tet_surf_indices):

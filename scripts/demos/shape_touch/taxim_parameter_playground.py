@@ -1199,7 +1199,6 @@ def run_data_collection(env: ShapeTouchEnv):
         points_3d[:, :2] += env.scene.env_origins[i, :2].cpu().numpy()
         calib_points_3d.append(points_3d)
 
-    draw.clear_points()
     points = np.array(calib_points_3d).flatten().reshape((-1, 3))
     draw.draw_points(points, colors=(1.0, 0.0, 1.0))
 

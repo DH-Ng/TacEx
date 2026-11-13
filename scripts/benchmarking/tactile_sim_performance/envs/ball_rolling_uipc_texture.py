@@ -183,10 +183,9 @@ class UipcTexturedEnv(PhysXRigidEnv):
         # update movement pattern according to the ball position
         ball_pos = self.object.data.root_pos_w - self.scene.env_origins
 
-        draw.clear_points()
         points = ball_pos.cpu().numpy()
 
-        draw.draw_points(points, colors=(1.0, 0.0, 1.0), sizes=1e-3)
+        draw.set_points(points, colors=(1.0, 0.0, 1.0), sizes=1e-3)
 
         # change goal
         if (self.step_count + 1) % self.num_step_goal_change == 0:
