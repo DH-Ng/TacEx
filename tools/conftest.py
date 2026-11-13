@@ -21,6 +21,18 @@ from junitparser import Error, JUnitXml, TestCase, TestSuite
 import tools.test_settings as test_settings
 
 
+
+def _indent_xml(path):
+    """Re-indents an XML report in place.
+
+    Drops whitespace-only text between elements before indenting, so reports that are read back and written again
+    (e.g. merged into the full report) do not pile up blank lines. Text of failures/errors is kept as is.
+    """
+    from lxml import etree
+
+    tree = etree.parse(str(path), etree.XMLParser(remove_blank_text=True))
+    tree.write(str(path), pretty_print=True, xml_declaration=True, encoding="utf-8")
+
 def pytest_ignore_collect(collection_path, config):
     # Skip collection and run each test script individually
     return True
@@ -184,7 +196,8 @@ def run_individual_tests(test_files, workspace_root, isaacsim_ci):
 
             # Write timeout report
             report_file = f"tests/test-reports-{str(file_name)}.xml"
-            timeout_report.write(report_file, pretty=True)
+            timeout_report.write(report_file)
+            _indent_xml(report_file)
 
             test_status[test_file] = {
                 "errors": 1,
@@ -225,7 +238,8 @@ def run_individual_tests(test_files, workspace_root, isaacsim_ci):
                     suite.name = suite_name
 
             # Write the updated report back
-            report.write(report_file, pretty=True)
+            report.write(report_file)
+            _indent_xml(report_file)
 
             # Parse the integer values with None handling
             errors = int(report.errors) if report.errors is not None else 0
@@ -373,7 +387,8 @@ def pytest_sessionstart(session):
     result_file = os.environ.get("TEST_RESULT_FILE", "full_report.xml")
     full_report_path = f"tests/{result_file}"
     print(f"Using result file: {result_file}")
-    full_report.write(full_report_path, pretty=True)
+    full_report.write(full_report_path)
+    _indent_xml(full_report_path)
     print("~~~~~~~~~~~~ Report written to", full_report_path)
 
     # print test status in a nice table

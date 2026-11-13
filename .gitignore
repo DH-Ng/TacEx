@@ -58,11 +58,14 @@ systems.json
 
 NvStreamer*
 
-# Tests
+# Test results
 tests/
 
 # Docker history
 .isaac-lab-docker-history
+
+# From libuipc
+sanity_check/
 
 # 
 source/tacex_assets/tacex_assets/data/Sensors/GelSight_Mini/calibs/pix2pix/checkpoints/
