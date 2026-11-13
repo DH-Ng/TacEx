@@ -100,7 +100,7 @@ def main():
     #         scale=(0.5, 0.5, 0.5)
     #     ),
     #     mesh_cfg=mesh_cfg,
-    #     constitution_cfg=UipcObjectCfg.StableNeoHookeanCfg()
+    #     constitution_cfg=UipcDeformableObjectCfg.StableNeoHookeanCfg()
     # )
     # ball = UipcObject(ball_cfg, uipc_sim)
 

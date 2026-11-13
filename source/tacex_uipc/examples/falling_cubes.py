@@ -180,6 +180,7 @@ def main():
 
     # Now we are ready!
     print("[INFO]: Setup complete...")
+    print("Start the simulation by pressing play button twice.")
 
     step = 1
     start_uipc_test = False
@@ -225,13 +226,13 @@ def main():
             print("Reset simulation")
             if start_uipc_test:
                 soft_obj.write_nodal_pos_to_sim(soft_obj.data.default_nodal_state_w[:, :, :3])
-                rigid_cube.write_pose_to_sim(rigid_cube.data.default_root_state)
+                rigid_cube.write_root_pose_to_sim(rigid_cube.data.default_root_state)
 
                 # reset a random small cube
                 if num_cubes > 0:
                     small_cube_id = random.randint(0, num_cubes - 1)
                     if small_cube_id % 2 == 1:
-                        cubes[small_cube_id].write_pose_to_sim(cubes[small_cube_id].data.default_root_state)
+                        cubes[small_cube_id].write_root_pose_to_sim(cubes[small_cube_id].data.default_root_state)
                     else:
                         cubes[small_cube_id].write_nodal_pos_to_sim(
                             cubes[small_cube_id].data.default_nodal_state_w[:, :, :3]

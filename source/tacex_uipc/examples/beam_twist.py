@@ -230,7 +230,7 @@ class BeamTwistEnvCfg(DirectRLEnvCfg):
         # epsilon_r=0.01
     )
     gelpad_left_cfg = UipcDeformableObjectCfg(
-        prim_path="/World/envs/env_.*/Robot/gelpad_left",
+        prim_path="/World/envs/env_.*/Robot/gsmini_gelpad_left",
         mesh_cfg=gel_mesh_cfg,
         constitution_cfg=UipcDeformableObjectCfg.StableNeoHookeanCfg(youngs_modulus=1),
         constraint_cfg=UipcIsaacAttachmentsCfg(
@@ -242,7 +242,7 @@ class BeamTwistEnvCfg(DirectRLEnvCfg):
         ),
     )
     gelpad_right_cfg = UipcDeformableObjectCfg(
-        prim_path="/World/envs/env_.*/Robot/gelpad_right",
+        prim_path="/World/envs/env_.*/Robot/gsmini_gelpad_right",
         mesh_cfg=gel_mesh_cfg,
         constitution_cfg=UipcDeformableObjectCfg.StableNeoHookeanCfg(youngs_modulus=1),
         constraint_cfg=UipcIsaacAttachmentsCfg(

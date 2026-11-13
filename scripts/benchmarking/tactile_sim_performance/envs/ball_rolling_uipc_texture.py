@@ -77,7 +77,7 @@ class UipcTexturedEnvCfg(PhysXRigidEnvCfg):
             usd_path=f"{TACEX_ASSETS_DATA_DIR}/Props/ball_wood.usd",
         ),
         mesh_cfg=mesh_cfg,
-        constitution_cfg=UipcRigidObjectCfg.AffineBodyConstitutionCfg(),  # UipcObjectCfg.StableNeoHookeanCfg() #
+        constitution_cfg=UipcRigidObjectCfg.AffineBodyConstitutionCfg(),  # UipcDeformableObjectCfg.StableNeoHookeanCfg() #
     )
 
     robot: ArticulationCfg = FRANKA_PANDA_ARM_SINGLE_GSMINI_TEXTURED_HIGH_PD_UIPC_CFG.replace(

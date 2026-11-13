@@ -73,7 +73,7 @@ class UipcEnvCfg(PhysXRigidEnvCfg):
             usd_path=f"{TACEX_ASSETS_DATA_DIR}/Props/ball_wood.usd",
         ),
         mesh_cfg=mesh_cfg,
-        constitution_cfg=UipcRigidObjectCfg.AffineBodyConstitutionCfg(),  # UipcObjectCfg.StableNeoHookeanCfg() #
+        constitution_cfg=UipcRigidObjectCfg.AffineBodyConstitutionCfg(),  # UipcDeformableObjectCfg.StableNeoHookeanCfg() #
     )
 
     robot: ArticulationCfg = FRANKA_PANDA_ARM_SINGLE_GSMINI_HIGH_PD_UIPC_CFG.replace(
@@ -193,7 +193,7 @@ class UipcEnv(PhysXRigidEnv):
         self._robot.set_joint_position_target(joint_pos, env_ids=env_ids)
         self._robot.write_joint_state_to_sim(joint_pos, joint_vel, env_ids=env_ids)
 
-        self.object.write_pose_to_sim(self.object.data.default_root_state)
+        self.object.write_root_pose_to_sim(self.object.data.default_root_state)
         self._uipc_gelpad.write_nodal_pos_to_sim(self._uipc_gelpad.data.default_nodal_state_w[:, :, :3])
 
         self.step_count = 0

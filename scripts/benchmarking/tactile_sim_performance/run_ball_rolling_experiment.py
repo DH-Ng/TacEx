@@ -1,3 +1,9 @@
+"""Franka panda arm, equipped with a single GelSight Mini sensor, rolls a ball around with running tactile simulation.
+
+Run with:
+python scripts/benchmarking/tactile_sim_performance/run_ball_rolling_experiment.py --env uipc
+"""
+
 import argparse
 
 from isaaclab.app import AppLauncher
@@ -18,7 +24,7 @@ parser.add_argument(
     "--debug_vis",
     default=False,
     action="store_true",
-    help="Whether to render tactile images in the# append AppLauncher cli args. Default True.",
+    help="Whether to render tactile images in the GUI. Default True.",
 )
 AppLauncher.add_app_launcher_args(parser)
 
@@ -280,9 +286,7 @@ def main():
     elif args_cli.env == "uipc_textured":
         env_cfg = UipcTexturedEnvCfg()
     else:
-        raise RuntimeError(
-            "Env not found. Try `--env_cfg physx_rigid` or `--env_cfg uipc` or `--env_cfg uipc_textured`."
-        )
+        raise RuntimeError("Env not found. Try `--env physx_rigid` or `--env uipc` or `--env uipc_textured`.")
 
     # override configurations with non-hydra CLI arguments
     env_cfg.scene.num_envs = args_cli.num_envs if args_cli.num_envs is not None else env_cfg.scene.num_envs

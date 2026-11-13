@@ -83,8 +83,8 @@ Sensor case prim names:
 - `gelsight_mini_case_right`
 
 Gelpad prim names:
-- `gelpad_left`
-- `gelpad_right`
+- `gsmini_gelpad_left`
+- `gsmini_gelpad_right`
 """
 
 
@@ -98,8 +98,8 @@ Sensor case prim names:
 - `gelsight_mini_case_right`
 
 Gelpad prim names:
-- `gelpad_left`
-- `gelpad_right`
+- `gsmini_gelpad_left`
+- `gsmini_gelpad_right`
 """
 FRANKA_PANDA_ARM_GSMINI_GRIPPER_HIGH_PD_RIGID_CFG.spawn.rigid_props.disable_gravity = True
 FRANKA_PANDA_ARM_GSMINI_GRIPPER_HIGH_PD_RIGID_CFG.actuators["panda_shoulder"].stiffness = 400.0
