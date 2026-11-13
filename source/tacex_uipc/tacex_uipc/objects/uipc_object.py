@@ -586,6 +586,9 @@ class UipcObject(AssetBase):
         curves.CreateWidthsAttr([width])
         curves.SetWidthsInterpolation(UsdGeom.Tokens.constant)
         curves.CreateDisplayColorPrimvar(UsdGeom.Tokens.constant).Set([Gf.Vec3f(*render_cfg.sim_mesh_vis_color)])
+        # keep the wireframe out of depth images (e.g. GelSight height maps), like Isaac Lab's VisualizationMarkers.
+        # Note: it is still visible in RGB camera images.
+        UsdGeom.PrimvarsAPI(curves).CreatePrimvar("invisibleToSecondaryRays", Sdf.ValueTypeNames.Bool).Set(True)
 
         self._sim_mesh_vis_prim = curves
         self._sim_mesh_vis_fabric = self.stage.GetPrimAtPath(usdrt.Sdf.Path(self.sim_mesh_vis_prim_path))

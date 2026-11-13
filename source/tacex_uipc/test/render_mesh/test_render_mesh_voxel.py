@@ -156,6 +156,8 @@ def test_sim_mesh_vis(result):
     edges = gel._sim_mesh_vis_edges
     assert edges.shape[0] * 2 == gel.sim_surf_triangles.shape[0] * 3
     assert len(UsdGeom.BasisCurves(prim).GetCurveVertexCountsAttr().Get()) == edges.shape[0]
+    # not visible in depth images (GelSight height maps)
+    assert UsdGeom.PrimvarsAPI(prim).GetPrimvar("invisibleToSecondaryRays").Get() is True
     # while shown: equals the current sim surface
     np.testing.assert_allclose(vis["points_shown"], result["final_surf"]["gel"][edges].reshape(-1, 3), atol=1e-6)
     # hidden: invisible and no longer updated
