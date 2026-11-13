@@ -12,15 +12,13 @@ from pxr import UsdGeom
 import isaaclab.sim as sim_utils
 from isaaclab.utils import configclass
 
-import numpy as np
-
 from uipc import Logger, Timer
 from uipc.core import Engine, Scene, SceneIO, World
 from uipc.geometry import extract_surface, ground
 from uipc.unit import GPa
 
 from tacex_uipc.objects import UipcObject
-from tacex_uipc.utils import DebugDraw, MeshGenerator, add_barycentric_primvar, create_surf_tri_vis_material
+from tacex_uipc.utils import MeshGenerator, add_barycentric_primvar, create_surf_tri_vis_material
 
 
 @configclass
@@ -30,6 +28,12 @@ class UipcSimCfg:
     update_render_meshes: bool = True
 
     debug_vis: bool = False
+    """Show the triangle outlines of the meshes created by :meth:`UipcSim.init_libuipc_scene_rendering` (libuipc
+    sample scenes).
+
+    The simulation meshes of uipc objects are visualized via the objects' ``debug_vis`` (triangle outlines, or the
+    simulation mesh wireframe for objects with a separate render mesh).
+    """
 
     dt: float = 0.01
 
@@ -214,9 +218,6 @@ class UipcSim:
 
         self.stage = usdrt.Usd.Stage.Attach(omni.usd.get_context().get_stage_id())
 
-        # debug drawing (cfg.debug_vis), prims are created on first use
-        self._debug_draw = DebugDraw("/Visuals/UipcSim", point_radius=2e-4, color=(1.0, 0.0, 1.0))
-
         # for updating render meshes
         self.sio = SceneIO(self.scene)
 
@@ -308,11 +309,6 @@ class UipcSim:
             #         #     [tet_points[0]] * 2, tet_points[1:], color * 2, [10] * 2
             #         # )  # draw from point 0 to every other point (3 times 0, cause line from 0 to the other 3 points)
             #         # draw.draw_lines([tet_points[1]] * 1, tet_points[2:], color * 1, [10] * 1)
-
-        if self.cfg.debug_vis:
-            # all simulation surface vertices
-            self._debug_draw.clear_points()
-            self._debug_draw.draw_points(np.array(all_trimesh_points))
 
         # if self.isaac_sim is not None:
         #     # additional render call to somewhat mitigate render delay
