@@ -12,6 +12,7 @@ from pxr import UsdGeom
 import isaaclab.sim as sim_utils
 from isaaclab.utils import configclass
 
+
 from uipc import Logger, Timer
 from uipc.core import Engine, Scene, SceneIO, World
 from uipc.geometry import extract_surface, ground
@@ -212,6 +213,8 @@ class UipcSim:
         self._surf_vertex_offsets = [0]
 
         self._fabric_meshes = []
+        # owner (uipc object) of each fabric mesh in `_fabric_meshes`
+        self._fabric_mesh_owners: list[UipcObject] = []
         # index in `_fabric_meshes` -> uipc object with a separate render mesh (see `RenderMeshCfg`)
         self._render_mesh_owners: dict[int, UipcObject] = {}
         self.uipc_objects: list[UipcObject] = []
@@ -298,6 +301,12 @@ class UipcSim:
 
             fabric_mesh_points = fabric_prim.GetAttribute("points")
             fabric_mesh_points.Set(usdrt.Vt.Vec3fArray(trimesh_points))
+
+            # deformation visualization (e.g. elastic energy/forces), see `UipcDeformableObjectCfg.debug_deformation_vis`
+            vis_owner = self._fabric_mesh_owners[i] if i < len(self._fabric_mesh_owners) else None
+            if vis_owner is not None and getattr(vis_owner.cfg, "debug_deformation_vis", False):
+                surf_points = all_trimesh_points[self._surf_vertex_offsets[i] : self._surf_vertex_offsets[i + 1]]
+                vis_owner.update_deformation_vis(surf_points, trimesh_points)
 
             # if self.cfg.debug_vis:
             #     # draw surface mesh

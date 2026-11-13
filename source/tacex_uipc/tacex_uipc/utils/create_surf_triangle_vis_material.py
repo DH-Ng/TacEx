@@ -5,7 +5,7 @@
 # reg = Sdr.Registry()
 # print("\n".join(sorted(reg.GetNodeNames())))
 
-# -> Run this script inside the Isaac Sim script editor
+# -> Run this script inside the Isaac Sim script editor to see an example.
 
 from pxr import UsdGeom, UsdShade, Gf, Sdf
 import omni.usd

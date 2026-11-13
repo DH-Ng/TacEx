@@ -7,6 +7,9 @@
 
 # -> Run this script inside the Isaac Sim script editor
 
+from __future__ import annotations
+
+from dataclasses import dataclass
 from PIL import Image
 from pathlib import Path
 
@@ -21,22 +24,23 @@ import omni.timeline
 import numpy as np
 import torch
 from scipy.linalg import svd
-import scipy.sparse as sp
+
+DEFAULT_RAMP_IMG_PATH = Path(__file__).resolve().parent / "color_ramp.png"
+"""Default color ramp (blue -> green -> red) used by the deformation visualization material."""
+
+
 
 def create_ramp_image(ramp_path=None, width=256, height=4):
     """Create a horizontal gradient image: left=blue, middle=green, right=red.
 
-    ramp_path: output file path (if None, creates "./source/tacex_uipc/tacex_uipc/utils/color_ramp.png")
+    ramp_path: output file path (if None, :data:`DEFAULT_RAMP_IMG_PATH` is used)
     width: img width
     height: img height
 
     Returns: Full path to created PNG image.
     """
 
-    if ramp_path is None:
-        ramp_path = Path("./source/tacex_uipc/tacex_uipc/utils").resolve() / "color_ramp.png"
-    else:
-        ramp_path = Path(ramp_path).resolve()
+    ramp_path = Path(ramp_path if ramp_path is not None else DEFAULT_RAMP_IMG_PATH).resolve()
     img = Image.new("RGB", (width, height))
     px = img.load()
 
@@ -94,10 +98,16 @@ def add_deform_primvar(gprim: UsdGeom.Mesh, primvar_name="deformValue"):
 
 
 def create_deform_vis_material(
-    mat_path="/Materials/TriangleOutlineMat",
+    mat_path="/World/Materials/DeformationVisMat",
     primvar_name="deformValue",
     ramp_img_path=None,
 ):
+    """Creates a material that colors a mesh with a per-vertex float primvar in [0, 1].
+
+    The primvar value is used as texture coordinate into a color ramp (0 = blue, 0.5 = green, 1 = red).
+    Values outside of [0, 1] are clamped, i.e. normalization has to be done before writing the primvar
+    (see :func:`normalize_deform_values`).
+    """
     stage = omni.usd.get_context().get_stage()
     if stage is None:
         raise RuntimeError("No USD stage available. Open a stage in Isaac Sim first.")
@@ -130,12 +140,15 @@ def create_deform_vis_material(
     img = UsdShade.Shader.Define(stage, mat_path + "/RampTex")
     img.CreateIdAttr("ND_UsdUVTexture")
 
-    # check if color ramp image exists
+    # check if color ramp image exists, otherwise create it
+    if ramp_img_path is None:
+        ramp_img_path = DEFAULT_RAMP_IMG_PATH
     try:
         with Image.open(ramp_img_path) as ramp_img:
             ramp_img.verify()
-    except (IOError, SyntaxError):
-        ramp_img_path = create_ramp_image()
+    except (OSError, SyntaxError):
+        ramp_img_path = create_ramp_image(ramp_img_path)
+    ramp_img_path = str(ramp_img_path)
 
     # set file to the ramp image asset (horizontal gradient)
     img.CreateInput("file", Sdf.ValueTypeNames.Asset).Set(ramp_img_path)
@@ -195,6 +208,144 @@ def assign_material_to_mesh_with_usd(gprim: UsdGeom.Mesh, material=None):
 
 
 # --- Utils for visualization
+
+
+@dataclass
+class ElasticState:
+    """Elastic quantities of a tet mesh, see :class:`StableNeoHookeanField`."""
+
+    energy_density: torch.Tensor
+    """Elastic strain energy density per vertex [J/m^3 = Pa], volume weighted average of the adjacent tets. Shape (V,)."""
+    forces: torch.Tensor
+    """Elastic (internal) nodal forces ``-dE/dx`` [N]. Shape (V, 3)."""
+    total_energy: float
+    """Total elastic strain energy of the mesh [J]."""
+
+
+class StableNeoHookeanField:
+    """Elastic strain energy and nodal forces of a tet mesh with the Stable Neo-Hookean model of libuipc.
+
+    libuipc does not export the elastic energy of finite elements, so it is recomputed here from the nodal positions
+    with the same energy density as the libuipc cuda backend (``stable_neo_hookean_3d_snk1.inl``)::
+
+        psi(F) = 0.5 * (mu * (tr(F^T F) - 3) + lambda * (det(F) - 1 - mu / lambda)^2)
+
+    The constant ``psi(I) = mu^2 / (2 lambda)`` is subtracted, so that the energy of the rest shape is zero.
+    Unlike the libuipc energies, the results are not scaled with ``dt^2``, i.e. they are in physical units.
+    Computations are done in float64, since the strain is small for stiff materials.
+    """
+
+    def __init__(
+        self,
+        rest_points: np.ndarray | torch.Tensor,
+        tets: np.ndarray | torch.Tensor,
+        youngs_modulus: float,
+        poisson_rate: float,
+        device: str = "cpu",
+    ):
+        """
+        Args:
+            rest_points: Vertex positions of the tet mesh in the rest configuration [m]. Shape (V, 3).
+            tets: Tetrahedra (vertex indices). Shape (T, 4).
+            youngs_modulus: Young's modulus [Pa].
+            poisson_rate: Poisson ratio, < 0.5.
+            device: Torch device.
+        """
+        self.device = device
+        self.dtype = torch.float64
+        X = torch.as_tensor(np.asarray(rest_points), dtype=self.dtype, device=device).reshape(-1, 3)
+        self.tets = torch.as_tensor(np.asarray(tets), dtype=torch.long, device=device).reshape(-1, 4)
+        self.num_vertices = X.shape[0]
+
+        Dm = self._edge_matrix(X)
+        self.rest_volumes = torch.linalg.det(Dm).abs() / 6.0
+        self.Dm_inv = torch.linalg.inv(Dm)
+
+        E, nu = float(youngs_modulus), float(poisson_rate)
+        self.mu = E / (2.0 * (1.0 + nu))
+        self.lam = E * nu / ((1.0 + nu) * (1.0 - 2.0 * nu))
+        self._psi_rest = 0.5 * self.mu**2 / self.lam
+
+        # volume associated with each vertex (1/4 of each adjacent tet)
+        self.vertex_volumes = self._scatter_tets_to_vertices(self.rest_volumes / 4.0).clamp_min(1e-30)
+
+    def compute(self, points: np.ndarray | torch.Tensor) -> ElasticState:
+        """Computes the elastic quantities for the current (deformed) vertex positions.
+
+        Args:
+            points: Current vertex positions [m], same indexing as the rest points. Shape (V, 3).
+        """
+        x = torch.as_tensor(np.asarray(points) if not torch.is_tensor(points) else points)
+        x = x.to(device=self.device, dtype=self.dtype).reshape(-1, 3)
+
+        F = self._edge_matrix(x) @ self.Dm_inv  # (T, 3, 3)
+        f0, f1, f2 = F[..., 0], F[..., 1], F[..., 2]
+        cof = torch.stack(
+            [torch.linalg.cross(f1, f2), torch.linalg.cross(f2, f0), torch.linalg.cross(f0, f1)], dim=-1
+        )  # dJ/dF
+        J = (f0 * cof[..., 0]).sum(-1)
+        Ic = (F * F).sum(dim=(-2, -1))
+        Jm = J - 1.0 - self.mu / self.lam
+
+        psi = 0.5 * (self.mu * (Ic - 3.0) + self.lam * Jm * Jm) - self._psi_rest  # (T,)
+        tet_energy = psi * self.rest_volumes
+
+        # first Piola-Kirchhoff stress -> gradient w.r.t. x1, x2, x3 (columns), x0 = -sum
+        P = self.mu * F + (self.lam * Jm)[:, None, None] * cof
+        H = self.rest_volumes[:, None, None] * (P @ self.Dm_inv.transpose(-2, -1))
+        tet_grad = torch.cat([-H.sum(dim=-1, keepdim=True), H], dim=-1).transpose(-2, -1)  # (T, 4, 3)
+        grad = torch.zeros((self.num_vertices, 3), dtype=self.dtype, device=self.device)
+        grad.index_add_(0, self.tets.reshape(-1), tet_grad.reshape(-1, 3))
+
+        energy_density = self._scatter_tets_to_vertices(tet_energy / 4.0) / self.vertex_volumes
+        return ElasticState(
+            energy_density=energy_density, forces=-grad, total_energy=float(tet_energy.sum().item())
+        )
+
+    def _edge_matrix(self, x: torch.Tensor) -> torch.Tensor:
+        v = x[self.tets]  # (T, 4, 3)
+        return (v[:, 1:] - v[:, :1]).transpose(-2, -1)  # columns: x1 - x0, x2 - x0, x3 - x0
+
+    def _scatter_tets_to_vertices(self, tet_values: torch.Tensor) -> torch.Tensor:
+        out = torch.zeros(self.num_vertices, dtype=self.dtype, device=self.device)
+        out.index_add_(0, self.tets.reshape(-1), tet_values.unsqueeze(-1).expand(-1, 4).reshape(-1))
+        return out
+
+
+def normalize_deform_values(
+    values: torch.Tensor,
+    value_range: tuple[float, float] | None = None,
+    log_scale: bool = False,
+    log_decades: float = 3.0,
+    auto_range_floor: float = 0.0,
+) -> torch.Tensor:
+    """Maps non-negative values to [0, 1] for the color ramp of the deformation vis material.
+
+    Args:
+        values: Values to normalize.
+        value_range: (min, max) mapped to (0, 1). If None, ``(0, max(values.max(), auto_range_floor))`` is used.
+        log_scale: Use a logarithmic mapping. The lower bound is then raised to ``max * 10^-log_decades`` if needed.
+        log_decades: Number of decades shown with ``log_scale``.
+        auto_range_floor: Min. upper bound of the automatic range, so that numerical noise of an undeformed body is
+            not stretched over the whole color ramp.
+
+    Returns:
+        Normalized values in [0, 1], same shape as ``values``.
+    """
+    values = values.clamp_min(0.0)
+    if value_range is None:
+        vmin, vmax = 0.0, max(float(values.max().item()) if values.numel() else 0.0, auto_range_floor)
+    else:
+        vmin, vmax = float(value_range[0]), float(value_range[1])
+    if vmax <= 0.0 or vmax <= vmin:
+        return torch.zeros_like(values)
+
+    if log_scale:
+        lo = max(vmin, vmax * 10.0 ** (-log_decades))
+        out = (torch.log10(values.clamp_min(lo)) - np.log10(lo)) / (np.log10(vmax) - np.log10(lo))
+    else:
+        out = (values - vmin) / (vmax - vmin)
+    return out.clamp(0.0, 1.0)
 
 
 # TODO pytorch, batched implementation

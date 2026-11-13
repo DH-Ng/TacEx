@@ -22,6 +22,15 @@ Two mappings are supported:
 Both mappings reproduce the render mesh exactly in the rest configuration and are invariant to rigid motions;
 the tetrahedral mapping is additionally exact for any affine deformation.
 
+Choose the mapping based on your tetrahedralization method.
+
+Rule of thumb
+- fTetWild / fine tets that follow the surface: surface mapping (the default).
+- Voxel cages or other deliberately coarse tet meshes: tetrahedral mapping (default for voxel meshes).
+
+In both cases contact is computed only on the sim mesh surface.
+The mapping affects only how the detailed mesh is drawn, not contact accuracy.
+
 This module only depends on numpy, torch and warp, so it can be used/tested without Isaac Sim.
 """
 
@@ -124,6 +133,23 @@ class RenderMeshMapper:
 
         # tetrahedral: linear shape functions
         return (x[self.elements] * self.coords.unsqueeze(-1)).sum(dim=1)
+
+    def interpolate(self, sim_values: np.ndarray | torch.Tensor) -> torch.Tensor:
+        """Interpolates per simulation vertex values (e.g. energies) onto the render vertices.
+
+        Uses the barycentric coordinates of the embedding (surface: triangle, tetrahedral: tet). The normal offset of
+        the surface mapping is ignored, i.e. a render vertex gets the value of its closest point on the sim surface.
+
+        Args:
+            sim_values: Values per simulation vertex, same indexing as used for the embedding. Shape (M,) or (M, C).
+
+        Returns:
+            Values per render vertex. Shape (N,) or (N, C), dtype float32.
+        """
+        v = torch.as_tensor(np.asarray(sim_values) if not torch.is_tensor(sim_values) else sim_values)
+        v = v.to(device=self.device, dtype=torch.float32)
+        c = self.coords if v.dim() == 1 else self.coords.unsqueeze(-1)
+        return (v[self.elements] * c).sum(dim=1)
 
     """
     Internal helper.

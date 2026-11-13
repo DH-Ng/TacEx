@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import torch
+import re
 from collections.abc import Sequence
 from typing import TYPE_CHECKING
 import weakref
@@ -10,6 +11,7 @@ import omni.usd
 import usdrt
 import usdrt.UsdGeom
 from pxr import UsdGeom, Sdf
+
 
 import numpy as np
 
@@ -30,13 +32,14 @@ from uipc.unit import MPa
 wp.init()
 
 
-from tacex_uipc.utils import MeshGenerator, TetMeshCfg, VoxelTetMeshCfg, ContactInfo
+from tacex_uipc.utils import ContactInfo, DebugDraw, MeshGenerator, TetMeshCfg, VoxelTetMeshCfg
 from tacex_uipc.utils.create_deformation_vis_material import (
+    StableNeoHookeanField,
     create_deform_vis_material,
     add_deform_primvar,
     compute_residuals_and_magnitudes,
+    normalize_deform_values,
 )
-from tacex_uipc.utils import TACEX_UIPC_UTILS_DIR
 # from tacex_assets import TACEX_ASSETS_DATA_DIR cannot import things from tacex_assets, otherwise circular import problem
 
 from ..uipc_object import UipcObject
@@ -65,15 +68,10 @@ class UipcDeformableObject(UipcObject):
         """
         super().__init__(cfg, uipc_sim)
 
+        self._elastic_field: StableNeoHookeanField | None = None
+        self.rest_points: np.ndarray | None = None
         if self.cfg.debug_deformation_vis:
-            add_deform_primvar(self._render_geom_mesh)
-            fabric_prim = self.fabric_prim
-            mat_path = "/World/Materials/DeformationVisMat"
-            create_deform_vis_material(mat_path, ramp_img_path=f"{TACEX_UIPC_UTILS_DIR}/color_ramp.png")
-
-            # bind material with fabric
-            rel = fabric_prim.GetRelationship(usdrt.UsdShade.Tokens.materialBinding)
-            rel.SetTargets([mat_path])
+            self._setup_deformation_vis()
 
     """
     Properties
@@ -122,13 +120,9 @@ class UipcDeformableObject(UipcObject):
             self.rest_points = np.array(fabric_prim.GetAttribute("points").Get())
 
             # make sure that primvar interpolation is vertex - need to set it explicitly for the usdrt prim!
-            usdrt.UsdGeom.PrimvarsAPI(fabric_prim).GetPrimvar("deformValue").SetInterpolation(
+            usdrt.UsdGeom.PrimvarsAPI(fabric_prim).GetPrimvar(self.cfg.deformation_vis_cfg.primvar_name).SetInterpolation(
                 usdrt.UsdGeom.Tokens.vertex
             )
-
-            # # for exporting energy of normal contact
-            # self._csf: ContactSystemFeature = self._uipc_sim.world.features().find(ContactSystemFeature)
-            # self._normal_energy = Geometry()
 
     def write_data_to_sim(self):
         pass
@@ -395,70 +389,135 @@ class UipcDeformableObject(UipcObject):
         self._physics_sim_view = None
         self._root_physx_view = None
 
-    # for debug vis of deformation
-    def _update_deformValue_with_position_displacement(self, normalize=True):
-        """Updates the "deformValue" primvar with the displacements of the nodal positions from the object center.
+    """
+    Deformation visualization.
+    """
 
-        Object center is computed by taking the mean of all nodal positions.
+    def _setup_deformation_vis(self):
+        """Creates the deformation vis material + primvar and the data for computing the elastic quantities."""
+        vis_cfg = self.cfg.deformation_vis_cfg
+        if vis_cfg.quantity not in ("energy", "force", "displacement"):
+            raise ValueError(
+                f"Unknown deformation vis quantity '{vis_cfg.quantity}'. Options: 'energy', 'force', 'displacement'."
+            )
 
-        -> Does not work, since our object moves and method here is not rotation invariant
-        Args:
-            normalize: Defaults to True.
+        add_deform_primvar(self._render_geom_mesh, primvar_name=vis_cfg.primvar_name)
+        stage = omni.usd.get_context().get_stage()
+        if not stage.GetPrimAtPath(vis_cfg.material_path).IsValid():
+            create_deform_vis_material(vis_cfg.material_path, primvar_name=vis_cfg.primvar_name)
+
+        # bind material with fabric
+        rel = self.fabric_prim.GetRelationship(usdrt.UsdShade.Tokens.materialBinding)
+        rel.SetTargets([vis_cfg.material_path])
+
+        # topology of the simulation mesh: tets and the tet vertices that form the simulation surface.
+        # `extract_surface` keeps the vertices with `is_surf` in ascending order -> same order as the surface points
+        uipc_mesh = self.uipc_meshes[0]
+        is_surf = np.asarray(uipc_mesh.vertices().find(builtin.is_surf).view()).reshape(-1)
+        self._surf_vertex_ids = np.flatnonzero(is_surf)
+        tets = np.asarray(uipc_mesh.tetrahedra().topo().view()).reshape(-1, 4)
+        rest_points = np.asarray(uipc_mesh.positions().view()).reshape(-1, 3)
+
+        constitution_cfg = self.cfg.constitution_cfg
+        self._elastic_field = StableNeoHookeanField(
+            rest_points,
+            tets,
+            youngs_modulus=constitution_cfg.youngs_modulus * MPa,
+            poisson_rate=constitution_cfg.poisson_rate,
+            device=self._uipc_sim.cfg.device if torch.cuda.is_available() else "cpu",
+        )
+        self._surf_vertex_ids_t = torch.as_tensor(self._surf_vertex_ids, device=self._elastic_field.device)
+        self._bbox_diag = float(np.linalg.norm(np.ptp(rest_points, axis=0)))
+
+        self.elastic_state = None
+        """Elastic quantities of the last deformation vis update (:class:`ElasticState`), None for "displacement"."""
+
+    def compute_elastic_state(self):
+        """Computes elastic strain energy (density) and elastic nodal forces of the current simulation state.
+
+        Requires ``debug_deformation_vis``.
+
+        Returns:
+            :class:`~tacex_uipc.utils.create_deformation_vis_material.ElasticState` for all tet mesh vertices.
         """
-        # points_pos = self.geo_slot_list[0].geometry().positions().view()[self.surface_points_idx, :, 0]
-        # points_pos = points_pos - np.mean(points_pos, axis=0)
+        if self._elastic_field is None:
+            raise RuntimeError(f"Deformation vis is not enabled for {self.cfg.prim_path} (`debug_deformation_vis`).")
+        return self._elastic_field.compute(self._sim_nodal_positions_w())
 
-        points_pos = np.array(self.fabric_prim.GetAttribute("points").Get())
+    def update_deformation_vis(self, surf_points_w: np.ndarray, render_points_w: np.ndarray):
+        """Updates the deformation vis primvar of the render mesh (and the force arrows).
 
-        # compute displacement delta
-        residuals, mags, rest_points_aligned = compute_residuals_and_magnitudes(self.rest_points, points_pos)
+        Called by :meth:`UipcSim.update_render_meshes` after the render mesh points were updated.
 
-        # # draw current points vs. aligned rest points for debugging purposes
-        # draw.clear_points()
-        # # draw current mesh points
-        # draw.draw_points(points_pos, [(0, 255, 0, 0.5)] * points_pos.shape[0], [50] * points_pos.shape[0])
-        # draw.draw_points([np.mean(points_pos, axis=0)], [(0, 255, 0, 1.0)], [50])
-        # # draw the transformed rest point pos
-        # draw.draw_points(
-        #     rest_points_aligned,
-        #     [(255, 0, 255, 0.5)] * rest_points_aligned.shape[0],
-        #     [30] * rest_points_aligned.shape[0],
-        # )
-        # draw.draw_points([np.mean(rest_points_aligned, axis=0)], [(255, 0, 255, 1.0, 0)], [30])
+        Args:
+            surf_points_w: Current simulation surface vertex positions in world frame.
+            render_points_w: Current render mesh vertex positions in world frame.
+        """
+        if self._elastic_field is None:
+            return
+        vis_cfg = self.cfg.deformation_vis_cfg
 
-        # scale magnitudes for better vis
-        mags *= 5
-
-        # normalize = True
-        # if normalize:  # TODO improve normalization and make max/min user configurable
-        #     # normalize to [0,1]
-        #     mags_min = np.min(mags)
-        #     mags_max = np.max(mags)
-        #     if mags_max == mags_min:
-        #         mags = np.zeros_like(mags)
-        #     else:
-        #         mags = (mags - mags_min) / (mags_max - mags_min)
-        # write into primvar
-        UsdGeom.PrimvarsAPI(self._render_geom_mesh).GetPrimvar("deformValue").Set(mags)
-
-    def _update_deformValue_with_normal_energy(self, normalize=True):
-        # retrieve normal energy from simulation via ContactSystemFeature
-        self._csf.contact_energy("PP+N", self._normal_energy)  # point-point
-        energy = self._normal_energy.instances().find("energy").view()
-
-        if energy.shape[0] != 0:
-            if normalize:
-                # normalize to [0,1]
-                rng = np.max(energy) - np.min(energy)
-                if rng != 0:
-                    mags = (energy - np.min(energy)) / rng
+        if vis_cfg.quantity == "displacement":
+            # displacement after rigid alignment (Kabsch) of the render mesh
+            render_points_w = np.asarray(render_points_w, dtype=np.float64).reshape(-1, 3)
+            if getattr(self, "rest_points", None) is None:
+                self.rest_points = render_points_w.copy()
+            _, mags, _ = compute_residuals_and_magnitudes(self.rest_points, render_points_w)
+            render_values = torch.as_tensor(mags)
+            self.elastic_state = None
         else:
-            mags = np.zeros_like(np.array(self._render_geom_mesh.GetPrim().GetAttribute("points").Get()))
+            self.elastic_state = self.compute_elastic_state()
+            if vis_cfg.quantity == "energy":
+                sim_values = self.elastic_state.energy_density
+            else:
+                sim_values = self.elastic_state.forces.norm(dim=-1)
+            render_values = self._sim_values_to_render_vertices(sim_values)
 
-        # write into primvar
-        self._render_geom_mesh.GetPrim().GetAttribute("primvars:deformValue").Set(mags)
+        floor = vis_cfg.auto_range_floor
+        if floor is None:
+            floor = {"energy": 1e-3, "force": 1e-6, "displacement": 1e-6}[vis_cfg.quantity]
+        normalized = normalize_deform_values(
+            render_values,
+            value_range=vis_cfg.value_range,
+            log_scale=vis_cfg.log_scale,
+            log_decades=vis_cfg.log_decades,
+            auto_range_floor=floor,
+        )
+        UsdGeom.PrimvarsAPI(self._render_geom_mesh).GetPrimvar(vis_cfg.primvar_name).Set(
+            normalized.to(torch.float32).cpu().numpy()
+        )
 
-    def _debug_vis_callback(self, event):
-        if self.cfg.debug_deformation_vis and self._data.surf_nodal_pos_w is not None:
-            self._update_deformValue_with_position_displacement(normalize=False)
-            # self._update_deformValue_with_normal_energy(normalize=False)
+        if vis_cfg.draw_force_arrows:
+            self._draw_force_arrows(surf_points_w)
+
+    def _sim_values_to_render_vertices(self, sim_values: torch.Tensor) -> torch.Tensor:
+        """Maps per tet vertex values onto the render mesh vertices."""
+        if self._render_mapper is None:
+            # render mesh == simulation surface
+            return sim_values[self._surf_vertex_ids_t]
+        if self._render_mapper.method == "surface":
+            sim_values = sim_values[self._surf_vertex_ids_t]
+        return self._render_mapper.interpolate(sim_values)
+
+    def _draw_force_arrows(self, surf_points_w: np.ndarray):
+        """Draws the elastic forces of the simulation surface vertices as lines (own :class:`DebugDraw`)."""
+        if self.elastic_state is None:
+            self.elastic_state = self.compute_elastic_state()
+        vis_cfg = self.cfg.deformation_vis_cfg
+        forces = self.elastic_state.forces[self._surf_vertex_ids_t].cpu().numpy()
+        mags = np.linalg.norm(forces, axis=1)
+        max_mag = float(mags.max()) if mags.size else 0.0
+        if getattr(self, "_force_draw", None) is None:
+            name = re.sub(r"[^A-Za-z0-9_]", "_", self.cfg.prim_path.strip("/"))
+            self._force_draw = DebugDraw(f"/Visuals/UipcForces/{name}")
+        if max_mag <= 0.0:
+            self._force_draw.set_lines(np.zeros((0, 3)), np.zeros((0, 3)))  # no forces -> no arrows
+            return
+        mask = mags >= vis_cfg.force_arrow_min_ratio * max_mag
+        scale = vis_cfg.force_arrow_scale
+        if scale is None:
+            scale = 0.1 * self._bbox_diag / max_mag
+        starts = np.asarray(surf_points_w, dtype=np.float64)[mask]
+        ends = starts + scale * forces[mask]
+        width = vis_cfg.force_arrow_width if vis_cfg.force_arrow_width is not None else 3e-3 * self._bbox_diag
+        self._force_draw.set_lines(starts, ends, colors=vis_cfg.force_arrow_color, sizes=width)

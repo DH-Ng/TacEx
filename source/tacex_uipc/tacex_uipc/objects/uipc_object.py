@@ -234,6 +234,7 @@ class UipcObject(AssetBase):
             self._uipc_sim._render_mesh_owners[len(self._uipc_sim._fabric_meshes)] = self
         # add fabric meshes to uipc sim class for updating the render meshes
         self._uipc_sim._fabric_meshes.append(fabric_prim)
+        self._uipc_sim._fabric_mesh_owners.append(self)
 
         # save surface offsets for finding corresponding surface points of the meshes for rendering
         num_surf_points = surf_points_world.shape[0]
