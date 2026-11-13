@@ -9,12 +9,16 @@ class GelSightSensorData:
 
     position: np.ndarray = None
     """Position of the sensor origin in local frame."""
+
     orientation: np.ndarray = None
     """Quaternion orientation `(w, x, y, z)` of the sensor origin in local frame."""
+
     intrinsic_matrix: np.ndarray = None
     """The intrinsic matrix for the camera."""
+
     image_resolution: tuple[int, int] = None
     """A tuple containing (width, height) of the camera sensor."""
+
     output: dict[str, Any] = None
     """The retrieved sensor data with sensor types as key.
 

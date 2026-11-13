@@ -149,9 +149,7 @@ class FactoryTaskNutThreadTactileCfg(FactoryTactileEnvCfg):
 
     tactile_rgb_feature_extractor = TactileRGBFeatureExtractorCfg(
         write_image_to_file=False,
-        save_step_frequency=int(
-            episode_length_s / (1 / 120)
-        ),  # save after each episode
+        save_step_frequency=int(episode_length_s / (1 / 120)),  # save after each episode
         load_checkpoint=True,
         checkpoint_path="/home/dh/Projects/Public_TacEx/TacEx/logs/rl_games/Factory/nut_thread_tactile/feature_extractor/cnn_step_50400_loss_0.0008332598372362554.pth",
     )

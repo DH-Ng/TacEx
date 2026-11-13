@@ -37,9 +37,7 @@ from .feature_extractor_tactile_rgb_images import TactileRGBFeatureExtractor
 class FactoryTactileSingleEnv(FactoryTactileEnv):
     cfg: FactoryTactileSingleEnvCfg
 
-    def __init__(
-        self, cfg: FactoryTactileSingleEnvCfg, render_mode: str | None = None, **kwargs
-    ):
+    def __init__(self, cfg: FactoryTactileSingleEnvCfg, render_mode: str | None = None, **kwargs):
         """Factory tasks with GelSight Mini output for the policy observations.
 
         Uses the IK control defined in FactoryIKJointControlEnv.
@@ -56,7 +54,6 @@ class FactoryTactileSingleEnv(FactoryTactileEnv):
 
         super().__init__(cfg, render_mode, **kwargs)
 
-
     def _setup_scene(self):
         """Initialize simulation scene."""
         spawn_ground_plane(
@@ -66,9 +63,7 @@ class FactoryTactileSingleEnv(FactoryTactileEnv):
         )
 
         # spawn a usd file of a table into the scene
-        cfg = sim_utils.UsdFileCfg(
-            usd_path=f"{ISAAC_NUCLEUS_DIR}/Props/Mounts/SeattleLabTable/table_instanceable.usd"
-        )
+        cfg = sim_utils.UsdFileCfg(usd_path=f"{ISAAC_NUCLEUS_DIR}/Props/Mounts/SeattleLabTable/table_instanceable.usd")
         cfg.func(
             "/World/envs/env_.*/Table",
             cfg,

@@ -1,8 +1,3 @@
-# Copyright (c) 2022-2025, The Isaac Lab Project Developers (https://github.com/isaac-sim/IsaacLab/blob/main/CONTRIBUTORS.md).
-# All rights reserved.
-#
-# SPDX-License-Identifier: BSD-3-Clause
-
 import glob
 import os
 import torch
@@ -24,9 +19,7 @@ class TactileRGBFeatureExtractorNetwork(nn.Module):
     def __init__(self, num_keypoints=3, coordinate_dim=3, num_images=2):
         super().__init__()
         self.num_images = num_images
-        num_channel = (
-            3 * num_images
-        )  # 6, when we use two tactile rgb images concatenated
+        num_channel = 3 * num_images  # 6, when we use two tactile rgb images concatenated
 
         output_dim = num_keypoints * coordinate_dim
         # Thats for image res. 120x120
@@ -68,9 +61,7 @@ class TactileRGBFeatureExtractorNetwork(nn.Module):
 
         self.data_transforms = torchvision.transforms.Compose(
             [
-                torchvision.transforms.Normalize(
-                    mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]
-                ),
+                torchvision.transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
             ]
         )
 
@@ -80,10 +71,7 @@ class TactileRGBFeatureExtractorNetwork(nn.Module):
 
         # Normalize each RGB image independently.
         x = torch.cat(
-            [
-                self.data_transforms(x[:, i * 3 : (i + 1) * 3])
-                for i in range(self.num_images)
-            ],
+            [self.data_transforms(x[:, i * 3 : (i + 1) * 3]) for i in range(self.num_images)],
             dim=1,
         )
 
@@ -154,9 +142,7 @@ class TactileRGBFeatureExtractor:
         if log_dir is not None:
             self.log_dir = log_dir
         else:
-            self.log_dir = os.path.join(
-                os.path.dirname(os.path.realpath(__file__)), "logs"
-            )
+            self.log_dir = os.path.join(os.path.dirname(os.path.realpath(__file__)), "logs")
         if not os.path.exists(self.log_dir):
             os.makedirs(self.log_dir)
 
@@ -169,32 +155,20 @@ class TactileRGBFeatureExtractor:
             if self.cfg.checkpoint_path == "":
                 list_of_files = glob.glob(self.log_dir + "/*.pth")
                 if len(list_of_files) == 0:
-                    print(
-                        "[INFO - Feature Extractor]: No checkpoint for feature extractor found!"
-                    )
+                    print("[INFO - Feature Extractor]: No checkpoint for feature extractor found!")
                     print("[INFO - Feature Extractor]: Training from scratch...")
                 else:
                     latest_file = max(list_of_files, key=os.path.getctime)
                     checkpoint = latest_file
-                    print(
-                        f"[INFO - Feature Extractor]: Loading feature extractor checkpoint from {checkpoint}"
-                    )
-                    self.feature_extractor.load_state_dict(
-                        torch.load(checkpoint, weights_only=True)
-                    )
+                    print(f"[INFO - Feature Extractor]: Loading feature extractor checkpoint from {checkpoint}")
+                    self.feature_extractor.load_state_dict(torch.load(checkpoint, weights_only=True))
             else:
                 checkpoint = self.cfg.checkpoint_path
-                print(
-                    f"[INFO - Feature Extractor]: Loading feature extractor checkpoint from {checkpoint}"
-                )
-                self.feature_extractor.load_state_dict(
-                    torch.load(checkpoint, weights_only=True)
-                )
+                print(f"[INFO - Feature Extractor]: Loading feature extractor checkpoint from {checkpoint}")
+                self.feature_extractor.load_state_dict(torch.load(checkpoint, weights_only=True))
 
         if self.cfg.train:
-            self.optimizer = torch.optim.Adam(
-                self.feature_extractor.parameters(), lr=1e-4
-            )
+            self.optimizer = torch.optim.Adam(self.feature_extractor.parameters(), lr=1e-4)
             self.l2_loss = nn.MSELoss()
             self.feature_extractor.train()
         else:
@@ -243,13 +217,9 @@ class TactileRGBFeatureExtractor:
         """
         if self.cfg.write_image_to_file:
             if left_sensor_rgb_img is not None:
-                self._save_images(
-                    left_sensor_rgb_img, f"sensor_left_rgb_img_{self.step_count}.png"
-                )
+                self._save_images(left_sensor_rgb_img, f"sensor_left_rgb_img_{self.step_count}.png")
             if right_sensor_rgb_img is not None:
-                self._save_images(
-                    right_sensor_rgb_img, f"sensor_right_rgb_img_{self.step_count}.png"
-                )
+                self._save_images(right_sensor_rgb_img, f"sensor_right_rgb_img_{self.step_count}.png")
 
         if self.single_image:
             if right_sensor_rgb_img is not None and left_sensor_rgb_img is not None:
@@ -260,9 +230,7 @@ class TactileRGBFeatureExtractor:
                 images = right_sensor_rgb_img / 255.0
         else:
             if right_sensor_rgb_img is None or left_sensor_rgb_img is None:
-                raise ValueError(
-                    "right_sensor_rgb_img is required when single_image=False."
-                )
+                raise ValueError("right_sensor_rgb_img is required when single_image=False.")
             left_sensor_rgb_img = left_sensor_rgb_img / 255.0
             right_sensor_rgb_img = right_sensor_rgb_img / 255.0
             images = torch.cat((left_sensor_rgb_img, right_sensor_rgb_img), dim=-1)
