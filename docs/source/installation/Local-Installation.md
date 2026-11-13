@@ -3,7 +3,7 @@ Otherwise, **you need to install Isaac Sim 5.1 and Isaac Lab 2.3.0**.
 Below is a quick summary, but here is the [full installation guide](https://isaac-sim.github.io/IsaacLab/main/source/setup/installation/index.html).
 
 <details>
-<summary>Quick summary for installing Isaac Sim 5.1.0 and Isaac Lab 2.3.0 for Ubuntu 24.04</summary>
+<summary>Quick summary for installing Isaac Sim 5.1.0 and Isaac Lab 2.3.2 for Ubuntu 24.04</summary>
 
 > [!note]
 > To install Isaac Sim for Ubuntu 20.04 follow the [binary installation guide](https://isaac-sim.github.io/IsaacLab/main/source/setup/installation/binaries_installation.html).
@@ -30,8 +30,8 @@ pip install "isaacsim[all,extscache]==5.1.0" --extra-index-url https://pypi.nvid
 sudo apt install cmake build-essential
 git clone https://github.com/isaac-sim/IsaacLab
 cd IsaacLab
-# use Isaac Lab version 2.3.0
-git checkout v2.3.0
+# use Isaac Lab version 2.3.2
+git checkout v2.3.2
 # activate the Isaac Sim python env
 conda activate env_isaaclab
 # install isaaclab extensions (with --editable flag)
