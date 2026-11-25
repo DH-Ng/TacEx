@@ -142,8 +142,27 @@ class UipcSimCfg:
 class UipcSim:
     cfg: UipcSimCfg
 
+    _instance: UipcSim | None = None
+    """The single UipcSim of the process (libuipc itself has no singleton for Engine/World/Scene)."""
+
+    @classmethod
+    def instance(cls) -> UipcSim | None:
+        """The :class:`UipcSim` of the process, or ``None`` if there is none (like ``SimulationContext.instance()``)."""
+        return cls._instance
+
+    @classmethod
+    def clear_instance(cls) -> None:
+        """Release the singleton, so that a new :class:`UipcSim` can be created (like ``SimulationContext.clear_instance()``)."""
+        cls._instance = None
+
     def __init__(self, cfg: UipcSimCfg = UipcSimCfg()):
-        """Initialize the uipc simulation."""
+        """Initialize the uipc simulation.
+
+        Raises:
+            RuntimeError: If a UipcSim already exists. Only one is allowed per process.
+        """
+        if UipcSim._instance is not None:
+            raise RuntimeError("UipcSim already exists. Call UipcSim.clear_instance() before creating a new one.")
         # will be initialized in `setup_sim()`
         self.isaac_sim = None
         self.cfg: UipcSimCfg = cfg
@@ -224,10 +243,13 @@ class UipcSim:
         # for updating render meshes
         self.sio = SceneIO(self.scene)
 
+        # register last, so that a failed init does not leave a half-built instance
+        UipcSim._instance = self
+
     def __del__(self):
         """Unsubscribe from the callbacks."""
         # clear debug visualization
-        if self._debug_vis_handle:
+        if getattr(self, "_debug_vis_handle", None):
             self._debug_vis_handle.unsubscribe()
             self._debug_vis_handle = None
 

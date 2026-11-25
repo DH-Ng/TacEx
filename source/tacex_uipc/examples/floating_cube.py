@@ -89,7 +89,7 @@ def main():
         constitution_cfg=UipcDeformableObjectCfg.StableNeoHookeanCfg(),  # UipcObjectCfg.AffineBodyConstitutionCfg() #
         constraint_cfg=UipcConstraintCfg(constraint_type=SoftPositionConstraint),
     )
-    cube = UipcDeformableObject(cube_cfg, uipc_sim)
+    cube = UipcDeformableObject(cube_cfg)
 
     # tet_ball_asset_path = pathlib.Path(__file__).parent.resolve() / "assets" / "ball.usd"
     # ball_cfg = UipcObjectCfg(
@@ -102,7 +102,7 @@ def main():
     #     mesh_cfg=mesh_cfg,
     #     constitution_cfg=UipcDeformableObjectCfg.StableNeoHookeanCfg()
     # )
-    # ball = UipcObject(ball_cfg, uipc_sim)
+    # ball = UipcObject(ball_cfg)
 
     # Create Animation -> has to happen after the objects were created in the
     # uipc scene, i.e. after UipcObject._initialize_impl() is called, but before world.init()

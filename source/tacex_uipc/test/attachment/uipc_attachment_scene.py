@@ -119,7 +119,7 @@ def build_scene(attachment: str):
                 constraint_strength_ratio=100.0, isaaclab_rigid_body_prim_path="/World/Case"
             )
         )
-    gel = UipcDeformableObject(gel_cfg, uipc_sim)
+    gel = UipcDeformableObject(gel_cfg)
 
     ball = UipcRigidObject(
         UipcRigidObjectCfg(
@@ -129,7 +129,6 @@ def build_scene(attachment: str):
             mesh_cfg=TetMeshCfg(stop_quality=8, max_its=100, edge_length_r=1 / 5),
             constitution_cfg=UipcRigidObjectCfg.AffineBodyConstitutionCfg(),
         ),
-        uipc_sim,
     )
 
     if attachment == "soft_position":
@@ -145,7 +144,6 @@ def build_scene(attachment: str):
         attach = UipcIsaacCarrierAttachments(
             UipcIsaacCarrierAttachmentsCfg(isaaclab_rigid_body_prim_path="/World/Case", debug_vis=dv.DEBUG_VIS),
             gel,
-            uipc_sim,
             isaaclab_rigid_object=case,
         )
     else:

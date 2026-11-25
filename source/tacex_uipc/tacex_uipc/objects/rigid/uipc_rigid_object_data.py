@@ -34,7 +34,7 @@ class UipcRigidObjectData:
     is older than the current simulation timestamp. The timestamp is updated whenever the data is updated.
     """
 
-    def __init__(self, uipc_sim: UipcSim, uipc_rigid_object: UipcRigidObject, device: str):
+    def __init__(self, uipc_rigid_object: UipcRigidObject, device: str):
         """Initializes the rigid object data.
 
         Args:
@@ -44,7 +44,7 @@ class UipcRigidObjectData:
         # Set the parameters
         self.device = device
 
-        self._uipc_sim: UipcSim = weakref.proxy(uipc_sim)
+        self._uipc_sim: UipcSim = weakref.proxy(uipc_rigid_object.uipc_sim)
 
         # Set the root rigid body view
         # note: this is stored as a weak reference to avoid circular references between the asset class

@@ -233,12 +233,12 @@ class BeamDeformationVis(UipcRLEnv):
         )
 
         # --- UIPC objects ---
-        self.gsmini_gelpad_left = UipcDeformableObject(self.cfg.gelpad_left_cfg, self.uipc_sim)
-        self.gsmini_gelpad_right = UipcDeformableObject(self.cfg.gelpad_right_cfg, self.uipc_sim)
+        self.gsmini_gelpad_left = UipcDeformableObject(self.cfg.gelpad_left_cfg)
+        self.gsmini_gelpad_right = UipcDeformableObject(self.cfg.gelpad_right_cfg)
         self.gsmini_gelpad_left.constraint.isaaclab_rigid_object = self.scene.articulations["robot"]
         self.gsmini_gelpad_right.constraint.isaaclab_rigid_object = self.scene.articulations["robot"]
 
-        self.beam = UipcDeformableObject(self.cfg.beam, self.uipc_sim)
+        self.beam = UipcDeformableObject(self.cfg.beam)
         self.beam.constraint.isaaclab_rigid_object = plate
 
     def _pre_physics_step(self, actions: torch.Tensor | None):

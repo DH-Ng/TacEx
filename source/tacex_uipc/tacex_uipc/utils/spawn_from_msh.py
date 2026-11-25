@@ -158,7 +158,10 @@ def create_prim_for_tet_data(prim_path, tet_points_world, tet_indices):
     MeshGenerator.update_usd_mesh(gprim=prim, surf_points=tet_surf_points_world, triangles=tet_surf_tri)
 
 
-def create_prim_for_uipc_scene_object(uipc_sim, prim_path, uipc_scene_object):
+def create_prim_for_uipc_scene_object(prim_path, uipc_scene_object):
+    from tacex_uipc.sim import UipcSim  # runtime import: avoids circular import
+
+    uipc_sim = UipcSim.instance()
     # spawn a usd mesh in Isaac
     stage = omni.usd.get_context().get_stage()
     prim = UsdGeom.Mesh.Define(stage, prim_path)

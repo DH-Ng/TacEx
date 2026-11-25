@@ -128,12 +128,12 @@ class UipcIsaacCarrierAttachments:
         self,
         cfg: UipcIsaacCarrierAttachmentsCfg,
         uipc_object: UipcObject,
-        uipc_sim: UipcSim,
         isaaclab_rigid_object: RigidObject | Articulation,
     ):
         cfg.validate()
         self.cfg = cfg.copy()
         self.uipc_object = uipc_object
+        uipc_sim = uipc_object.uipc_sim
         self.uipc_sim = uipc_sim
         self.isaaclab_rigid_object = isaaclab_rigid_object
         self.rigid_body_id = None

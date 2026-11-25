@@ -390,21 +390,21 @@ class BeamTwistCarrier(UipcRLEnv):
 
         # --- UIPC simulation setup ---
         # gelpad simulated via uipc
-        self._uipc_gelpad_left = UipcDeformableObject(self.cfg.gelpad_left_cfg, self.uipc_sim)
-        self._uipc_gelpad_right = UipcDeformableObject(self.cfg.gelpad_right_cfg, self.uipc_sim)
+        self._uipc_gelpad_left = UipcDeformableObject(self.cfg.gelpad_left_cfg)
+        self._uipc_gelpad_right = UipcDeformableObject(self.cfg.gelpad_right_cfg)
 
-        self.beam = UipcDeformableObject(self.cfg.beam, self.uipc_sim)
+        self.beam = UipcDeformableObject(self.cfg.beam)
 
         # carriers last: they register their surface vertices after all other UIPC objects
         self._carriers = [
             UipcIsaacCarrierAttachments(
-                self.cfg.gelpad_left_carrier_cfg, self._uipc_gelpad_left, self.uipc_sim, isaaclab_rigid_object=self._robot
+                self.cfg.gelpad_left_carrier_cfg, self._uipc_gelpad_left, isaaclab_rigid_object=self._robot
             ),
             UipcIsaacCarrierAttachments(
-                self.cfg.gelpad_right_carrier_cfg, self._uipc_gelpad_right, self.uipc_sim, isaaclab_rigid_object=self._robot
+                self.cfg.gelpad_right_carrier_cfg, self._uipc_gelpad_right, isaaclab_rigid_object=self._robot
             ),
             UipcIsaacCarrierAttachments(
-                self.cfg.beam_carrier_cfg, self.beam, self.uipc_sim, isaaclab_rigid_object=self._plate
+                self.cfg.beam_carrier_cfg, self.beam, isaaclab_rigid_object=self._plate
             ),
         ]
         for carrier in self._carriers:

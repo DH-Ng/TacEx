@@ -56,13 +56,13 @@ class UipcRigidObject(UipcObject):
     cfg: UipcRigidObjectCfg
     """Configuration instance for the rigid object."""
 
-    def __init__(self, cfg: UipcRigidObjectCfg, uipc_sim: UipcSim):
+    def __init__(self, cfg: UipcRigidObjectCfg):
         """Initialize the uipc object.
 
         Args:
             cfg: A configuration instance.
         """
-        super().__init__(cfg, uipc_sim)
+        super().__init__(cfg)
 
     """
     Properties
@@ -271,9 +271,7 @@ class UipcRigidObject(UipcObject):
         )
 
         # create buffers
-        self._data = UipcRigidObjectData(
-            self._uipc_sim, self, self.device
-        )  # container for data access
+        self._data = UipcRigidObjectData(self, self.device)  # container for data access
         self._create_buffers()
         # process configuration
         self._process_cfg()

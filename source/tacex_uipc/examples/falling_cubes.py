@@ -108,7 +108,7 @@ def main():
         debug_vis=True,
         debug_deformation_vis=True,
     )
-    soft_obj = UipcDeformableObject(soft_cfg, uipc_sim)
+    soft_obj = UipcDeformableObject(soft_cfg)
 
     # spawn a ball instead
     # tet_ball_asset_path = pathlib.Path(__file__).parent.resolve() / "assets" / "ball.usd"
@@ -121,7 +121,7 @@ def main():
     #     debug_deformation_vis=True,
     #     debug_vis=True,
     # )
-    # soft_obj = UipcDeformableObject(soft_cfg, uipc_sim)
+    # soft_obj = UipcDeformableObject(soft_cfg)
 
     num_cubes = 0  # 3
     cubes = []
@@ -154,7 +154,7 @@ def main():
             mesh_cfg=None,
             debug_vis=True,
         )
-        cubeX = uipc_obj_class(cube_cfg, uipc_sim)
+        cubeX = uipc_obj_class(cube_cfg)
         cubes.append(cubeX)
 
     rot = (random.uniform(-1.0, 1.0), random.uniform(-1.0, 1.0), random.uniform(-1.0, 1.0), random.uniform(-1.0, 1.0))
@@ -167,7 +167,7 @@ def main():
         debug_vis=True,
         constitution_cfg=UipcRigidObjectCfg.AffineBodyConstitutionCfg(),
     )
-    rigid_cube = UipcRigidObject(rigid_cube_cfg, uipc_sim)
+    rigid_cube = UipcRigidObject(rigid_cube_cfg)
 
     # only after Isaac Sim got reset (= objects init), otherwise wold init is false
     # because _initialize_impl() of the object is called in the sim.reset() method

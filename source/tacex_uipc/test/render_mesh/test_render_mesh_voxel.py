@@ -55,7 +55,6 @@ def result():
             constitution_cfg=UipcDeformableObjectCfg.StableNeoHookeanCfg(),
             debug_vis=True,  # shows the voxel cage
         ),
-        uipc_sim,
     )
     ball = UipcRigidObject(
         UipcRigidObjectCfg(
@@ -66,7 +65,6 @@ def result():
             constitution_cfg=UipcRigidObjectCfg.AffineBodyConstitutionCfg(),
             mass_density=2e4,
         ),
-        uipc_sim,
     )
     uipc_sim.setup_sim()
     sim.reset()

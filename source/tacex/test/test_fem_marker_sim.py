@@ -91,7 +91,6 @@ def run():
             mesh_cfg=TetMeshCfg(stop_quality=8, max_its=100, edge_length_r=1 / 20),
             constitution_cfg=UipcDeformableObjectCfg.StableNeoHookeanCfg(),
         ),
-        uipc_sim,
     )
     ball = UipcRigidObject(
         UipcRigidObjectCfg(
@@ -101,10 +100,9 @@ def run():
             mesh_cfg=TetMeshCfg(stop_quality=8, max_its=100, edge_length_r=1 / 5),
             constitution_cfg=UipcRigidObjectCfg.AffineBodyConstitutionCfg(),
         ),
-        uipc_sim,
     )
     UipcIsaacCarrierAttachments(
-        UipcIsaacCarrierAttachmentsCfg(isaaclab_rigid_body_prim_path="/World/Case"), gel, uipc_sim, case
+        UipcIsaacCarrierAttachmentsCfg(isaaclab_rigid_body_prim_path="/World/Case"), gel, case
     )
     sensor = GelSightSensor(
         GELSIGHT_MINI_TAXIM_FEM_CFG.replace(prim_path="/World/Case", debug_vis=False), gelpad_obj=gel

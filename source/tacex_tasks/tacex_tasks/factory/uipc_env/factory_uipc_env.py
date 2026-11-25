@@ -142,8 +142,8 @@ class FactoryUipcEnv(UipcRLEnv):
         )
 
         self._robot = Articulation(self.cfg.robot)
-        self._fixed_asset = UipcRigidObject(self.cfg_task.fixed_asset, self.uipc_sim)
-        self._held_asset = UipcRigidObject(self.cfg_task.held_asset, self.uipc_sim)
+        self._fixed_asset = UipcRigidObject(self.cfg_task.fixed_asset)
+        self._held_asset = UipcRigidObject(self.cfg_task.held_asset)
         # if self.cfg_task.name == "gear_mesh":
         #     self._small_gear_asset = Articulation(self.cfg_task.small_gear_cfg)
         #     self._large_gear_asset = Articulation(self.cfg_task.large_gear_cfg)
@@ -161,7 +161,7 @@ class FactoryUipcEnv(UipcRLEnv):
 
         # gelpads simulated via uipc
         self._uipc_gelpad_left = UipcDeformableObject(
-            self.cfg.gelpad_left_cfg, self.uipc_sim
+            self.cfg.gelpad_left_cfg
         )
         # set rigid object for attachment-constraint
         self._uipc_gelpad_left.constraint.isaaclab_rigid_object = (
@@ -170,7 +170,7 @@ class FactoryUipcEnv(UipcRLEnv):
         self.scene.uipc_objects["uipc_gelpad_left"] = self._uipc_gelpad_left
 
         self._uipc_gelpad_right = UipcDeformableObject(
-            self.cfg.gelpad_right_cfg, self.uipc_sim
+            self.cfg.gelpad_right_cfg
         )
         # set rigid object for attachment-constraint
         self._uipc_gelpad_right.constraint.isaaclab_rigid_object = (

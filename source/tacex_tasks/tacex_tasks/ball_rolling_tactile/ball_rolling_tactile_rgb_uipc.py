@@ -690,13 +690,13 @@ class BallRollingTactileRGBUipcEnv(UipcRLEnv):
         # --- UIPC simulation setup ---
 
         # gelpad simulated via uipc
-        self._uipc_gelpad = UipcDeformableObject(self.cfg.gelpad_cfg, self.uipc_sim)
+        self._uipc_gelpad = UipcDeformableObject(self.cfg.gelpad_cfg)
         self.scene.uipc_objects["uipc_gelpad"] = self._uipc_gelpad
 
         # set rigid object for attachment-constraint
         self._uipc_gelpad.constraint.isaaclab_rigid_object = self.scene.articulations["robot"]
 
-        self.object = UipcRigidObject(self.cfg.object, self.uipc_sim)
+        self.object = UipcRigidObject(self.cfg.object)
         self.scene.uipc_objects["object"] = self.object
 
     # MARK: pre-physics step calls

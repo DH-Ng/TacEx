@@ -119,22 +119,27 @@ class UipcObject(AssetBase):
     cfg: UipcObjectCfg
     """Configuration instance for the rigid object."""
 
-    def __init__(self, cfg: UipcObjectCfg, uipc_sim: UipcSim):
+    def __init__(self, cfg: UipcObjectCfg):
         """Initialize the uipc object from an USD asset.
 
         The USD asset should consist of a parent XForm, followed by an USD mesh.
         If the USD mesh name is not given, then the first mesh under the XForm is used.
+        The object is added to ``UipcSim.instance()``, i.e., the ``UipcSim`` has to be created first.
+
         Args:
             cfg: A configuration instance.
         """
         super().__init__(cfg)
+        from tacex_uipc.sim import UipcSim  # runtime import: avoids circular import
+
+        uipc_sim = UipcSim.instance()
+        if uipc_sim is None:
+            raise RuntimeError("No UipcSim exists. Create the UipcSim before creating UIPC objects.")
         self._uipc_sim: UipcSim = uipc_sim
 
         prim_paths_expr = self.cfg.prim_path
         print(f"Initializing uipc objects {prim_paths_expr}...")
-        self._prim_view = XFormPrim(
-            prim_paths_expr=prim_paths_expr, name=f"{prim_paths_expr}", usd=False
-        )
+        self._prim_view = XFormPrim(prim_paths_expr=prim_paths_expr, name=f"{prim_paths_expr}", usd=False)
         self._prim_view.initialize()
 
         # the isaac mesh that should be used for creating the Tet mesh
@@ -157,16 +162,13 @@ class UipcObject(AssetBase):
 
         if self.cfg.usd_mesh_prim_name is not None:
             usd_mesh_prim = prims_utils.get_prim_at_path(
-                str(self._prim_view.prims[0].GetPath())
-                + f"/{self.cfg.usd_mesh_prim_name}"
+                str(self._prim_view.prims[0].GetPath()) + f"/{self.cfg.usd_mesh_prim_name}"
             )
             if usd_mesh_prim.GetAttribute("points").IsValid():
                 self._usd_mesh_prim = usd_mesh_prim
 
         if self._usd_mesh_prim is None:
-            raise RuntimeWarning(
-                f"No USD geom mesh found for uipc object at {prim_paths_expr}."
-            )
+            raise RuntimeWarning(f"No USD geom mesh found for uipc object at {prim_paths_expr}.")
 
         print(
             "USD mesh that is used for creating the UIPC Mesh: ",
@@ -196,13 +198,9 @@ class UipcObject(AssetBase):
         # add constraints
         self.constraint: UipcConstraint = None
         if type(self.cfg.constraint_cfg) is UipcConstraintCfg:
-            self.constraint: UipcConstraint = UipcConstraint(
-                self.cfg.constraint_cfg, self
-            )
+            self.constraint: UipcConstraint = UipcConstraint(self.cfg.constraint_cfg, self)
         elif type(self.cfg.constraint_cfg) is UipcIsaacAttachmentsCfg:
-            self.constraint: UipcIsaacAttachments = UipcIsaacAttachments(
-                self.cfg.constraint_cfg, self
-            )
+            self.constraint: UipcIsaacAttachments = UipcIsaacAttachments(self.cfg.constraint_cfg, self)
 
         obj_geo_slot = self._spawn_uipc_scene_object(obj, uipc_mesh)
         self.geo_slot_list.append(obj_geo_slot)
@@ -221,9 +219,7 @@ class UipcObject(AssetBase):
 
         # TODO handle multi env
         if self.cfg.render_mesh_cfg is None:
-            fabric_prim = self._setup_render_mesh(
-                self._usd_geom_mesh, surf_points_world, surf_tri, surf_tri_orient
-            )
+            fabric_prim = self._setup_render_mesh(self._usd_geom_mesh, surf_points_world, surf_tri, surf_tri_orient)
             self._render_geom_mesh = self._usd_geom_mesh
         else:
             fabric_prim = self._setup_separate_render_mesh(uipc_mesh)
@@ -238,9 +234,7 @@ class UipcObject(AssetBase):
 
         # save surface offsets for finding corresponding surface points of the meshes for rendering
         num_surf_points = surf_points_world.shape[0]
-        self._uipc_sim._surf_vertex_offsets.append(
-            self._uipc_sim._surf_vertex_offsets[-1] + num_surf_points
-        )
+        self._uipc_sim._surf_vertex_offsets.append(self._uipc_sim._surf_vertex_offsets[-1] + num_surf_points)
 
         # simulation mesh visualization (debug_vis). `AssetBase.__init__` already requested the debug vis state
         # before the uipc setup existed -> apply it now.
@@ -374,9 +368,7 @@ class UipcObject(AssetBase):
             sim_points = self._sim_nodal_positions_w()
         return self._render_mapper.map(sim_points).cpu().numpy()
 
-    def _spawn_uipc_scene_object(
-        self, obj, uipc_mesh: SimplicialComplex
-    ) -> SimplicialComplexSlot:
+    def _spawn_uipc_scene_object(self, obj, uipc_mesh: SimplicialComplex) -> SimplicialComplexSlot:
         # spawn mesh inside uipc simulation
         obj_geo_slot, obj_rest_geo_slot = obj.geometries().create(uipc_mesh)
         self.obj_id = obj_geo_slot.id()
@@ -394,9 +386,7 @@ class UipcObject(AssetBase):
         usd_mesh_path = str(gprim.GetPath())
 
         # update the isaac surface mesh with the new topology
-        MeshGenerator.update_usd_mesh(
-            gprim=gprim, surf_points=surf_points, triangles=surf_tri
-        )
+        MeshGenerator.update_usd_mesh(gprim=gprim, surf_points=surf_points, triangles=surf_tri)
 
         # setup mesh updates via Fabric
         fabric_prim = self.stage.GetPrimAtPath(usdrt.Sdf.Path(usd_mesh_path))
@@ -407,16 +397,12 @@ class UipcObject(AssetBase):
 
         # Tell OmniHydra to render points from Fabric
         if not fabric_prim.HasAttribute("Deformable"):
-            fabric_prim.CreateAttribute(
-                "Deformable", usdrt.Sdf.ValueTypeNames.PrimTypeTag, True
-            )
+            fabric_prim.CreateAttribute("Deformable", usdrt.Sdf.ValueTypeNames.PrimTypeTag, True)
 
         # Set xform transformation to identity, since uipc data is defined in world frame
         stage_id = self.stage.GetStageIdAsStageId()
         fabric_id = self.stage.GetFabricId()
-        hier = usdrt.hierarchy.IFabricHierarchy().get_fabric_hierarchy(
-            fabric_id, stage_id
-        )
+        hier = usdrt.hierarchy.IFabricHierarchy().get_fabric_hierarchy(fabric_id, stage_id)
         hier.set_world_xform(usdrt.Sdf.Path(usd_mesh_path), usdrt.Gf.Matrix4d(1))
         hier.update_world_xforms()
 

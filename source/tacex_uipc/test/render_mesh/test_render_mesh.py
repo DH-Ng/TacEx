@@ -104,7 +104,6 @@ def result():
             render_mesh_cfg=RenderMeshCfg(mapping="tetrahedral"),
             debug_vis=dv.DEBUG_VIS,
         ),
-        uipc_sim,
     )
     ball = UipcRigidObject(
         UipcRigidObjectCfg(
@@ -117,7 +116,6 @@ def result():
             render_mesh_cfg=RenderMeshCfg(mapping="surface"),
             debug_vis=dv.DEBUG_VIS,
         ),
-        uipc_sim,
     )
     uipc_sim.setup_sim()
     sim.reset()

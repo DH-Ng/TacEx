@@ -376,14 +376,14 @@ class BeamTwist(UipcRLEnv):
 
         # --- UIPC simulation setup ---
         # gelpad simulated via uipc
-        self._uipc_gelpad_left = UipcDeformableObject(self.cfg.gelpad_left_cfg, self.uipc_sim)
-        self._uipc_gelpad_right = UipcDeformableObject(self.cfg.gelpad_right_cfg, self.uipc_sim)
+        self._uipc_gelpad_left = UipcDeformableObject(self.cfg.gelpad_left_cfg)
+        self._uipc_gelpad_right = UipcDeformableObject(self.cfg.gelpad_right_cfg)
 
         # set rigid object for attachment-constraint
         self._uipc_gelpad_left.constraint.isaaclab_rigid_object = self.scene.articulations["robot"]
         self._uipc_gelpad_right.constraint.isaaclab_rigid_object = self.scene.articulations["robot"]
 
-        self.beam = UipcDeformableObject(self.cfg.beam, self.uipc_sim)
+        self.beam = UipcDeformableObject(self.cfg.beam)
 
         self.beam.constraint.isaaclab_rigid_object = plate
 

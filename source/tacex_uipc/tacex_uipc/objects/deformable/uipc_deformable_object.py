@@ -60,13 +60,13 @@ class UipcDeformableObject(UipcObject):
     cfg: UipcDeformableObjectCfg
     """Configuration instance for the rigid object."""
 
-    def __init__(self, cfg: UipcDeformableObjectCfg, uipc_sim: UipcSim):
+    def __init__(self, cfg: UipcDeformableObjectCfg):
         """Initialize the uipc object.
 
         Args:
             cfg: A configuration instance.
         """
-        super().__init__(cfg, uipc_sim)
+        super().__init__(cfg)
 
         self._elastic_field: StableNeoHookeanField | None = None
         self.rest_points: np.ndarray | None = None
@@ -315,7 +315,7 @@ class UipcDeformableObject(UipcObject):
             FiniteElementStateAccessorFeature
         )
         # create buffers
-        self._data = UipcDeformableObjectData(self._uipc_sim, self, self.device)  # container for data access
+        self._data = UipcDeformableObjectData(self, self.device)  # container for data access
         self._create_buffers()
 
         # process configuration
