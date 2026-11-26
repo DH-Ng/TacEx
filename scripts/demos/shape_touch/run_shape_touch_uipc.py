@@ -51,16 +51,12 @@ from isaacsim.core.api.objects import VisualCuboid
 from isaacsim.core.prims import XFormPrim
 
 import isaaclab.sim as sim_utils
-import isaaclab.utils.math as math_utils
 from isaaclab.assets import (
-    Articulation,
     ArticulationCfg,
     AssetBaseCfg,
     RigidObject,
     RigidObjectCfg,
 )
-from isaaclab.controllers.differential_ik import DifferentialIKController
-from isaaclab.controllers.differential_ik_cfg import DifferentialIKControllerCfg
 from isaaclab.envs import DirectRLEnv, DirectRLEnvCfg, ViewerCfg
 from isaaclab.envs.ui import BaseEnvWindow
 from isaaclab.markers.config import FRAME_MARKER_CFG
@@ -70,7 +66,7 @@ from isaaclab.sensors.frame_transformer.frame_transformer_cfg import OffsetCfg
 from isaaclab.sim import PhysxCfg, RenderCfg, SimulationCfg
 from isaaclab.utils import configclass
 
-from tacex import GelSightSensor
+from tacex import GelSightSensor, TacExRobot, TacExRobotCfg
 from tacex.simulation_approaches.fots import FOTSMarkerSimulatorCfg
 
 from tacex_assets import TACEX_ASSETS_DATA_DIR
@@ -261,7 +257,11 @@ class BallRollingEnvCfg(DirectRLEnvCfg):
         spawn=sim_utils.DomeLightCfg(color=(0.75, 0.75, 0.75), intensity=3000.0),
     )
 
-    robot: ArticulationCfg = FRANKA_PANDA_ARM_SINGLE_GSMINI_HIGH_PD_UIPC_CFG.replace(
+    robot: TacExRobotCfg = TacExRobotCfg.from_articulation_cfg(
+        FRANKA_PANDA_ARM_SINGLE_GSMINI_HIGH_PD_UIPC_CFG,
+        ik_body_name="panda_hand",
+        ee_offset_pos=[0.0, 0.0, 0.131],
+        ee_offset_rot=[1.0, 0.0, 0.0, 0.0],
         prim_path="/World/envs/env_.*/Robot",
     )
 
@@ -323,8 +323,6 @@ class BallRollingEnvCfg(DirectRLEnvCfg):
         tactile_img_res=(320, 240),
     )
 
-    ik_controller_cfg = DifferentialIKControllerCfg(command_type="pose", use_relative_mode=False, ik_method="dls")
-
     main_pose = [0.5, 0.0, 0.02, 1, 0, 0, 0]
 
     # some filler values, needed for DirectRLEnv class
@@ -368,29 +366,8 @@ class BallRollingEnv(UipcRLEnv):
     def __init__(self, cfg: BallRollingEnvCfg, render_mode: str | None = None, **kwargs):
         super().__init__(cfg, render_mode, **kwargs)
 
-        # --- for IK ---
-        # create the differential IK controller
-        self._ik_controller = DifferentialIKController(
-            cfg=self.cfg.ik_controller_cfg, num_envs=self.num_envs, device=self.device
-        )
-        # Obtain the frame index of the end-effector
-        body_ids, body_names = self._robot.find_bodies("panda_hand")
-        # save only the first body index
-        self._body_idx = body_ids[0]
-        self._body_name = body_names[0]
-
-        # For a fixed base robot, the frame index is one less than the body index.
-        # This is because the root body is not included in the returned Jacobians.
-        self._jacobi_body_idx = self._body_idx - 1
-        # self._jacobi_joint_ids = self._joint_ids # we take every joint
-
-        # ee offset w.r.t panda hand -> based on the asset
-        self._offset_pos = torch.tensor([0.0, 0.0, 0.131], device=self.device).repeat(self.num_envs, 1)
-        self._offset_rot = torch.tensor([1.0, 0.0, 0.0, 0.0], device=self.device).repeat(self.num_envs, 1)
-        # ---
-
         # create buffer to store actions (= ik_commands)
-        self.ik_commands = torch.zeros((self.num_envs, self._ik_controller.action_dim), device=self.device)
+        self.ik_commands = torch.zeros((self.num_envs, 7), device=self.device)
         # self.ik_commands[:, 3:] = torch.tensor([0,1,0,0],device=self.device)
 
         self.step_count = 0
@@ -403,7 +380,7 @@ class BallRollingEnv(UipcRLEnv):
         self.set_debug_vis(self.cfg.debug_vis)
 
     def _setup_scene(self):
-        self._robot = Articulation(self.cfg.robot)
+        self._robot = TacExRobot(self.cfg.robot)
         self.scene.articulations["robot"] = self._robot
 
         # clone, filter, and replicate
@@ -467,13 +444,12 @@ class BallRollingEnv(UipcRLEnv):
         # --- UIPC simulation setup ---
         self._uipc_gelpad = UipcDeformableObject(
             self.cfg.gelpad_cfg,
-            self.uipc_sim,
         )
         # set rigid object for attachment-constraint
         self._uipc_gelpad.constraint.isaaclab_rigid_object = self.scene.articulations["robot"]
 
         for obj_name, cfg in self.cfg.shapes.items():
-            self.scene.uipc_objects[obj_name] = UipcRigidObject(cfg, self.uipc_sim)
+            self.scene.uipc_objects[obj_name] = UipcRigidObject(cfg)
 
         # set the current obj for the shape touch
         self.object = list(self.scene.uipc_objects.values())[0]
@@ -481,21 +457,9 @@ class BallRollingEnv(UipcRLEnv):
     # MARK: pre-physics step calls
 
     def _pre_physics_step(self, actions: torch.Tensor):
-        self._ik_controller.set_command(self.ik_commands)
+        self._robot.set_ee_pose_target(self.ik_commands[:, :3], self.ik_commands[:, 3:])
 
     def _apply_action(self):
-        # obtain quantities from simulation
-        ee_pos_curr_b, ee_quat_curr_b = self._compute_frame_pose()
-        joint_pos = self._robot.data.joint_pos[:, :]
-
-        # compute the delta in joint-space
-        if ee_pos_curr_b.norm() != 0:
-            jacobian = self._compute_frame_jacobian()
-            joint_pos_des = self._ik_controller.compute(ee_pos_curr_b, ee_quat_curr_b, jacobian, joint_pos)
-        else:
-            joint_pos_des = joint_pos.clone()
-        self._robot.set_joint_position_target(joint_pos_des)
-
         self.step_count += 1
 
     # post-physics step calls
@@ -532,67 +496,6 @@ class BallRollingEnv(UipcRLEnv):
     # MARK: observations
     def _get_observations(self) -> dict:
         pass
-
-    """
-    Helper Functions for IK control (from task_space_actions.py of IsaacLab).
-    """
-
-    @property
-    def jacobian_w(self) -> torch.Tensor:
-        return self._robot.root_physx_view.get_jacobians()[:, self._jacobi_body_idx, :, :]
-
-    @property
-    def jacobian_b(self) -> torch.Tensor:
-        jacobian = self.jacobian_w
-        base_rot = self._robot.data.root_link_quat_w
-        base_rot_matrix = math_utils.matrix_from_quat(math_utils.quat_inv(base_rot))
-        jacobian[:, :3, :] = torch.bmm(base_rot_matrix, jacobian[:, :3, :])
-        jacobian[:, 3:, :] = torch.bmm(base_rot_matrix, jacobian[:, 3:, :])
-        return jacobian
-
-    def _compute_frame_pose(self) -> tuple[torch.Tensor, torch.Tensor]:
-        """Computes the pose of the target frame in the root frame.
-
-        Returns:
-            A tuple of the body's position and orientation in the root frame.
-        """
-        # obtain quantities from simulation
-        ee_pos_w = self._robot.data.body_link_pos_w[:, self._body_idx]
-        ee_quat_w = self._robot.data.body_link_quat_w[:, self._body_idx]
-        root_pos_w = self._robot.data.root_link_pos_w
-        root_quat_w = self._robot.data.root_link_quat_w
-        # compute the pose of the body in the root frame
-        ee_pose_b, ee_quat_b = math_utils.subtract_frame_transforms(root_pos_w, root_quat_w, ee_pos_w, ee_quat_w)
-        # account for the offset
-        # if self.cfg.body_offset is not None:
-        ee_pose_b, ee_quat_b = math_utils.combine_frame_transforms(
-            ee_pose_b, ee_quat_b, self._offset_pos, self._offset_rot
-        )
-
-        return ee_pose_b, ee_quat_b
-
-    def _compute_frame_jacobian(self):
-        """Computes the geometric Jacobian of the target frame in the root frame.
-
-        This function accounts for the target frame offset and applies the necessary transformations to obtain
-        the right Jacobian from the parent body Jacobian.
-        """
-        # read the parent jacobian
-        jacobian = self.jacobian_b
-
-        # account for the offset
-        # if self.cfg.body_offset is not None:
-        # Modify the jacobian to account for the offset
-        # -- translational part
-        # v_link = v_ee + w_ee x r_link_ee = v_J_ee * q + w_J_ee * q x r_link_ee
-        #        = (v_J_ee + w_J_ee x r_link_ee ) * q
-        #        = (v_J_ee - r_link_ee_[x] @ w_J_ee) * q
-        jacobian[:, 0:3, :] += torch.bmm(-math_utils.skew_symmetric_matrix(self._offset_pos), jacobian[:, 3:, :])
-        # -- rotational part
-        # w_link = R_link_ee @ w_ee
-        jacobian[:, 3:, :] = torch.bmm(math_utils.matrix_from_quat(self._offset_rot), jacobian[:, 3:, :])
-
-        return jacobian
 
 
 def run_simulator(env: BallRollingEnv):

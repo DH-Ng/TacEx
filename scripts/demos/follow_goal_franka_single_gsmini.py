@@ -36,10 +36,8 @@ from isaacsim.core.api.objects import VisualCuboid
 from isaacsim.core.prims import XFormPrim
 
 import isaaclab.sim as sim_utils
-import isaaclab.utils.math as math_utils
-from isaaclab.assets import Articulation, ArticulationCfg, AssetBaseCfg, RigidObject, RigidObjectCfg
+from isaaclab.assets import AssetBaseCfg, RigidObject, RigidObjectCfg
 
-from isaaclab.controllers import DifferentialIKController, DifferentialIKControllerCfg
 from isaaclab.envs import DirectRLEnv, DirectRLEnvCfg, ViewerCfg
 from isaaclab.envs.ui import BaseEnvWindow
 from isaaclab.markers.config import FRAME_MARKER_CFG
@@ -50,7 +48,7 @@ from isaaclab.sim import PhysxCfg, SimulationCfg
 from isaaclab.sim.schemas.schemas_cfg import RigidBodyPropertiesCfg
 from isaaclab.utils import configclass
 
-from tacex import GelSightSensor
+from tacex import GelSightSensor, TacExRobot, TacExRobotCfg
 from tacex.simulation_approaches.fots import FOTSMarkerSimulatorCfg
 
 from tacex_assets import TACEX_ASSETS_DATA_DIR
@@ -170,13 +168,14 @@ class BallRollingEnvCfg(DirectRLEnvCfg):
                 max_angular_velocity=1000.0,
                 max_linear_velocity=1000.0,
                 max_depenetration_velocity=5.0,
-                # kinematic_enabled=True,
+                # kinematic_enabled=True,5
                 disable_gravity=False,
             ),
         ),
     )
 
-    robot: ArticulationCfg = FRANKA_PANDA_ARM_SINGLE_GSMINI_HIGH_PD_RIGID_CFG.replace(
+    robot: TacExRobotCfg = TacExRobotCfg.from_articulation_cfg(
+        FRANKA_PANDA_ARM_SINGLE_GSMINI_HIGH_PD_RIGID_CFG,
         prim_path="/World/envs/env_.*/Robot",
     )
 
@@ -232,10 +231,6 @@ class BallRollingEnvCfg(DirectRLEnvCfg):
         tactile_img_res=(320, 240),
     )
 
-    ik_controller_cfg = DifferentialIKControllerCfg(command_type="pose", use_relative_mode=False, ik_method="dls")
-    ee_pos_offset = [0.0, 0.0, 0.0]
-    ee_rot_offset = [0.0, 1.0, 0.0, 0.0]
-
     ball_radius = 0.005
 
     obj_pos_randomization_range = [-0.15, 0.15]
@@ -253,29 +248,9 @@ class BallRollingEnv(DirectRLEnv):
     def __init__(self, cfg: BallRollingEnvCfg, render_mode: str | None = None, **kwargs):
         super().__init__(cfg, render_mode, **kwargs)
 
-        # --- for IK ---
-        # create the differential IK controller
-        self._ik_controller = DifferentialIKController(
-            cfg=self.cfg.ik_controller_cfg, num_envs=self.num_envs, device=self.device
-        )
-        # Obtain the frame index of the end-effector
-        body_ids, _ = self._robot.find_bodies("TCP")
-        # save only the first body index
-        self._body_tcp_idx = body_ids[0]
-
-        # For a fixed base robot, the frame index is one less than the body index.
-        # This is because the root body is not included in the returned Jacobians.
-        self._jacobi_body_idx = self._body_tcp_idx - 1
-
-        # create buffer to store actions (= ik_commands)
-        self.ik_commands = torch.zeros((self.num_envs, self._ik_controller.action_dim), device=self.device)
+        # create buffer to store actions (= ik_commands, applied by the robot via IK)
+        self.ik_commands = torch.zeros((self.num_envs, 7), device=self.device)
         self.ik_commands[:, 3:] = torch.tensor([1, 0, 0, 0], device=self.device)
-
-        # ee offset w.r.t TCP -> TCP is defined so that z-axis shows down. In our case here we want z to show upwards
-        self._ee_pos_offset = torch.tensor(self.cfg.ee_pos_offset, device=self.device).repeat(self.num_envs, 1)
-        self._ee_rot_offset = torch.tensor(self.cfg.ee_rot_offset, device=self.device).repeat(self.num_envs, 1)
-        # ---
-
         self.step_count = 0
 
         self.goal_prim_view = None
@@ -284,7 +259,7 @@ class BallRollingEnv(DirectRLEnv):
         self.set_debug_vis(self.cfg.debug_vis)
 
     def _setup_scene(self):
-        self._robot = Articulation(self.cfg.robot)
+        self._robot = TacExRobot(self.cfg.robot)
         self.scene.articulations["robot"] = self._robot
 
         self.object = RigidObject(self.cfg.ball)
@@ -304,7 +279,7 @@ class BallRollingEnv(DirectRLEnv):
                 FrameTransformerCfg.FrameCfg(
                     prim_path="/World/envs/env_.*/Robot/TCP",
                     name="end_effector",
-                    offset=OffsetCfg(pos=self.cfg.ee_pos_offset, rot=self.cfg.ee_rot_offset),
+                    offset=OffsetCfg(pos=self.cfg.robot.ee_offset_pos, rot=self.cfg.robot.ee_offset_rot),
                 ),
             ],
         )
@@ -328,7 +303,7 @@ class BallRollingEnv(DirectRLEnv):
             prim_path="/Goal",
             size=0.01,
             position=np.array([0.5, 0.0, 0.0155]),
-            orientation=np.array([1.0, 0.0, 0.0, 0.0]),
+            orientation=np.array([0.0, 1.0, 0.0, 0.0]),
             color=np.array([255.0, 0.0, 0.0]),
             visible=False,
         )
@@ -340,32 +315,10 @@ class BallRollingEnv(DirectRLEnv):
     # MARK: pre-physics step calls
 
     def _pre_physics_step(self, actions: torch.Tensor):
-        self._ik_controller.set_command(self.ik_commands)
+        self._robot.set_ee_pose_target(self.ik_commands[:, :3], self.ik_commands[:, 3:])
 
     def _apply_action(self):
-        # obtain quantities from simulation
-        jacobian = self._robot.root_physx_view.get_jacobians()[:, self._jacobi_body_idx, :, :]
-        ee_pose_w = self._robot.data.body_pose_w[:, self._body_tcp_idx]
-        root_pose_w = self._robot.data.root_pose_w
-        joint_pos = self._robot.data.joint_pos[:, :]
-
-        # compute ee frame in root frame
-        ee_pos_b, ee_quat_b = math_utils.subtract_frame_transforms(
-            root_pose_w[:, 0:3],
-            root_pose_w[:, 3:7],
-            ee_pose_w[:, 0:3],
-            ee_pose_w[:, 3:7],
-        )
-
-        # apply ee offset
-        ee_pos_b, ee_quat_b = math_utils.combine_frame_transforms(
-            ee_pos_b, ee_quat_b, self._ee_pos_offset, self._ee_rot_offset
-        )
-
-        # compute the joint commands
-        joint_pos_des = self._ik_controller.compute(ee_pos_b, ee_quat_b, jacobian, joint_pos)
-
-        self._robot.set_joint_position_target(joint_pos_des)
+        # IK is applied by the robot in write_data_to_sim
 
         self.step_count += 1
 
