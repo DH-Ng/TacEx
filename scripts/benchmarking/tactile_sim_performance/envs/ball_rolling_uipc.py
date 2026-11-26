@@ -167,11 +167,11 @@ class UipcEnv(PhysXRigidEnv):
         # --- UIPC simulation setup ---
 
         # gelpad simulated via uipc
-        self._uipc_gelpad: UipcDeformableObject = UipcDeformableObject(self.cfg.gelpad_cfg, self.uipc_sim)
+        self._uipc_gelpad: UipcDeformableObject = UipcDeformableObject(self.cfg.gelpad_cfg)
         # set rigid object for attachment-constraint
         self._uipc_gelpad.constraint.isaaclab_rigid_object = self.scene.articulations["robot"]
 
-        self.object: UipcRigidObject = UipcRigidObject(self.cfg.ball, self.uipc_sim)
+        self.object: UipcRigidObject = UipcRigidObject(self.cfg.ball)
         self.scene.uipc_objects["object"] = self.object
 
     def _pre_physics_step(self, actions: torch.Tensor):

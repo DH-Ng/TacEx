@@ -318,8 +318,6 @@ class BallRollingEnv(DirectRLEnv):
         self._robot.set_ee_pose_target(self.ik_commands[:, :3], self.ik_commands[:, 3:])
 
     def _apply_action(self):
-        # IK is applied by the robot in write_data_to_sim
-
         self.step_count += 1
 
     # post-physics step calls

@@ -440,7 +440,7 @@ class UipcIsaacAttachments(UipcConstraint):
                 self.isaaclab_rigid_object.find_bodies(self.cfg.body_name)
             )
 
-        if type(self.isaaclab_rigid_object) is Articulation:
+        if isinstance(self.isaaclab_rigid_object, Articulation):
             # this only works when rigid body is an articulation
             # self.isaaclab_rigid_object._physics_sim_view.update_articulations_kinematic()
             # read data from simulation
@@ -449,7 +449,7 @@ class UipcIsaacAttachments(UipcConstraint):
             )
             poses[..., 3:7] = math_utils.convert_quat(poses[..., 3:7], to="wxyz")
             pose = poses[:, self.rigid_body_id, 0:7].clone()
-        elif type(self.isaaclab_rigid_object) is RigidObject:
+        elif isinstance(self.isaaclab_rigid_object, RigidObject):
             # only works with rigid body
             # read data from simulation
             pose = self.isaaclab_rigid_object._root_physx_view.get_transforms().clone()
@@ -497,7 +497,7 @@ class UipcIsaacAttachments(UipcConstraint):
 
     def _compute_aim_positions(self, dt=0):
         # make sure we have the newest data
-        if type(self.isaaclab_rigid_object) is Articulation:
+        if isinstance(self.isaaclab_rigid_object, Articulation):
             # this only works when rigid body is an articulation
             # self.isaaclab_rigid_object._physics_sim_view.update_articulations_kinematic()
             # read data from simulation
@@ -506,7 +506,7 @@ class UipcIsaacAttachments(UipcConstraint):
             )
             poses[..., 3:7] = math_utils.convert_quat(poses[..., 3:7], to="wxyz")
             pose = poses[:, self.rigid_body_id, 0:7].clone()
-        elif type(self.isaaclab_rigid_object) is RigidObject:
+        elif isinstance(self.isaaclab_rigid_object, RigidObject):
             # only works with rigid body
             # pose = self.isaaclab_rigid_object.root_physx_view.root_state_w.view(-1, 1, 13)
             # pose = pose[:, self.rigid_body_id, 0:7].clone()

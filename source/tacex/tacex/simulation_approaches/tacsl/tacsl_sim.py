@@ -5,7 +5,7 @@ Two outputs, each enabled by the GelSight sensor's cfg slots and data types:
 - optical (``"tactile_rgb"``): Isaac Lab's ``GelsightRender`` (Taxim-style polynomial lookup) applied to the sensor's
   height map. TacSL itself renders the difference between a "nominal" (no-contact) depth image and the current one;
   TacEx's height map already is that difference (0 = undeformed gelpad, negative = pressed in), so no nominal
-  render is needed.
+  render is needed. Note: Looks more like that Tacto than Taxim, because no Gaussian Kernel blur.
 - force field (``"force_field"``): Isaac Lab's SDF-based penalty forces at a grid of points on the gelpad surface.
   The Isaac Lab code is reused through ``_TacSLForceField``, a ``VisuoTactileSensor`` subclass that is not
   registered as a sensor (no callbacks, no camera); only the tactile point generation is replaced to support
@@ -286,9 +286,7 @@ class _TacSLForceField(VisuoTactileSensor):
     the tactile point markers. ``_generate_tactile_points`` is replaced (see there).
     """
 
-    def __init__(
-        self, cfg: TacSLForceFieldCfg, elastomer_prim, num_envs: int, device: str, physics_sim_view
-    ):  # noqa: D107
+    def __init__(self, cfg: TacSLForceFieldCfg, elastomer_prim, num_envs: int, device: str, physics_sim_view):  # noqa: D107
         self.cfg = cfg
         self._data = VisuoTactileSensorData()
         self._device = device

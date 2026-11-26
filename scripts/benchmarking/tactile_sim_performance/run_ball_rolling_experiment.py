@@ -1,7 +1,10 @@
 """Franka panda arm, equipped with a single GelSight Mini sensor, rolls a ball around with running tactile simulation.
 
+Arguments:
+--env [physx_rigid, uipc, uipc_textured]
+
 Run with:
-python scripts/benchmarking/tactile_sim_performance/run_ball_rolling_experiment.py --env uipc
+python scripts/benchmarking/tactile_sim_performance/run_ball_rolling_experiment.py --env uipc --debug_vis
 """
 
 import argparse
