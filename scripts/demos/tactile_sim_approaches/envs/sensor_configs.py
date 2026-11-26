@@ -122,6 +122,7 @@ TAXIM_FOTS_CFG = GELSIGHT_MINI_TAXIM_FOTS_CFG.replace(
 
 TAXIM_FEM_CFG = GELSIGHT_MINI_TAXIM_FEM_CFG.replace(
     prim_path="/World/envs/env_.*/Robot/gelsight_mini_case",
+    gelpad_prim_path="/World/envs/env_.*/Robot/gelsight_mini_gelpad",
     sensor_camera_cfg=GELSIGHT_MINI_TAXIM_FEM_CFG.SensorCameraCfg(
         prim_name="Camera",
         update_period=0,

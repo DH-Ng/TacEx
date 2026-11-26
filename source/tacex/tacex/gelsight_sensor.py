@@ -282,6 +282,29 @@ class GelSightSensor(SensorBase):
 
     ####
     # Implementation of abstract methods of base sensor class
+    def _resolve_gelpad_obj(self):
+        """Looks up the UIPC gelpad object via ``cfg.gelpad_prim_path``, unless one was passed to the constructor."""
+        if self.gelpad_obj is not None or not self.cfg.gelpad_prim_path:
+            return
+        # lazy import: tacex works without tacex_uipc
+        from tacex_uipc import UipcSim
+
+        uipc_sim = UipcSim.instance()
+        if uipc_sim is None:
+            raise RuntimeError(
+                f"GelSightSensor `{self.cfg.prim_path}` has `gelpad_prim_path` set, but there is no UipcSim."
+                " Set `uipc_sim` in the env cfg."
+            )
+        for obj in uipc_sim.uipc_objects:
+            if obj.cfg.prim_path == self.cfg.gelpad_prim_path:
+                self.gelpad_obj = obj
+                return
+        available = [obj.cfg.prim_path for obj in uipc_sim.uipc_objects]
+        raise RuntimeError(
+            f"No UIPC object with prim_path '{self.cfg.gelpad_prim_path}' found for GelSightSensor"
+            f" `{self.cfg.prim_path}`. Available UIPC objects: {available}"
+        )
+
     ####
     # MARK: _init_impl
     def _initialize_impl(self):
@@ -339,6 +362,8 @@ class GelSightSensor(SensorBase):
             self._data.output["camera_rgb"] = torch.zeros(
                 (self._num_envs, self.camera_resolution[1], self.camera_resolution[0], 3), device=self.cfg.device
             )
+        self._resolve_gelpad_obj()
+
         # Initialize sim approaches
         # NOTE: important, that this happens after the height map buffer was created, because the simulators read it.
         # Each simulator is initialized once, even if it serves several outputs.

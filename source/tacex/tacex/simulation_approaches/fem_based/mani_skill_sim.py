@@ -30,11 +30,17 @@ class ManiSkillSimulator(GelSightSimulator):
     cfg: ManiSkillSimulatorCfg
 
     def __init__(self, sensor: GelSightSensor, cfg: ManiSkillSimulatorCfg):
-        self.gelpad_uipc: UipcObject = sensor.gelpad_obj
-
         super().__init__(sensor=sensor, cfg=cfg)
 
     def _initialize_impl(self):
+        # sensor looks up its gelpad (cfg.gelpad_prim_path) when it initializes
+        self.gelpad_uipc: UipcObject | None = self.sensor.gelpad_obj
+        if self.gelpad_uipc is None:
+            raise RuntimeError(
+                "ManiSkillSimulator needs the UIPC gelpad: set `gelpad_prim_path` in the GelSightSensorCfg or pass"
+                " `gelpad_obj` to the GelSightSensor."
+            )
+
         if self.cfg.device is None:
             # use same device as simulation
             self._device = self.sensor.device

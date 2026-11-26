@@ -173,6 +173,14 @@ class GelSightSensorCfg(SensorBaseCfg):
     If it names the same simulation class as another slot, the existing simulator instance is reused.
     """
 
+    gelpad_prim_path: str | None = None
+    """Prim path (regex) of the UIPC object that simulates the gelpad, e.g. ``/World/envs/env_.*/Robot/gelsight_mini_gelpad``.
+
+    Must match the ``prim_path`` of the object's cfg. The sensor looks the object up in the ``UipcSim`` when it is
+    initialized. Only needed for UIPC-based simulators (e.g. the FEM marker simulation) and ignored if a
+    ``gelpad_obj`` is passed to the sensor.
+    """
+
     compute_indentation_depth_class: Literal["optical_sim", "marker_motion_sim", "default"] = "default"
     """Defines which approach is used for computing the indentation depth.
 
