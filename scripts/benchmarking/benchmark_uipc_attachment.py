@@ -98,9 +98,9 @@ def run_worker(args):
 
     import isaaclab.sim as sim_utils
     import isaaclab.utils.math as math_utils
-    from isaaclab.assets import Articulation, AssetBaseCfg
-    from isaaclab.controllers import DifferentialIKController, DifferentialIKControllerCfg
+    from isaaclab.assets import AssetBaseCfg
 
+    from tacex import TacExRobot, TacExRobotCfg
     from tacex_assets.robots.franka.franka_gsmini_gripper_uipc import FRANKA_PANDA_ARM_GSMINI_GRIPPER_HIGH_PD_UIPC_CFG
     from tacex_uipc import UipcSim, UipcSimCfg
     from tacex_uipc.objects import (
@@ -128,7 +128,14 @@ def run_worker(args):
                 update_render_meshes=args.debug_vis,  # show the UIPC meshes (gels, cube) in the GUI
             )
         )
-        robot = Articulation(FRANKA_PANDA_ARM_GSMINI_GRIPPER_HIGH_PD_UIPC_CFG.replace(prim_path="/World/Robot"))
+        robot = TacExRobot(
+            TacExRobotCfg.from_articulation_cfg(
+                FRANKA_PANDA_ARM_GSMINI_GRIPPER_HIGH_PD_UIPC_CFG,
+                prim_path="/World/Robot",
+                ik_body_name="TCP",
+                ik_joint_names=["panda_joint[1-7]"],
+            )
+        )
 
         # -- UIPC gelpads (attachment: soft position constraint on the gel, or carrier created after all objects)
         gel_mesh_cfg = TetMeshCfg(stop_quality=8, max_its=100, edge_length_r=1 / 20)
@@ -145,7 +152,7 @@ def run_worker(args):
                         isaaclab_rigid_body_prim_path="/World/Robot",
                     )
                 )
-            gels[side] = UipcDeformableObject(cfg, uipc_sim)
+            gels[side] = UipcDeformableObject(cfg)
 
         # -- cube on the UIPC ground at gripper height
         cube_color = (0.15, 0.35, 0.8) if args.object == "rigid" else (0.2, 0.65, 0.3)  # blue: rigid, green: soft
@@ -160,7 +167,6 @@ def run_worker(args):
                     prim_path="/World/Cube", spawn=cube_spawn, init_state=cube_init, mesh_cfg=cube_mesh_cfg,
                     constitution_cfg=UipcRigidObjectCfg.AffineBodyConstitutionCfg(),
                 ),
-                uipc_sim,
             )  # fmt: skip
         else:
             cube = UipcDeformableObject(
@@ -168,7 +174,6 @@ def run_worker(args):
                     prim_path="/World/Cube", spawn=cube_spawn, init_state=cube_init, mesh_cfg=cube_mesh_cfg,
                     constitution_cfg=UipcDeformableObjectCfg.StableNeoHookeanCfg(youngs_modulus=args.soft_youngs_modulus),
                 ),
-                uipc_sim,
             )  # fmt: skip
 
         # -- attachments
@@ -182,7 +187,7 @@ def run_worker(args):
                     UipcIsaacCarrierAttachmentsCfg(
                         isaaclab_rigid_body_prim_path="/World/Robot", body_name=CASE_BODIES[side], debug_vis=args.debug_vis
                     ),
-                    gel, uipc_sim, robot,
+                    gel, robot,
                 )  # fmt: skip
 
         if args.debug_vis:
@@ -212,9 +217,6 @@ def run_worker(args):
         result["setup_s"] = time.perf_counter() - t_setup
 
         # -- control: differential IK for the arm (TCP), position targets for the fingers
-        ik = DifferentialIKController(
-            DifferentialIKControllerCfg(command_type="pose", use_relative_mode=False, ik_method="dls"), 1, "cuda"
-        )
         tcp_id = robot.find_bodies("TCP")[0][0]
         finger_ids = robot.find_joints("panda_finger_joint.*")[0]
         case_ids = {side: robot.find_bodies(name)[0][0] for side, name in CASE_BODIES.items()}
@@ -265,12 +267,14 @@ def run_worker(args):
                     target_b = math_utils.subtract_frame_transforms(
                         root[:, :3], root[:, 3:7], tcp0_pos + torch.tensor([[0.0, 0.0, dz]], device="cuda"), tcp0_quat
                     )
-                    ik.set_command(torch.cat(target_b, dim=-1))
-                    jac = robot.root_physx_view.get_jacobians()[:, tcp_id - 1, :, arm_ids]
-                    ee_pos_b, ee_quat_b = math_utils.subtract_frame_transforms(root[:, :3], root[:, 3:7], *tcp_pose())
-                    joint_pos[:, arm_ids] = ik.compute(ee_pos_b, ee_quat_b, jac, robot.data.joint_pos[:, arm_ids])
+                    # arm joint targets are computed by IK in robot.write_data_to_sim()
+                    robot.set_ee_pose_target(*target_b)
                 joint_pos[:, finger_ids] = finger_target
-                robot.set_joint_position_target(joint_pos)
+                if phase == "settle":
+                    robot.set_joint_position_target(joint_pos)
+                else:
+                    # only the fingers: the arm joint targets come from IK (set_ee_pose_target)
+                    robot.set_joint_position_target(joint_pos[:, finger_ids], joint_ids=finger_ids)
                 robot.write_data_to_sim()
 
                 # step (physics + UIPC via physics callback)

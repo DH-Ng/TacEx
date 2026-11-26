@@ -8,13 +8,13 @@ robot moves (``UipcIsaacCarrierAttachments``, see ``tacex_uipc/objects/constrain
 from __future__ import annotations
 
 import isaaclab.sim as sim_utils
-from isaaclab.assets import Articulation, RigidObject
+from isaaclab.assets import RigidObject
 from isaaclab.markers.config import FRAME_MARKER_CFG
 from isaaclab.sensors import FrameTransformer, FrameTransformerCfg, OffsetCfg
 from isaaclab.utils import configclass
 
-from tacex import GelSightSensor
-from tacex_uipc.objects import UipcDeformableObject, UipcRigidObject
+from tacex import GelSightSensor, TacExUipcRobot
+from tacex_uipc.objects import UipcRigidObject
 from tacex_uipc.objects.constraints.uipc_carrier_attachment import (
     UipcIsaacCarrierAttachments,
     UipcIsaacCarrierAttachmentsCfg,
@@ -35,7 +35,8 @@ class BallRollingUIPCCarrierEnvCfg(BallRollingUIPCEnvCfg):
         if hasattr(super(), "__post_init__"):
             super().__post_init__()
         # the gel is attached by the carrier, not by a constraint on its vertices
-        self.gelpad_cfg = self.gelpad_cfg.replace(constraint_cfg=None)
+        gelpad_cfg = self.robot.uipc_objects["gelpad"].replace(constraint_cfg=None)
+        self.robot = self.robot.replace(uipc_objects={**self.robot.uipc_objects, "gelpad": gelpad_cfg})
 
 
 class BallRollingUIPCCarrierEnv(BallRollingUIPCEnv):
@@ -43,7 +44,7 @@ class BallRollingUIPCCarrierEnv(BallRollingUIPCEnv):
 
     def _setup_scene(self):
         # same as BallRollingUIPCEnv._setup_scene, except for the gelpad attachment
-        self._robot = Articulation(self.cfg.robot)
+        self._robot = TacExUipcRobot(self.cfg.robot)
         self.scene.articulations["robot"] = self._robot
 
         # clone, filter, and replicate
@@ -76,17 +77,17 @@ class BallRollingUIPCCarrierEnv(BallRollingUIPCEnv):
         light_cfg.func("/World/Light", light_cfg)
 
         # --- UIPC simulation setup ---
-        self._uipc_gelpad = UipcDeformableObject(self.cfg.gelpad_cfg, self.uipc_sim)
-        self.scene.uipc_objects["uipc_gelpad"] = self._uipc_gelpad
-        self.object = UipcRigidObject(self.cfg.ball, self.uipc_sim)
+        # the gelpad (cfg.robot.uipc_objects) is created by the robot, without a constraint on its vertices
+        self._uipc_gelpad = self._robot.uipc_objects["gelpad"]
+        self.object = UipcRigidObject(self.cfg.ball)
         # carrier last: it registers its surface vertices after all other UIPC objects
         self._carrier = UipcIsaacCarrierAttachments(
-            self.cfg.carrier_cfg, self._uipc_gelpad, self.uipc_sim, isaaclab_rigid_object=self._robot
+            self.cfg.carrier_cfg, self._uipc_gelpad, isaaclab_rigid_object=self._robot
         )
 
         # sensors
         self._ee_frame = FrameTransformer(ee_frame_cfg)
         self.scene.sensors["ee_frame"] = self._ee_frame
 
-        self.gsmini = GelSightSensor(self.cfg.gsmini, gelpad_obj=self._uipc_gelpad)
+        self.gsmini = GelSightSensor(self.cfg.gsmini)
         self.scene.sensors["gsmini"] = self.gsmini

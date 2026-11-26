@@ -2,12 +2,12 @@ from __future__ import annotations
 
 import isaaclab.sim as sim_utils
 from isaaclab.assets import ArticulationCfg, AssetBaseCfg
-from isaaclab.controllers.differential_ik_cfg import DifferentialIKControllerCfg
 from isaaclab.envs import DirectRLEnvCfg, ViewerCfg
 from isaaclab.envs.ui import BaseEnvWindow
 from isaaclab.scene import InteractiveSceneCfg
 from isaaclab.sim import PhysxCfg, SimulationCfg
 from isaaclab.utils import configclass
+from tacex import TacExUipcRobotCfg
 from tacex_assets import TACEX_ASSETS_DATA_DIR
 from tacex_assets.robots.franka.franka_gsmini_single_uipc import (
     FRANKA_PANDA_ARM_SINGLE_GSMINI_HIGH_PD_UIPC_CFG,
@@ -119,7 +119,10 @@ class BallRollingUIPCEnvCfg(DirectRLEnvCfg):
         debug_vis=True,
     )
 
-    robot: ArticulationCfg = FRANKA_PANDA_ARM_SINGLE_GSMINI_HIGH_PD_UIPC_CFG.replace(
+    # the gelpad is simulated as uipc mesh; it belongs to the robot, which creates it
+    # (relative prim path; the attachment's rigid body path defaults to the robot's prim path)
+    robot: TacExUipcRobotCfg = TacExUipcRobotCfg.from_articulation_cfg(
+        FRANKA_PANDA_ARM_SINGLE_GSMINI_HIGH_PD_UIPC_CFG,
         prim_path="/World/envs/env_.*/Robot",
         init_state=ArticulationCfg.InitialStateCfg(
             joint_pos={
@@ -132,32 +135,30 @@ class BallRollingUIPCEnvCfg(DirectRLEnvCfg):
                 "panda_joint7": 0.741,
             },
         ),
-    )
-    # simulate the gelpad as uipc mesh
-    mesh_cfg = TetMeshCfg(
-        stop_quality=8,
-        max_its=100,
-        edge_length_r=1 / 20,
-        # epsilon_r=0.01
-    )
-    gelpad_cfg = UipcDeformableObjectCfg(
-        prim_path="/World/envs/env_.*/Robot/gelsight_mini_gelpad",
-        mesh_cfg=mesh_cfg,
-        constitution_cfg=UipcDeformableObjectCfg.StableNeoHookeanCfg(),
-        constraint_cfg=UipcIsaacAttachmentsCfg(
-            constraint_strength_ratio=100.0,
-            body_name="gelsight_mini_case",
-            debug_vis=debug_vis,
-            compute_attachment_data=True,
-            isaaclab_rigid_body_prim_path="/World/envs/env_.*/Robot",
-        ),
+        uipc_objects={
+            "gelpad": UipcDeformableObjectCfg(
+                prim_path="gelsight_mini_gelpad",
+                mesh_cfg=TetMeshCfg(
+                    stop_quality=8,
+                    max_its=100,
+                    edge_length_r=1 / 20,
+                    # epsilon_r=0.01
+                ),
+                constitution_cfg=UipcDeformableObjectCfg.StableNeoHookeanCfg(),
+                constraint_cfg=UipcIsaacAttachmentsCfg(
+                    constraint_strength_ratio=100.0,
+                    body_name="gelsight_mini_case",
+                    debug_vis=False,
+                    compute_attachment_data=True,
+                ),
+            ),
+        },
     )
 
     gsmini = GELSIGHT_MINI_TAXIM_CFG.replace(
         prim_path="/World/envs/env_.*/Robot/gelsight_mini_case",
+        gelpad_prim_path="/World/envs/env_.*/Robot/gelsight_mini_gelpad",
     )
-
-    ik_controller_cfg = DifferentialIKControllerCfg(command_type="pose", use_relative_mode=False, ik_method="dls")
 
     ball_radius = 0.005
 

@@ -103,6 +103,7 @@ class UipcRLEnv(DirectRLEnv):
         with Timer("[INFO]: Time taken for scene creation", "scene_creation"):
             self.scene: UipcInteractiveScene = UipcInteractiveScene(self.cfg.scene)
             self._setup_scene()
+            self.scene.register_articulation_uipc_objects()
         print("[INFO]: Scene manager: ", self.scene)
 
         # set up camera viewport controller
@@ -481,6 +482,8 @@ class UipcRLEnv(DirectRLEnv):
             # clear callbacks and instance
             self.sim.clear_all_callbacks()
             self.sim.clear_instance()
+            if self.uipc_sim is not None:
+                UipcSim.clear_instance()
             # destroy the window
             if self._window is not None:
                 self._window = None

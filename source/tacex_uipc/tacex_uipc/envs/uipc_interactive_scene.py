@@ -361,6 +361,18 @@ class UipcInteractiveScene:
     def uipc_objects(self) -> dict[str, UipcObject]:
         return self._uipc_objects
 
+    def register_articulation_uipc_objects(self):
+        """Registers the UIPC objects owned by articulations (e.g. gelpads of ``TacExUipcRobot``) in the scene.
+
+        An articulation exposes them via a ``uipc_objects`` dict. They are added as ``"<articulation>/<object>"``, so
+        the scene updates them like any other UIPC object. Objects that are already registered are skipped.
+        """
+        registered = {id(obj) for obj in self._uipc_objects.values()}
+        for art_name, articulation in self._articulations.items():
+            for obj_name, obj in (getattr(articulation, "uipc_objects", None) or {}).items():
+                if id(obj) not in registered:
+                    self._uipc_objects[f"{art_name}/{obj_name}"] = obj
+
     @property
     def state(self) -> dict[str, dict[str, dict[str, torch.Tensor]]]:
         """Returns the state of the scene entities.

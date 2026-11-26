@@ -1,18 +1,16 @@
 from __future__ import annotations
 
 import isaaclab.sim as sim_utils
-import isaaclab.utils.math as math_utils
 from isaaclab.utils.math import sample_uniform
 import torch
-from isaaclab.assets import Articulation, RigidObject
-from isaaclab.controllers.differential_ik import DifferentialIKController
+from isaaclab.assets import RigidObject
 from isaaclab.markers.config import FRAME_MARKER_CFG
 from isaaclab.sensors import FrameTransformer, FrameTransformerCfg, OffsetCfg
-from tacex import GelSightSensor
+from tacex import GelSightSensor, TacExUipcRobot
 from tacex_uipc import (
     UipcRLEnv,
 )
-from tacex_uipc.objects import UipcDeformableObject, UipcRigidObject
+from tacex_uipc.objects import UipcRigidObject
 
 from .ball_roll_base_env_cfg import BallRollingEnvCfg
 
@@ -23,30 +21,11 @@ class BallRollingUIPCEnv(UipcRLEnv):
     def __init__(self, cfg: BallRollingEnvCfg, render_mode: str | None = None, **kwargs):
         super().__init__(cfg, render_mode, **kwargs)
 
-        # --- for IK ---
-        # create the differential IK controller
-        self._ik_controller = DifferentialIKController(
-            cfg=self.cfg.ik_controller_cfg, num_envs=self.num_envs, device=self.device
-        )
-        # Obtain the frame index of the end-effector
-        body_ids, body_names = self._robot.find_bodies("TCP")
-        # save only the first body index
-        self._body_tcp_idx = body_ids[0]
-        self._body_name = body_names[0]
-
-        # For a fixed base robot, the frame index is one less than the body index.
-        # This is because the root body is not included in the returned Jacobians.
-        self._jacobi_body_idx = self._body_tcp_idx - 1
-
-        # ee offset w.r.t panda hand -> based on the asset
-        self._ee_pos_offset = torch.tensor([0.0, 0.0, 0.0], device=self.device).repeat(self.num_envs, 1)
-        self._ee_rot_offset = torch.tensor([1.0, 0.0, 0.0, 0.0], device=self.device).repeat(self.num_envs, 1)
-        # ---
-
-        # create buffer to store actions (= ik_commands)
-        self.ik_commands = torch.zeros((self.num_envs, self._ik_controller.action_dim), device=self.device)
         # ee orientation should always be (0,1,0,0)
-        self.ik_commands[:, 3:] += torch.tensor([0, 1, 0, 0], device=self.device)
+        self._ee_target_quat = torch.tensor([0, 1, 0, 0], device=self.device, dtype=torch.float32).repeat(
+            self.num_envs, 1
+        )
+        self._ee_target_pos = torch.zeros((self.num_envs, 3), device=self.device)
 
         # Define goals for the end effector of the franka arm by adding offsets to the current ball position
         # (for moving ee and ball in a specific pattern)
@@ -89,7 +68,7 @@ class BallRollingUIPCEnv(UipcRLEnv):
         self.set_debug_vis(self.cfg.debug_vis)
 
     def _setup_scene(self):
-        self._robot = Articulation(self.cfg.robot)
+        self._robot = TacExUipcRobot(self.cfg.robot)
         self.scene.articulations["robot"] = self._robot
 
         # clone, filter, and replicate
@@ -126,20 +105,16 @@ class BallRollingUIPCEnv(UipcRLEnv):
         light_cfg.func("/World/Light", light_cfg)
 
         # --- UIPC simulation setup ---
+        # the gelpad (cfg.robot.uipc_objects) is created by the robot and registered in the scene by the env
 
-        # gelpad simulated via uipc
-        self._uipc_gelpad = UipcDeformableObject(self.cfg.gelpad_cfg, self.uipc_sim)
-        self.scene.uipc_objects["uipc_gelpad"] = self._uipc_gelpad
-        # set rigid object for attachment-constraint
-        self._uipc_gelpad.constraint.isaaclab_rigid_object = self.scene.articulations["robot"]
-
-        self.object = UipcRigidObject(self.cfg.ball, self.uipc_sim)
+        self.object = UipcRigidObject(self.cfg.ball)
 
         # sensors
         self._ee_frame = FrameTransformer(ee_frame_cfg)
         self.scene.sensors["ee_frame"] = self._ee_frame
 
-        self.gsmini = GelSightSensor(self.cfg.gsmini, gelpad_obj=self._uipc_gelpad)
+        # the sensor finds its gelpad via cfg.gsmini.gelpad_prim_path
+        self.gsmini = GelSightSensor(self.cfg.gsmini)
         self.scene.sensors["gsmini"] = self.gsmini
 
     def _pre_physics_step(self, actions: torch.Tensor):
@@ -148,40 +123,18 @@ class BallRollingUIPCEnv(UipcRLEnv):
         # change goal
         if self.step_count % self.num_step_goal_change == 0:
             self.current_goal_idx = (self.current_goal_idx + 1) % len(self.pattern_offsets)
-        self.ik_commands[:, :3] = ball_pos + self.pattern_offsets[self.current_goal_idx]
+        self._ee_target_pos[:] = ball_pos + self.pattern_offsets[self.current_goal_idx]
 
         # add some randomization for diverse tactile signals
-        self.ik_commands[:, :2] += sample_uniform(-0.002, 0.002, (self.num_envs, 2), self.device)
-        self._ik_controller.set_command(self.ik_commands)
+        self._ee_target_pos[:, :2] += sample_uniform(-0.002, 0.002, (self.num_envs, 2), self.device)
+        self._robot.set_ee_pose_target(self._ee_target_pos, self._ee_target_quat)
 
     def _apply_action(self):
-        # obtain quantities from simulation
-        jacobian = self._robot.root_physx_view.get_jacobians()[:, self._jacobi_body_idx, :, :]
-        ee_pose_w = self._robot.data.body_pose_w[:, self._body_tcp_idx]
-        root_pose_w = self._robot.data.root_pose_w
-        joint_pos = self._robot.data.joint_pos[:, :]
-
-        # compute ee frame in root frame
-        ee_pos_b, ee_quat_b = math_utils.subtract_frame_transforms(
-            root_pose_w[:, 0:3],
-            root_pose_w[:, 3:7],
-            ee_pose_w[:, 0:3],
-            ee_pose_w[:, 3:7],
-        )
-
-        # apply ee offset
-        ee_pos_b, ee_quat_b = math_utils.combine_frame_transforms(
-            ee_pos_b, ee_quat_b, self._ee_pos_offset, self._ee_rot_offset
-        )
-
-        # compute the joint commands
-        joint_pos_des = self._ik_controller.compute(ee_pos_b, ee_quat_b, jacobian, joint_pos)
-
-        # # apply rotation for testing purposes
+        # IK is applied by the robot in write_data_to_sim; here only the hand rotation test needs custom joint targets
         if self.current_goal_idx == 3 or self.current_goal_idx == 4:
+            joint_pos_des = self._robot.compute_ik_joint_targets()
             joint_pos_des[:, 6] = -joint_pos_des[:, 6]  # joint with id 6 = hand
-
-        self._robot.set_joint_position_target(joint_pos_des)
+            self._robot.set_joint_position_target(joint_pos_des, joint_ids=self._robot.ik_joint_ids)
 
         self.step_count += 1
 
@@ -200,7 +153,6 @@ class BallRollingUIPCEnv(UipcRLEnv):
 
         # reset actions
         self.actions[env_ids] = 0.0
-        self._ik_controller.reset(env_ids)
 
         # reset goal
         self.current_goal_idx = 0
